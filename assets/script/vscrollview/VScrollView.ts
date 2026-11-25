@@ -673,6 +673,7 @@ export class VirtualScrollView extends Component {
   // 等大小模式下，从 content 子节点获取的模板节点
   private _templateNode: Node | null = null;
   private _isStarted: boolean = false;
+  private _hasPendingTotalCount: boolean = false;
   private _pendingStartOperations: Array<() => void> = [];
   private _edgeVisibleIndices: Set<number> = new Set();
   private _fullyVisibleIndices: Set<number> = new Set();
@@ -896,6 +897,7 @@ export class VirtualScrollView extends Component {
     if (!mask) console.warn('[VirtualScrollView] 建议在视窗节点挂一个 Mask 组件用于裁剪');
     this.gridCount = Math.max(1, Math.round(this.gridCount));
     if (!this.useVirtualList) {
+      this._upWidgetAlignment();
       this._viewportSize = this._getViewportMainSize();
       this._contentSize = this._isVertical() ? this._contentTf.height : this._contentTf.width;
       if (this._isVertical()) {
@@ -925,16 +927,24 @@ export class VirtualScrollView extends Component {
     }
 
     this.content.removeAllChildren();
+    this._upWidgetAlignment();
     this._viewportSize = this._getViewportMainSize();
     this._applyScrollStyle();
     if (this.useDynamicSize) await this._initDynamicSizeMode();
     else await this._initFixedSizeMode();
+    if ((this as { isValid?: boolean }).isValid === false || !this.content || (this.content as { isValid?: boolean }).isValid === false) return;
     this._bindTouch();
     this._bindGlobalTouch();
     this._isStarted = true;
     if (this.totalCount > 0) {
       this._beginInitialAppearBatch();
+      if (this._hasPendingTotalCount) {
+        for (let i = 0; i < this.totalCount; i++) {
+          this._needAnimateIndices.add(i);
+        }
+      }
     }
+    this._hasPendingTotalCount = false;
     this._updateVisible(true);
     this._flushPendingStartOperations();
   }
@@ -950,6 +960,7 @@ export class VirtualScrollView extends Component {
   onDestroy() {
     this._pendingStartOperations.length = 0;
     this._isStarted = false;
+    this._hasPendingTotalCount = false;
     this._resetItemEnterCallbackState();
     this._releaseNestedTouchOwner();
     input.off(Input.EventType.TOUCH_END, this._onGlobalTouchEnd, this);
@@ -1138,7 +1149,6 @@ export class VirtualScrollView extends Component {
       this._slotNodes.push(n);
     }
     this._slotFirstIndex = 0;
-    this._layoutSlots(this._slotFirstIndex, true);
   }
 
   private async _initDynamicSizeMode() {
@@ -1224,7 +1234,6 @@ export class VirtualScrollView extends Component {
     this._slotNodes = new Array(this._slots).fill(null);
     this._slotPrefabIndices = new Array(this._slots).fill(-1);
     this._slotFirstIndex = 0;
-    this._layoutSlots(this._slotFirstIndex, true);
   }
 
   private _buildPrefixSum() {
@@ -1555,9 +1564,16 @@ export class VirtualScrollView extends Component {
       console.warn('[VScrollView] 非虚拟列表模式，不支持 setTotalCount');
       return;
     }
+    const nextCount = Math.max(0, count | 0);
+    if (!this._isStarted) {
+      // start() 前只记录条数，待 start() 测量真实视口、模板尺寸并建好槽位后统一首轮布局
+      this.totalCount = nextCount;
+      this._hasPendingTotalCount = true;
+      return;
+    }
     this._upWidgetAlignment();
     const oldCount = this.totalCount;
-    this.totalCount = Math.max(0, count | 0);
+    this.totalCount = nextCount;
     if (oldCount === 0 && this.totalCount > 0) {
       this._beginInitialAppearBatch();
     } else {
@@ -1596,11 +1612,75 @@ export class VirtualScrollView extends Component {
     this._updateVisible(true);
   }
 
+  /**
+   * 视口尺寸变化后重新测量并重排（例如背包顶部功能行显隐，列表区高度跟着变）。
+   *
+   * `_viewportSize` 只在 `start()` 里量一次：外部改 Widget / 节点尺寸后，可见行数、
+   * 滚动边界仍按旧视口算（滚到底会多滚一段、底部少排一行）。布局稳定后调本方法同步。
+   * 固定尺寸模式按新视口补足槽位（只增不减，已建节点继续复用）。
+   */
+  public refreshViewportSize(): void {
+    if (!this.useVirtualList || !this._isStarted || !this.content) return;
+    this._upWidgetAlignment();
+    const viewportSize = this._getViewportMainSize();
+    if (Math.abs(viewportSize - this._viewportSize) < 0.5) return;
+    const oldPos = this._getContentMainPos();
+    this._viewportSize = viewportSize;
+    if (this.useDynamicSize) {
+      this._buildPrefixSum();
+    } else {
+      this._recomputeContentSize();
+      this._growFixedSlots();
+    }
+    this._setContentMainPos(math.clamp(oldPos, this._boundsMin, this._boundsMax));
+    this._updateVisible(true);
+  }
+
+  /** 固定尺寸模式：视口变大后按需补建槽位（与 `_initFixedSizeMode` 同一套公式）。 */
+  private _growFixedSlots(): void {
+    if (!this.provideNodeFn || !this.content) return;
+    const stride = this.itemMainSize + this.spacing;
+    if (stride <= 0) return;
+    const visibleLines = Math.ceil(this._viewportSize / stride);
+    const needed = Math.max(1, (visibleLines + this.buffer + 2) * this.gridCount);
+    for (let i = this._slotNodes.length; i < needed; i++) {
+      const provided = this.provideNodeFn(i);
+      // 异步提供节点（`start()` 里 await 过）在同步布局方法里拿不到结果，维持现有槽位数。
+      if (!provided || typeof (provided as Promise<Node>).then === 'function') return;
+      const node = provided as Node;
+      node.parent = this.content;
+      node.active = false;
+      const tf = node.getComponent(UITransform);
+      if (tf) {
+        if (this._isVertical()) {
+          tf.width = this.itemCrossSize;
+          tf.height = this.itemMainSize;
+        } else {
+          tf.width = this.itemMainSize;
+          tf.height = this.itemCrossSize;
+        }
+      }
+      this._slotNodes.push(node);
+    }
+    this._slots = this._slotNodes.length;
+  }
+
   _upWidgetAlignment() {
     const hasContent = !!this.content;
     const oldPos = hasContent ? this._getContentMainPos() : 0;
-    this.node?.getComponent?.(Widget)?.updateAlignment?.();
-    this.content?.getComponent?.(Widget)?.updateAlignment?.();
+    if (typeof Widget === 'function') {
+      const widgets: Widget[] = [];
+      let cur: Node | null = this.node;
+      while (cur) {
+        const w = cur.getComponent?.(Widget);
+        if (w && w.enabled !== false) widgets.push(w);
+        cur = cur.parent ?? null;
+      }
+      for (let i = widgets.length - 1; i >= 0; i--) {
+        widgets[i].updateAlignment?.();
+      }
+      this.content?.getComponent?.(Widget)?.updateAlignment?.();
+    }
     if (this._isStarted && hasContent) {
       this._setContentMainPos(oldPos);
     }

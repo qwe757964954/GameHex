@@ -34,6 +34,7 @@ export interface IRoleNavEntry {
 export interface IRoleBagEntry {
     /** 列表项身份标识（宝石 = gemId，装备 = uniqueId，道具 = resId）。 */
     readonly id: number;
+    readonly uniqueId?: string;
     /** 配置 resId（宝石槽类型 / 装备 / 道具）。 */
     readonly resId: number;
     /** 物品归属类型。 */
@@ -66,6 +67,58 @@ export interface IRoleGemEntry extends IRoleBagEntry {
     readonly kind: 'gem';
     readonly gemId: string;
     readonly equipId: number;
+}
+
+export interface IRoleEquipGrowth {
+    readonly id: string;
+    readonly baseId: number;
+    readonly name: string;
+    readonly level: number;
+    readonly rank: number;
+    readonly worn: boolean;
+    readonly attack: number;
+    readonly hpPercent: number;
+    readonly nextAttack?: number;
+    readonly nextHpPercent?: number;
+    readonly effects: readonly string[];
+    /**
+     * 已镶嵌宝石的属性文案（`gemAttribute.modifyDesc`，按孔位顺序）。
+     *
+     * 与 {@link effects}（装备洗练属性，和 {@link washValues} 下标一一对应）**分列**：
+     * 宝石不参与洗练数值，混进 `effects` 会让升品页的下标错位。
+     */
+    readonly gemEffects: readonly string[];
+    readonly washValues: readonly number[];
+    readonly levelCost: readonly string[];
+    readonly qualityCost: string | null;
+    readonly washCost: string | null;
+}
+
+export interface IRoleEquipPlan {
+    readonly page: number;
+    readonly name: string;
+    readonly selected: boolean;
+    readonly lockedUntil: number;
+}
+
+export interface IRoleGemGrowth {
+    readonly lock: number;
+    readonly refineCost: number;
+    readonly pendingAttribute: string;
+}
+
+export interface IRoleGrowthProtocol {
+    CmdEquipSelectPageReqMsg: [CmdEquipSelectPageReqMsg, CmdEquipSelectPageRspMsg];
+    CmdEquipReplaceReqMsg: [CmdEquipReplaceReqMsg, CmdEquipReplaceRspMsg];
+    CmdEquipDecomposeReqMsg: [CmdEquipDecomposeReqMsg, CmdEquipDecomposeRspMsg];
+    CmdEquipUpLevelReqMsg: [CmdEquipUpLevelReqMsg, CmdEquipUpLevelRspMsg];
+    CmdEquipUpLevelAllReqMsg: [CmdEquipUpLevelAllReqMsg, CmdEquipUpLevelAllRspMsg];
+    CmdEquipUpQualityReqMsg: [CmdEquipUpQualityReqMsg, CmdEquipUpQualityRspMsg];
+    CmdEquipWashReqMsg: [CmdEquipWashReqMsg, CmdEquipWashRspMsg];
+    CmdEquipWashConformReqMsg: [CmdEquipWashConformReqMsg, CmdEquipWashConformRspMsg];
+    CmdGemLockReqMsg: [CmdGemLockReqMsg, CmdGemLockRspMsg];
+    CmdGemRefineReqMsg: [CmdGemRefineReqMsg, CmdGemRefineRspMsg];
+    CmdGemRefineSaveReqMsg: [CmdGemRefineSaveReqMsg, CmdGemRefineSaveRspMsg];
 }
 
 export interface IRoleGemSocket {

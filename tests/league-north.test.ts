@@ -829,16 +829,14 @@ test('E6 奖励页：切页签**不发包**（两档一次读全），领奖走 
     assert.ok(code.includes("this.tabRoleRef.setSelected(this.tab === 'role')"), '个人页签的选中态');
 });
 
-test('E7 三个列表页：都等 `nextPopupFrame()` 再 refreshList（否则虚拟列表槽位还没建）', () => {
+test('E7 三个列表页：不再手写 `nextPopupFrame()`，直接 refreshList + 回顶', () => {
     for (const [path, listName] of [
         [RANK_PAGE_TS, 'this.rankList.refreshList('],
         [REWARD_PAGE_TS, 'this.rewardList.refreshList('],
     ] as const) {
         const code = readFileSync(path, 'utf8');
-        const frame = code.indexOf('await this.nextPopupFrame();');
-        const refresh = code.indexOf(listName);
-        assert.ok(frame > 0, `${path} 缺 await this.nextPopupFrame()`);
-        assert.ok(refresh > frame, `${path} 的 refreshList 必须晚于 defer 一帧`);
+        assert.ok(!code.includes('nextPopupFrame()'), `${path} 不应再手写 nextPopupFrame()`);
+        assert.ok(code.includes(listName), `${path} 缺 ${listName}`);
         assert.ok(code.includes('.scrollToTop(false)'), `${path} 铺完应回到顶部`);
         // `onInit` 由 `PopupBase._inited` 保证每实例只跑一次 ⇒ 不再需要「只绑一次」门闩
         assert.ok(!/if \(!this\.rendererBound\)/.test(code), `${path} 不该再有「只绑一次」门闩`);

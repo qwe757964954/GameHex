@@ -1,6 +1,5 @@
 /**
- * 物品详情（老端 `LayerRolrItemDetail`，FGUI `组件_角色_道具详情.xml`）的判定口径与解析
- * —— 纯函数层，只依赖 core 的表行骨架，`tests/itemdetail.test.ts` 直接 import。
+ * 物品详情模块的判定口径与解析 —— 纯函数层，只依赖 core 的表行骨架。
  *
  * 页面里带 `cc` 的部分不能进这里：链上出现 `import ... from 'cc'` 会让整组用例静默失效。
  *
@@ -218,42 +217,6 @@ export function parseItemRows(rows: readonly unknown[]): Map<number, IItemRow> {
 }
 
 // ============================================================
-// 按钮 / 内容区的显隐
-// ============================================================
-
-/**
- * 界面下半部四块的显隐（由「有没有内容」+「能不能使用」+「能不能合成」推出）。
- *
- * 真源是 FGUI 控制器「类型」+ `UpdateComposBtn`：
- *   类型 0 有内容不可使用 / 1 有内容可使用 / 2 无内容不可使用 / 3 无内容可使用；
- *   `btn_go` 显示类型 1，`btn_go1` 显示类型 3，「内容」显示类型 0 或 1，
- *   合成按钮优先于 `btn_go1`。
- *
- * 老端 `btn_go` 与 `btn_compos` 会同时为 true（两者几何只差 2px，靠子节点顺序遮挡），
- * 这里改成三选一互斥，视觉等价，但不会出现两个按钮同时可点。
- */
-export interface IItemDetailButtonState {
-    /** 「内容」标题 + 内容格子容器。 */
-    readonly showContent: boolean;
-    /** `btn_go`（有内容可使用）。 */
-    readonly showGo: boolean;
-    /** `btn_go1`（无内容可使用）。 */
-    readonly showGo1: boolean;
-    /** `btn_compos`（碎片合成）。 */
-    readonly showCompos: boolean;
-}
-
-export function typeStateOf(hasItemBox: boolean, useJump: number, canCompos: boolean): IItemDetailButtonState {
-    const usable = Number.isFinite(useJump) && useJump > 0;
-    return {
-        showContent: hasItemBox,
-        showCompos: canCompos,
-        showGo: !canCompos && hasItemBox && usable,
-        showGo1: !canCompos && !hasItemBox && usable,
-    };
-}
-
-// ============================================================
 // 获取途径（viewtype）
 // ============================================================
 
@@ -303,54 +266,4 @@ export function accessRefsOf(
 /** 只要文案（`accessRefsOf` 的投影；单测与「只显示不点击」的场景用）。 */
 export function accessTextsOf(viewTypes: ReadonlyMap<number, IViewTypeRow>, access: readonly number[]): string[] {
     return accessRefsOf(viewTypes, access).map((ref) => ref.text);
-}
-
-// ============================================================
-// 碎片合成（itemCraft）
-// ============================================================
-
-/** `itemCraft` 表一行（主键是碎片自身的 resId，不是产物）。 */
-export interface IItemCraftRow {
-    readonly id: number;
-    /** 合成需要的碎片数量。 */
-    readonly number: number;
-    /** 合成产物。 */
-    readonly reward: { readonly resId: number; readonly number: number } | null;
-}
-
-export function parseItemCraftRows(rows: readonly unknown[]): Map<number, IItemCraftRow> {
-    const out = new Map<number, IItemCraftRow>();
-    for (const raw of rows) {
-        if (!raw || typeof raw !== 'object') continue;
-        const row = raw as Record<string, unknown>;
-        const id = toCount(row.id);
-        if (id <= 0) continue;
-        const rewardRaw = row.reward && typeof row.reward === 'object'
-            ? (row.reward as Record<string, unknown>)
-            : null;
-        out.set(id, {
-            id,
-            number: toCount(row.number),
-            reward: rewardRaw
-                ? {
-                    resId: toCount(rewardRaw.resId),
-                    number: Number.isFinite(Number(rewardRaw.number)) ? toCount(rewardRaw.number) : 1,
-                }
-                : null,
-        });
-    }
-    return out;
-}
-
-/**
- * 「合成」按钮显不显示。老端口径：
- * `craftRef != null && craftRef.number > 0 && 持有数量 >= craftRef.number`。
- *
- * `itemCraft` 是异步表，不预热的话这里恒 undefined，「合成」按钮永远不出现（静默）。
- * 本工程的预热在 `ItemDetailRepository.load()` 的 `readRows('itemCraft')`。
- */
-export function canComposOf(craft: IItemCraftRow | undefined | null, owned: number): boolean {
-    if (!craft) return false;
-    if (!Number.isFinite(craft.number) || craft.number <= 0) return false;
-    return Number.isFinite(owned) && owned >= craft.number;
 }

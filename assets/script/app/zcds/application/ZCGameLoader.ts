@@ -14,8 +14,8 @@ import { captureZCMatchConfig, createZCMatchConfig } from '../model/ZCMatchConfi
 import type { ZCMatchConfig, ZCMatchMap } from '../model/ZCMatchConfig';
 import { decorFramePath, GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME, ARTIFACT_CLAIM_BURST_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, SPAWN_REGION_ART_ROOT, spriteFramePath } from '../../ArtPaths';
 import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
-import { ZCGuideLoader } from './ZCGuideLoader';
-import type { IZCGuidePreparedContent } from './ZCGuideLoader';
+import { loadZCGuide, ZCGuideLoader } from './ZCGuideLoader';
+import type { IZCGuidePreparedContent } from '../model/ZCGuideConfig';
 import type { IZCDeferredBattleArt, IZCGamePreparedResources } from './ZCGamePreparedResources';
 import { SPAWN_REGION_HINT_PREFAB, type IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay';
 import type { IZCMonsterFocusFrames } from '../view/ZCHexView';
@@ -245,7 +245,6 @@ export class ZCGameLoader {
     private createGuideTask(scope?: ResourceScope): IZCGamePreparedResources['loadGuide'] {
         let guideTask: Promise<IZCGuidePreparedContent> | null = null;
         return () => {
-            this.checkActive(scope);
             if (guideTask) return guideTask;
             const task = new ZCGuideLoader(this.resources).prepare(scope);
             guideTask = task;

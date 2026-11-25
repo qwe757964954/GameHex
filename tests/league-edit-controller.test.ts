@@ -22,8 +22,8 @@ function fixture(type = 1, content = '初值') {
         requests: { removeCaller: caller => cancelled.push(caller) },
     });
     controller.start();
-    const intent = (kind: 'submit' | 'change', value = model.content, target = owner) =>
-        EventMgr.instance.emit(LeagueEditEvent.Intent, { kind, content: value }, target);
+    const intent = (kind: 'submit' | 'change', value = model.content) =>
+        EventMgr.instance.emit(LeagueEditEvent.Intent, { kind, content: value });
     return { owner, model, controller, states, tips, requests, cancelled, intent, get closed() { return closed; } };
 }
 
@@ -42,11 +42,10 @@ test('edit model preserves raw content and rejects empty, placeholder and invali
     assert.equal(new LeagueEditModel().canSubmit, false);
 });
 
-test('edit controller isolates owners, rejects invalid submissions and gates duplicate requests', async () => {
+test('edit controller rejects invalid submissions and gates duplicate requests', async () => {
     const h = fixture(2);
     try {
         h.controller.start();
-        h.intent('submit', '陌生页面', {});
         h.intent('submit', ''); h.intent('submit', '***');
         assert.equal(h.requests.length, 0);
         h.intent('submit', 'wx-raw'); h.intent('submit', 'wx-raw');

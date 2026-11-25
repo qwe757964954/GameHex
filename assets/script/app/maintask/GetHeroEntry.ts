@@ -1,7 +1,7 @@
 import { _decorator, Component, Label, Node, SpriteFrame } from 'cc';
 import { Toast } from '../common/Toast';
 import { GoodsBox } from '../itemdetail/GoodsBox';
-import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
+import { ItemInfoPage } from '../itemdetail/ItemInfoPage';
 import { loadItemIconArt, loadItemQualityFrame } from '../itemdetail/ItemDetailArtLoader';
 import { mainTaskRepository } from './MainTaskRepository';
 import type { IHeroTaskSnapshot, IMainTaskRepository } from './MainTaskRepository';
@@ -99,7 +99,7 @@ export class GetHeroEntry extends Component {
         // 不能领（未完成 / 已领取）：老端 `com_task_hero.setClick` 的 else 分支是空的，
         // 但 `com_goods` 的默认 `onClickItem()` 仍会打开该物品详情 —— 照做。
         if (snapshot.rewardResId > 0) {
-            await ItemDetailPage.open({
+            await ItemInfoPage.open({
                 userData: { resId: snapshot.rewardResId, number: snapshot.rewardNumber },
             });
         }

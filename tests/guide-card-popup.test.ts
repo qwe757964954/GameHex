@@ -57,7 +57,7 @@ function fixture() {
     }, view);
     return { view, events, composition, resolveStatus: () => resolveStatus(),
         open: () => composition.open({ card: unit('68012'), cardId: '68012', level: 1 }),
-        next: () => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'next' }, view),
+        next: () => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'next' }),
         finish() { composition.dispose(); EventMgr.instance.offTarget(view); },
     };
 }

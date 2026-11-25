@@ -1,9 +1,9 @@
-import { _decorator, Component, Node } from 'cc';
+import { _decorator, Component, Node, Widget } from 'cc';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { RoleEvent } from './RoleEvents';
 import type { IRoleGemEntry } from './RoleTypes';
-import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
+import { ItemInfoPage } from '../itemdetail/ItemInfoPage';
 import { roleRepository } from './RoleRepository';
 import { loadRoleBagIcon, loadRoleQualityFrame } from './RoleArtLoader';
 import { bagCountText, bagRankText } from './RoleTable';
@@ -21,7 +21,7 @@ const { ccclass, property } = _decorator;
  * ## 列表：工程 `VirtualScrollView`（网格模式）
  *
  * 6 列网格（`gridCount=6`，格 96×96、横间距 22、行间距 15）由 Inspector 配置，**代码不覆盖**（项目约定：配置只在 prefab 一处）。
- * 本类只挂 `renderItemFn` / `onItemClickFn` 两个回调 + 喂 `refreshList(按 6 列补满的槽数)`。
+ * 本类只挂 `renderItemFn` / `onItemClickFn` 两个回调 + 喂 `refreshList(实际条目数)`。
  *
  * ⚠️ 两条时序（技能 §20.3）：
  *   ① 图必须先 `await` 完再 `refresh`（`renderItemFn` 同步，现加载会闪上一格图）；
@@ -39,6 +39,13 @@ export class RoleBagPanel extends Component {
 
     /** 缓存：Grid 节点上的虚拟列表。 */
     private list: VirtualScrollView = null;
+
+    /** 缓存：BagPanel 的 Widget（上下双向拉伸，改 top 即可整体上探）。 */
+    private panelWidget: Widget = null!;
+    /** Widget 的设计稿 top（切回宝石页签时还原）。 */
+    private panelTopBase = 0;
+    /** 当前顶部多占的高度（0 = 设计稿布局）。 */
+    private topExtra = 0;
 
     /** 当前展示条目（已排序）。 */
     private entries: IRoleBagEntry[] = [];
@@ -72,6 +79,8 @@ export class RoleBagPanel extends Component {
 
         // prefab 已绑好，不判空：绑错应当场抛出来，而不是静默留个死界面。
         this.list = this.grid.getComponent(VirtualScrollView);
+        this.panelWidget = this.node.getComponent(Widget);
+        this.panelTopBase = this.panelWidget.top;
 
         // 两个回调只接一次（技能 §20.7：放 onOpen 会随每次打开重复叠加）。
         this.list.renderItemFn = (node: Node, index: number) => this.renderItem(node, index);
@@ -83,11 +92,14 @@ export class RoleBagPanel extends Component {
     // ============================================================
 
     /** 切换页签并铺列表（列表区**常驻**在角色页下半屏，不是弹层）。 */
-    async show(tab: RoleBagTabId): Promise<void> {
+    async show(tab: RoleBagTabId, gemEquipId = 0): Promise<void> {
         const rev = (this.revision += 1);
         this.ensureInit(); // 宿主可能还没激活过 ⇒ onLoad 没跑，这里兜住
 
-        this.entries = roleRepository.bagEntries(tab);
+        const entries = roleRepository.bagEntries(tab);
+        this.entries = tab === 1 && gemEquipId
+            ? entries.filter(entry => (entry as IRoleGemEntry).equipId === gemEquipId)
+            : entries;
 
         // 预加载物品图标（先 await 完，再 refresh —— renderItemFn 同步）。
         const icons = await Promise.all(this.entries.map((e) => loadRoleBagIcon(e)));
@@ -103,12 +115,31 @@ export class RoleBagPanel extends Component {
         );
         if (rev !== this.revision) return;
 
-        // 固定 6 列整页铺满：不足一页时补空槽，与效果图的 6×4 网格数量一致（不伪造物品）。
-        const gridCount = this.list.gridCount > 0 ? this.list.gridCount : 1;
-        const slotCount = Math.ceil(this.entries.length / gridCount) * gridCount;
-        this.list.refreshList(slotCount);
+        // 按实际物品数量刷新列表（对齐老端 TabGem / TabRoleEquip / TabRoleItem，有多少显示多少，不额外补空白框）。
+        this.list.refreshList(this.entries.length);
         this.list.scrollToTop(false);
+        // 顶部宝石功能行显隐会改面板高度；这里再同步一次视口，兜住 Widget 对齐晚于列表刷新的时序。
+        this.list.refreshViewportSize();
         this.emptyTip.active = this.entries.length === 0;
+    }
+
+    /**
+     * 顶部宝石功能行隐藏后，让列表区整体上探、占满空出来的高度（底边仍贴页签栏）。
+     *
+     * 只改 `Widget.top`：BagPanel 是上下双向拉伸，上边一收高度自动补到下方，
+     * `Viewport` 再跟着铺满，不用手写尺寸。
+     * 视口高度变了要让虚拟列表重新量一次，否则可见行数与滚动边界还按旧高度算
+     * （`_viewportSize` 只在 `start()` 里取一次）。
+     *
+     * @param extra 顶部空出的高度（0 = 还原设计稿布局）
+     */
+    setTopExtra(extra: number): void {
+        this.ensureInit();
+        if (extra === this.topExtra) return;
+        this.topExtra = extra;
+        this.panelWidget.top = this.panelTopBase - extra;
+        this.panelWidget.updateAlignment();
+        this.list.refreshViewportSize();
     }
 
     /**
@@ -136,19 +167,7 @@ export class RoleBagPanel extends Component {
 
         const entry = this.entries[index];
         if (!entry) {
-            // 整页补位槽：只留中性品质框，图标 / 数量 / 品阶 / 状态全部清空。
-            item.render(
-                this.qualityFrames.get(1) ?? null,
-                null,
-                {
-                    selected: false,
-                    equipped: false,
-                    upMark: false,
-                    redDot: false,
-                },
-                '',
-                '',
-            );
+            node.active = false;
             return;
         }
 
@@ -168,17 +187,21 @@ export class RoleBagPanel extends Component {
 
     /**
      * 点一格：
-     * · 装备 / 道具 → 物品详情弹窗（ItemDetailPage，同「获得奖励」的处置）；
+     * · 道具 → 通用物品详情。装备与宝石走角色操作。
      * · 宝石交由角色 Controller 展示详情或确认镶嵌。
      */
     private onItemClick(index: number): void {
         const entry = this.entries[index];
         if (!entry) return;
         if (entry.kind === 'gem') {
-            EventMgr.instance.emit(RoleEvent.Intent, { kind: 'gem', id: (entry as IRoleGemEntry).gemId }, this.node.parent);
+            EventMgr.instance.emit(RoleEvent.Intent, { kind: 'gem', id: (entry as IRoleGemEntry).gemId });
             return;
         }
-        void ItemDetailPage.open({
+        if (entry.kind === 'equip') {
+            if (entry.uniqueId) EventMgr.instance.emit(RoleEvent.Intent, { kind: 'equip', id: entry.uniqueId });
+            return;
+        }
+        void ItemInfoPage.open({
             userData: { resId: entry.resId, number: entry.count },
             allowMultiple: true,
         });

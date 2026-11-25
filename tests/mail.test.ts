@@ -876,12 +876,11 @@ test('D6 ⚠️ `renderItemFn` 只绑**一次**（在 `onInit`）—— 绑在 `
     assert.equal(onOpen.includes('renderItemFn ='), false, 'onOpen 里不许重绑 renderItemFn');
 });
 
-test('D7 ⚠️ `onOpen` 里先 `await this.nextPopupFrame()`（`VirtualScrollView` 在 `start()` 才建槽位）', () => {
+test('D7 ⚠️ 走 `onViewReady` 或 `onOpen` 里先 `await this.nextPopupFrame()`（`VirtualScrollView` 在 `start()` 才建槽位）', () => {
     const text = src('MailPage.ts');
-    const at = text.indexOf('protected async onOpen');
-    assert.ok(at > 0);
-    const onOpen = text.slice(at, at + 1200);
-    assert.ok(onOpen.includes('nextPopupFrame'), 'MailPage.onOpen 缺 nextPopupFrame');
+    const hasViewReady = text.includes('onViewReady');
+    const hasNextFrame = text.includes('nextPopupFrame');
+    assert.ok(hasViewReady || hasNextFrame, 'MailPage 缺 onViewReady 或 nextPopupFrame');
 });
 
 test('D8 回调里**按 index 现取**行数据（禁闭包捕获本趟入参 —— 复用行会串数据）', () => {
@@ -907,16 +906,15 @@ test('D10 ⚠️ 详情页奖励列表的接线：`renderItemFn` 属性赋值 + 
     assert.ok(/renderRewardSlot\(node, index\)/.test(text), '回调应转发到 renderRewardSlot(node, index)');
     // ② 图必须**先取完再铺**（renderItemFn 是同步的，里面现加载会闪上一份奖励的图）
     assert.ok(/this\.rewardFrames\[index\]/.test(text), 'renderRewardSlot 应只读预取好的 rewardFrames[index]');
-    // ③ `RewardBox` 出厂 active=false ⇒ 列表的 start() 要等第一次激活才跑；
-    //    `refreshList` 早于它就一个格子都不建（**不报错**，只是空白）⇒ 必须中间隔一帧。
-    //    ⚠️ 按「开箱之后」找那一帧：`onOpen` 里也有一个 `nextPopupFrame()`（在开箱之前）。
+    // ③ `RewardBox` 出厂 active=false ⇒ 激活后 `VirtualScrollView` 会在首次 `start()` 时自动消耗待铺条数；
+    //    顺序必须是「开箱（rewardBox.active = hasReward）→ refreshList」，不再手动 nextPopupFrame。
     const boxAt = text.indexOf('this.rewardBox.active = hasReward');
-    const frameAt = text.indexOf('await this.nextPopupFrame()', boxAt);
     const refreshAt = text.indexOf('this.rewardList.refreshList(count)', boxAt);
-    assert.ok(boxAt >= 0 && frameAt >= 0 && refreshAt >= 0,
-        `详情页缺步骤：开箱(${boxAt}) / 等帧(${frameAt}) / 刷列表(${refreshAt})`);
-    assert.ok(frameAt < refreshAt,
-        '顺序必须是「开箱 → await nextPopupFrame() → refreshList」，否则列表一片空白（不报错）');
+    assert.ok(boxAt >= 0 && refreshAt >= 0,
+        `详情页缺步骤：开箱(${boxAt}) / 刷列表(${refreshAt})`);
+    assert.equal(text.includes('nextPopupFrame()'), false, '详情页不应再手写 nextPopupFrame()');
+    assert.ok(boxAt < refreshAt,
+        '顺序必须是「开箱 → refreshList」');
 });
 
 test('D11 ⚠️ 入口白名单**两处**都要登记（漏一处：入口不弹面板或弹了没内容）', () => {

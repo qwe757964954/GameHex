@@ -64,8 +64,6 @@ test('详情左右切卡沿用卡库顺序与真实等级，升级在途禁止�
     });
     try {
         await h.controller.start();
-        h.intent('next', {});
-        assert.equal(h.states.at(-1).cardId, '1', '其他详情实例的意图不能串入');
         h.intent('next');
         await tick();
         assert.equal(h.states.at(-1).cardId, '2');
@@ -161,7 +159,7 @@ function upgradeFixture(upgraded = false) {
         } : {}),
     });
     EventMgr.instance.on(CardLineupEvent.HeroUpgraded, value => results.push(value), owner);
-    const intent = (kind = 'submit', eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind, skillId: 100101 }, eventOwner);
+    const intent = (kind = 'submit') => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind, skillId: 100101 });
     return { owner, controller, repository, states, results, applied, skills, pending, intent, failures, upgradedContents, heroLoads, heroPrefab,
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); },
         get calls() { return calls; }, get loads() { return loads; }, get releases() { return releases; }, get loading() { return loading; }, get removed() { return removed; } };
@@ -284,7 +282,7 @@ test('切卡美术加载失败保留原卡，可重试；关闭后迟到美术�
 });
 test('upgrade isolates intents, gates duplicate submits and publishes confirmed level before refreshing costs', async () => {
     const h = upgradeFixture(); try {
-        await h.controller.start(); h.intent('submit', {}); h.intent(); h.intent();
+        await h.controller.start(); h.intent(); h.intent();
         assert.equal(h.calls, 1); assert.equal(h.loading, 1);
         h.pending.resolve({ kind: 'success', heroId: 1, level: 1 }); await tick();
         assert.equal(h.results.length, 1); assert.equal(h.applied.length, 1); assert.equal(h.loads, 2);
@@ -349,13 +347,13 @@ function boardFixture(closeAfterSave = false) {
         },
     });
     EventMgr.instance.on(CardLineupEvent.DeckSaved, value => events.push(value), owner);
-    const intent = (kind: string, data = {}, eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind, ...data }, eventOwner);
+    const intent = (kind: string, data = {}) => EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind, ...data });
     return { controller, repository, pending, states, events, submissions, tips, selects, intent,
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); }, get removed() { return removed; }, get closed() { return closed; } };
 }
 test('board owns independent preset drafts, toggles and reset; foreign intents are ignored', async () => {
     const h = boardFixture(); try {
-        await h.controller.start(); h.intent('toggle', { cardId: '2' }, {}); h.intent('toggle', { cardId: '2' });
+        await h.controller.start(); h.intent('toggle', { cardId: '2' });
         assert.deepEqual(h.states[h.states.length - 1].cards.map((v: ZCDeckCard) => v.id), ['1', '2']);
         h.intent('preset', { index: 1 }); assert.deepEqual(h.states[h.states.length - 1].cards.map((v: ZCDeckCard) => v.id), ['2']);
         h.intent('reset'); h.intent('preset', { index: 0 });

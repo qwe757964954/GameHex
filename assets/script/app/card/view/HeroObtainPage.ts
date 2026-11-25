@@ -196,7 +196,9 @@ export class HeroObtainPage extends PopupBase {
 
         this.renderStatic(data, frames, badgeFrame, headFrame);
         this.bindHero(heroPrefab, headFrame);
-        if (!(await this.nextPopupFrame())) return;
+    }
+
+    protected onViewReady(): void {
         this.startReveal();
     }
 

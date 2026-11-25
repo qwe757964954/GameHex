@@ -160,7 +160,7 @@ GameNet.instance.removeCaller(this);
 
 ### 3.2 异步安全与生命周期守卫
 - 所有 `async / await` 或回调逻辑必须显式处理以下 4 种中断场景：**节点/弹窗已销毁、流程预加载已取消、玩家重复点击、请求失败**。
-- `PopupBase` 子类统一使用 `nextPopupFrame()`，并在每次 `await` 恢复后立即检查 `if (!this.isValid) return;`。
+- `PopupBase` 提供 `onViewReady` 架构级生命周期（首帧就绪后框架自动安全调用，业务无需手动等帧），或显式使用 `if (!await this.nextPopupFrame()) return;`（底层已闭环校验节点有效性、打开状态与资源作用域，禁止在其后堆叠重复冗余的 `if (!this.isValid || scope.disposed)`）。其他一般异步 `await` 恢复后依然必须检查 `if (!this.isValid) return;`。
 - 流程级预加载（`Procedure*`）必须在异步阶段检查 `if (context.cancelled) return;`，防止切流程后幽灵回调污染新页面。
 - **同步事件 / 缓存回调不判 `isValid`**（原则见 §2.1.1）：`CacheMgr.setEventUpdate` / `view.on('xxx')` / `EventMgr.on` 注册的**同步**回调，`onDestroy` 里已按 `caller + callback` 精确摘除，且事件层 `EventListener.execute`（`framework/event/EventProxy.ts:524`）派发前就有 `if (t.caller.destroyed === true) return false;` ⇒ 已销毁归属对象的监听**根本不会被调用** ⇒ 回调开头 `if (!this.isValid) return;` 恒真、属死代码，删掉。（Cocos 的 `destroyed` 在 `onDestroy` 之前就已置位，与 `isValid` 在本场景等价。）
   - **必须保留的三类**：① 任何 `await` 恢复之后；② `.then()` / `catch` / `finally` 里；③ **没有解除的**延迟调度（`scheduleOnce` / `setTimeout` / tween 结束回调）—— 它们绕过事件层的 `destroyed` 检查。

@@ -163,8 +163,8 @@ export class CardUpgradeController extends ControllerBase {
                 }),
         ]);
     }
-    private onIntent(event: CardUpgradeIntent, source: object): void {
-        if (source !== this.options.owner || this.switching) {
+    private onIntent(event: CardUpgradeIntent): void {
+        if (this.switching) {
             return;
         }
         if (event.kind === 'submit') {

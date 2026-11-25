@@ -16,7 +16,7 @@ test('奖励窗从打开前即通知暂停，空奖励立即关闭或加载期�
         'assets/script/app/showReward/ShowRewardPage.ts', { modules: {
             cc: ccStub(), '/PopupBase': { PopupBase }, '/PopupDef': { PopupCloseReason: { Manual: 0 } },
             '/EventMgr': { EventMgr }, '/ViewLifecycle': { VIEW_LIFECYCLE }, '/FW': { FW: {} },
-            '/ItemDetailPage': {}, '/ItemDetailTable': {}, '/VScrollView': {}, '/ShowRewardItem': {},
+            '/ItemInfoPage': {}, '/ItemDetailTable': {}, '/VScrollView': {}, '/ShowRewardItem': {},
             '/ShowRewardTexts': {}, '/RewardFrames': {}, '/ShowRewardTable': table,
             '/RewardEntries': rewardEntries,
         } });

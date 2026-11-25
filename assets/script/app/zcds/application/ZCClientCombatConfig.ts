@@ -6,7 +6,7 @@ import { getZCNeutralResourceCatalog } from '../model/ZCNeutralResourceGroup';
 import { ownersForPlayerCount } from '../model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig, type ZCMatchMap, type IZCBattleRates } from '../model/ZCMatchConfig';
 import type { ZCCompiledModifierLoadout } from '../model/ZCModifierRuntime';
-import { compileZCCombatBuild, getZCModifierCatalogs, selectZCSkillPlans, type ZCModifierCatalogs } from '../model/ZCModifierRuntime';
+import { compileZCCampGemLoadouts, compileZCCombatBuild, getZCModifierCatalogs, selectZCSkillPlans, type ZCModifierCatalogs } from '../model/ZCModifierRuntime';
 import { ZC_RUNTIME_CONFIG } from '../model/ZCRuntimeConfigStore';
 
 export { ZC_BATTLE_RATE_KEYS } from '../../battle/BattleStartModel';
@@ -364,6 +364,10 @@ function compileOwnerLoadouts(
                 reason: error instanceof Error ? error.message : String(error),
             });
         }
+    }
+    if (unit?.modifyIds?.length) {
+        const targetUnitIds = new Set(heroes.map((hero) => String(hero.heroId)));
+        loadouts.push(...compileZCCampGemLoadouts(unit.modifyIds, targetUnitIds, config.units, catalogs));
     }
     return loadouts;
 }

@@ -209,39 +209,29 @@ const FRAME_OP_SPAWN = 4;
 
 /** 城墙/建筑占据一格，近战单位可从相邻格继续靠近并攻击其边缘。*/
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
-/** 召唤物四个阵位的基准角（度，数学坐标系：0°=+x、90°=屏幕上方）：左上/右上/左下/右下。实际摆位叠加本体朝向。*/
+/** 召唤物四向阵位角（度，0°=+x，90°=+y），叠加本体朝向 */
 const SUMMON_SLOT_DEGREES = [135, 45, 225, 315] as const;
-/** 独立分身默认散落半径（棋盘逻辑 px）。*/
+/** 独立分身散落半径（逻辑 px） */
 const SUMMON_SCATTER_RADIUS = 20;
-/** 独立分身逐个生成间隔（秒），用于按时序错开生成表现。*/
+/** 分身依次出现间隔（秒） */
 const SUMMON_STAGGER_SECONDS = 0.1;
-/** 特效起播至分身实体出现的时间差（秒），避免生成前实体作为隐形目标被攻击。*/
+/** 特效起播到生成实体的延迟（秒），避开隐形期提前受击 */
 const SUMMON_APPEAR_DELAY_SECONDS = 0.32;
-/** 分身生成特效默认时长（秒，26 帧 @ 24fps），与动画 clip 长度匹配。*/
+/** 分身生成特效时长（26 帧 @ 24fps） */
 const ZC_SUMMON_SPAWN_FX_SECONDS = 26 / 24;
-/** 独立分身默认透明度兜底（配表缺省 summonAlpha 时使用）。*/
+/** 独立分身默认透明度 */
 const SUMMON_INDEPENDENT_ALPHA = 0.65;
-/** 召唤脚底光环默认兜底时长（秒，避免无限期常驻 groundZones）。*/
+/** 召唤光环兜底时长（秒） */
 const SUMMON_AURA_FALLBACK_SECONDS = 6;
-/**
- * 持续光环伤害效果覆盖本体及阵位随从的事件级放大倍率（effectScale）。
- * 基于可见环半轴（91.9 × 36.05 屏上 px）与斜角阵位投影换算，使纵向能完整圈入站位。
- */
+/** 召唤光环覆盖阵位随从的缩放倍率 */
 export const ZC_SUMMON_AURA_COVER_SCALE = ZC_EFFECT_SCALE.summonAuraCoverScale;
-/**
- * 屏上 px ÷ 世界 px（各向异性：2.5625 / 2.1429）。
- * 与 HexGridLayout 格距常量联动换算，改格距或镜头比例时自动跟随。
- */
+/** 屏上 px / 世界 px（各向异性比例） */
 const SUMMON_AURA_MAP_SCALE_X = HEX_GRID_VIEW_COLUMN_SPACING / HEX_GRID_LOGICAL_COLUMN_STEP;
 const SUMMON_AURA_MAP_SCALE_Y = HEX_GRID_VIEW_ROW_SPACING / HEX_GRID_LOGICAL_ROW_STEP;
-/** effectScale = 1 时持续光环可见环半轴（屏上 px）。*/
 const SUMMON_AURA_RING_HALF_SCREEN_X = ZC_EFFECT_SCALE.summonAuraRingHalfScreenX;
 const SUMMON_AURA_RING_HALF_SCREEN_Y = ZC_EFFECT_SCALE.summonAuraRingHalfScreenY;
 
-/**
- * 光圈在世界坐标系下覆盖的半轴（世界 px）。
- * 地面特效尺寸由 prefab 与 effectScale 决定，以此作为召唤物活动范围真源。
- */
+/** 光圈在世界坐标下的覆盖半轴（世界 px） */
 export function zcSummonAuraLeashHalfWorld(
     effectScale: number = ZC_SUMMON_AURA_COVER_SCALE,
 ): { readonly x: number; readonly y: number } {
@@ -250,12 +240,7 @@ export function zcSummonAuraLeashHalfWorld(
         y: SUMMON_AURA_RING_HALF_SCREEN_Y * effectScale / SUMMON_AURA_MAP_SCALE_Y,
     };
 }
-/**
- * 弹道扫掠段找结构目标时的采样间隔（逻辑 px）。
- *
- * 格距 36×42、格内切半径约 21 ⇒ 取 8 能保证一帧的飞行段不会被"跳格"漏掉，
- * 而每帧最多也只多算 2~3 个点（`hexIdAt` 是 3×3 邻域查表，代价可控）。
-*/
+/** 弹道扫掠段检测结构目标的采样步长（逻辑 px，小于半格 21 以防跨格漏判） */
 const STRUCTURE_SAMPLE_STEP = 8;
 /** 伤害飘字存活时长（秒）。*/
 const FLOAT_TEXT_DAMAGE_SECONDS = 0.85;
@@ -969,71 +954,49 @@ export class ZCGameModel {
     private buildSkillTriggerContext(): IZCSkillTriggerContext {
         return {
             statusSystem: this.statusSystem,
-            //  键口径与 `ZCAttackResolutionSystem.sendAttack` 完全一致（`${unitId}:${普攻 profile.skillId}`），
-            //  否则「配置里能查到、运行时查不到」会出现同一张卡在两条链路上行为不一致。
+            // key 与攻击系统一致（${unitId}:${attackSkillId}）
             runtimeOf: (unit) => (unit.neutralReinforcement ? this.neutralSkillRuntime : this.skillRuntime[unit.owner])
                 .get(`${unit.unitId}:${this.effectiveUnitDefinition(unit).attackProfile.skillId}`),
-            //  连发弹走 `sendBurstShot`，不进 `sendAttack`：后者会推进普攻节拍与强化 CD。
             fireBurst: (unit) => ZCAttackResolutionSystem.sendBurstShot(this.state, unit, this.attackResolutionContext),
-            //  副轨主动（横扫）：走独立的扇形结算，不推进普攻节拍与强化 CD。
             castSecondary: (unit) => ZCAttackResolutionSystem.castFanSkill(this.state, unit, this.attackResolutionContext),
-            // 自身光环：在本体脚下开启跟随本体的周期伤害区域，独立车道（unit.auraReadyAt）
             castSelfAura: (unit) => ZCAttackResolutionSystem.castSelfAura(this.state, unit, this.attackResolutionContext),
-            // 五雷轰顶：沿目标背朝向排开落雷，独立车道（unit.boltReadyAt）
             castBolt: (unit) => ZCAttackResolutionSystem.castBoltLine(this.state, unit, this.attackResolutionContext),
-            // 闪电链：从锁定目标起跳逐跳弹射，独立车道（unit.chainReadyAt）
             castChainLightning: (unit) => ZCAttackResolutionSystem.castChainLightning(
                 this.state, unit, this.attackResolutionContext),
-            // 随从召唤：随从生成与阵位在模型层直接操作 state.units 与注册表
             castSummon: (unit) => this.summonUnits(unit),
-            // 怒吼：自心圆范围伤害、敌方减攻与友军护盾，独立车道（unit.roarReadyAt）
             castRoar: (unit) => ZCAttackResolutionSystem.castRoar(this.state, unit, this.attackResolutionContext),
             castStorm: (unit) => ZCAttackResolutionSystem.castStorm(this.state, unit, this.attackResolutionContext),
             castRayBeam: (unit, vulnStatusId) => ZCAttackResolutionSystem.castRayBeam(
                 this.state, unit, this.attackResolutionContext, vulnStatusId),
-            // 火焰区域：在目标点半径内生成地面伤害区域
             castFireZone: (unit) => ZCAttackResolutionSystem.castFireZone(
                 this.state, unit, this.attackResolutionContext),
-            // 精密陷阱：在本体脚下布置踩中/到点引爆陷阱，独立车道（unit.trapReadyAt）
             castTrap: (unit) => ZCAttackResolutionSystem.castTrap(this.state, unit, this.attackResolutionContext),
-            // 爆点投掷物：朝锁定目标发射范围爆炸弹体，减速状态由触发系统统一传入
             castSplashShot: (unit, slowStatusId) => ZCAttackResolutionSystem.castSplashShot(
                 this.state, unit, this.attackResolutionContext, slowStatusId),
-            // 范围爆发/毒液喷吐：以自身为圆心爆发伤害并套盾或击退，独立车道（unit.burstReadyAt / unit.venomReadyAt）
             castBurstSkill: (unit, guardStatusId, lane) => ZCAttackResolutionSystem.castBurstSkill(
                 this.state, unit, this.attackResolutionContext, guardStatusId, lane),
-            // 扇形甩击：身前扇形判定并施加减速状态，独立车道（unit.fanReadyAt）
             castFanSweep: (unit, slowStatusId) => ZCAttackResolutionSystem.castFanSweep(
                 this.state, unit, this.attackResolutionContext, slowStatusId),
-            // 冲锋：沿位移线段判定碰撞并施加伤害与护盾
             castChargeDash: (unit, options) => ZCAttackResolutionSystem.castChargeDash(
                 this.state, unit, this.attackResolutionContext, options),
-            // 风暴弹：命中单体后生成滞留风暴区域，独立车道（unit.windReadyAt）
             castWindBolt: (unit) => ZCAttackResolutionSystem.castWindBolt(
                 this.state, unit, this.attackResolutionContext),
-            // 连射导弹：按 0/0.4/0.8s 节拍发射单枚弹体
             castBarrageShot: (unit) => ZCAttackResolutionSystem.castBarrageShot(
                 this.state, unit, this.attackResolutionContext),
-            // 冲锋定长位移边界保护：校验目标格子合法性，避免冲出地图边界
+            // 冲锋定长位移边界校验，防止冲出可玩区域
             hexIdAt: (x, y) => this.geometry.hexIdAt(x, y),
-            // 技能朝向与攻击链路锁定目标保持一致
             currentTarget: (unit) => this.unitTargeting.current(unit),
             distanceScale: this.rules.combatDistanceScale,
-            // 自身施法治疗：走与吸血同一条 healUnit 统一封顶并推飘字
             healUnit: (unit, amount) => ZCStatusResolutionSystem.healUnit(unit, amount, this.statusResolutionContext),
-            // 多点打击：转发至攻击系统统一结算命中、溅射与处决
             strike: (unit, options) => ZCAttackResolutionSystem.strikeTargets(
                 this.state, unit, options, this.attackResolutionContext),
-            // 移形换影：位移统一转交 placeAt 维护连续坐标、朝向与地块索引一致
+            // 经 placeAt 更新坐标与地块索引
             blinkTo: (unit, x, y) => { this.movement.placeAt(unit, x, y); },
             unitPosition: (unit) => this.services.unitPosition(unit),
-            // 触发范围闸门：普攻射程内有目标才实际施放，与普攻判定同源
             inAttackRange: (unit) => this.unitTargeting.hasTargetInAttackRange(unit),
-            // 触发范围封顶：多点打击/移形换影搜索半径以普攻射程为上限
             attackReachOf: (unit) => this.unitTargeting.attackReachOf(unit),
-            // 技能专属触发距离：按配置半径进一步收窄判定范围以对齐视觉特效
             nearestEnemyDistance: (unit) => this.unitTargeting.nearestEnemyDistance(unit),
-            // 单位属性补丁：共享同一份 unitStatPatches 保证数值一致
+            // 与攻击系统共用同一份 unitStatPatches
             statPatchOf: (unit) => this.unitStatPatches[unit.owner]?.get(unit.unitId),
         };
     }

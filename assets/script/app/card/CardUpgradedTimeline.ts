@@ -1,17 +1,19 @@
 /**
  * CardUpgradedTimeline — 升级成功弹窗的表现时序（纯函数，零引擎依赖）
  * ------------------------------------------------------------------
- * 需求（2026-11-20）：「增加升级详情界面的 UI 表现动画」，五条按顺序串成一条时间轴：
+ * 需求（2026-11-20）：「增加升级详情界面的 UI 表现动画」，按顺序串成一条时间轴
+ * （2026-11-25 把「升级特效」从「立绘落位」挪到「刷光」那一拍，见 {@link FX_DELAY}）：
  *
  *   ① 入场 —— 各块**同时**起播，各自从屏幕的不同方向滑到自己的坐标；
- *   ② 角色升级特效 —— 15 帧序列帧，在立绘落位后播 1 次；
- *   ③ 等级数字 —— 跳一下放大，在放大峰值切成新数字，再回弹；
- *   ④ 进度条换档 —— 刷光扫过、满格顿一拍，再**清空归零**，随后绿色从左往右涨到下一级的比例；
- *   ⑤ 属性数值刷光 —— 刷光结束，数值直接切换。
+ *   ② 等级数字 —— 跳一下放大，在放大峰值切成新数字，再回弹；
+ *   ③ 刷光 —— 光柱扫过 + 角色本体叠一层发光颜色，满格顿一拍，再**清空归零**，
+ *      随后绿色从左往右涨到下一级的比例；
+ *   ④ 角色升级特效 —— spine 动画（`ddz_cj_nextlevel`），**与③同一拍**起播；
+ *   ⑤ 属性数值 —— 刷光结束，数值直接切换。
  *
  * **「所有的刷光动画同步」** 是这条需求里唯一的硬约束，所以本文件里
- * **只有一个 `shineProgressAt`**：进度条与左右属性框三条光带共用同一个扫过进度，
- * 视图侧只是把同一个 0→1 映射到各自框内的行程。谁也别再单独算一份。
+ * **只有一个 `shineProgressAt`**：进度条与左右属性框三条光带、以及角色本体 / 进度条边缘两处发光
+ * 都共用同一个扫过进度，视图侧只是把同一个 0→1 映射到各自的表现上。谁也别再单独算一份。
  *
  * 曲线在这里、写节点在 `CardUpgradedPage`（同 `UIMotion` / `UIMotionPlayer` 的分工）。
  * 不建 `cc.tween`：弹窗节点会进对象池，tween 在回收后还会跑完并写到别人的节点上。
@@ -52,18 +54,28 @@ export const ENTRANCE_DIRECTIONS: readonly IEntranceDirection[] = [
 /** 入场块数 = 方向表长度（两者必须一一对应，视图按 index 取方向）。 */
 export const ENTRANCE_BLOCK_COUNT = ENTRANCE_DIRECTIONS.length;
 
-/** 立绘所在块的序号：升级特效跟着它落位起播。 */
-export const HERO_BLOCK_INDEX = 1;
+/**
+ * 升级特效时长（秒）。
+ *
+ * 2026-11-25 起 `CardUpgradeFx` 是 spine `ddz_cj_nextlevel`：SkeletonData 里只有一条
+ * 同名动画、时长 1.0s、`loop=false`，播完停在末帧（末帧已淡到全透明）。
+ * 旧值 15/12=1.25s 对应已退役的 `007-2-run_loop_05..19` 序列帧。
+ */
+export const FX_DURATION = 1;
 
-/** 序列帧：`007-2-run_loop_05..19` 共 15 帧，采样 12fps（与 `.anim` 一致）。 */
-export const FX_FRAME_COUNT = 15;
-export const FX_SAMPLE = 12;
-export const FX_DURATION = FX_FRAME_COUNT / FX_SAMPLE;
-
-/** 立绘落位到特响起播的间隔（给落位留一拍，别在滑行途中炸开）。 */
+/**
+ * 升级特效相对**刷光那一拍**（= 角色本体叠色的起手，`shineStart`）的间隔；0 = 完全同步。
+ *
+ * 2026-11-25 用户口径：「升级界面的光效需要等待本体叠颜色同步播放，现在是角色加载动画就播放了」。
+ * 原来特响起播在「立绘落位」那一拍（`0.55s`），而本体叠色/光柱要等到刷光（`1.4s`）——
+ * 角色先被金黄连发柱炸一下、隔 0.85s 才轮到那层绿白叠色，两件事读起来是分开的。
+ * 现在把特挂到刷光上：光柱、本体叠色、进度条边缘光**同一帧**起手。
+ *
+ * 想让它比叠色再晚一点点就调大这里（单位秒），别去动 `LEVEL_POP_DELAY`。
+ */
 export const FX_DELAY = 0;
 
-/** 特响起播到等级数字起跳的间隔。 */
+/** 立绘落位到等级数字起跳的间隔（特挂到刷光之后，这一拍就是落位后的第一个动作）。 */
 export const LEVEL_POP_DELAY = 0.35;
 /** 数字放大段（到峰值 = 换数字那一刻）。 */
 export const LEVEL_POP_UP = 0.14;
@@ -118,7 +130,7 @@ export interface ICardUpgradedSchedule {
     readonly entrance: readonly number[];
     /** 最后一块落位时刻。 */
     readonly entranceEnd: number;
-    /** 升级特效起播 / 收工。 */
+    /** 升级特效起播 / 收工；起播与刷光同一拍（`shineStart + FX_DELAY`）。 */
     readonly fxAt: number;
     readonly fxEnd: number;
     /** 等级数字起跳 / 换字（= 放大峰值）/ 回弹结束。 */
@@ -151,13 +163,15 @@ export function buildCardUpgradedSchedule(): ICardUpgradedSchedule {
     for (let i = 0; i < ENTRANCE_BLOCK_COUNT; i++) entrance.push(0);
 
     const entranceEnd = round(ENTRANCE_DURATION);
-    const fxAt = round(entrance[HERO_BLOCK_INDEX] + ENTRANCE_DURATION + FX_DELAY);
-    const fxEnd = round(fxAt + FX_DURATION);
-    const levelPopAt = round(fxAt + LEVEL_POP_DELAY);
+    // 落位后的第一个动作是等级数字（2026-11-25：特挂挪去跟刷光同拍，见 `FX_DELAY`）。
+    const levelPopAt = round(entranceEnd + LEVEL_POP_DELAY);
     const levelSwitchAt = round(levelPopAt + LEVEL_POP_UP);
     const levelSettleEnd = round(levelSwitchAt + LEVEL_POP_SETTLE);
     const shineStart = round(levelSettleEnd + SHINE_DELAY);
     const shineEnd = round(shineStart + SHINE_DURATION);
+    // 升级特效与刷光同一拍起播 ⇒ 光柱、角色本体叠色、进度条边缘光同一帧起手。
+    const fxAt = round(shineStart + FX_DELAY);
+    const fxEnd = round(fxAt + FX_DURATION);
     const progressResetAt = round(shineEnd + PROGRESS_HOLD + PROGRESS_RESET);
     const progressSettleAt = round(progressResetAt + PROGRESS_GROW);
 
@@ -247,17 +261,120 @@ export function shineProgressAt(schedule: ICardUpgradedSchedule, t: number): num
 export const SHINE_FADE = 0.18;
 
 /**
- * 刷光强度（0..1）：梯形包络 —— 进出各淡一点，扫过途中恒定。
+ * 梯形包络：`0..1` 的进度 → 亮度，进/出各占 `fadeIn` / `fadeOut` 的比例。
+ *
+ * 这是**唯一**一份亮度包络形状 —— 光柱、角色本体发光、进度条边缘光三层都用它，
+ * 只是各自的进出占比不同（见下面三个包装函数）。想要「起得慢一点」就调占比，
+ * 别再各写一条曲线：三条亮度不同步的观感是「各亮各的」，比不亮更乱。
+ *
+ * `progress < 0`（= 时序表说此刻没有刷光）恒返回 0；越界的进度一律收敛。
+ */
+export function shineEnvelopeAt(progress: number, fadeIn: number, fadeOut: number): number {
+    if (progress < 0) return 0;
+    const p = clamp01(progress);
+    return Math.min(clamp01(p / fadeIn), clamp01((1 - p) / fadeOut));
+}
+
+/**
+ * 光柱强度（0..1）：进出各淡一点，扫过途中恒定。
  *
  * 两端不淡会看到光带「凭空出现在边缘」，中段再淡又会让两条带子亮度对不上。
  */
 export function shineOpacityAt(progress: number): number {
-    if (progress < 0) return 0;
-    const p = clamp01(progress);
-    const fadeIn = clamp01(p / SHINE_FADE);
-    const fadeOut = clamp01((1 - p) / SHINE_FADE);
-    return Math.min(fadeIn, fadeOut);
+    return shineEnvelopeAt(progress, SHINE_FADE, SHINE_FADE);
 }
+
+/**
+ * 角色本体发光 / 进度条边缘光的淡入淡出占比（占整段扫过的比例）。
+ *
+ * 与光柱的 `SHINE_FADE`（0.18）刻意不同：这两层不是「一条带子在扫」，而是
+ * **整块亮起来**——起手要更快（0.14 / 0.10，别让玩家以为只有光带在动），
+ * 收尾要更缓（0.42 / 0.34：光柱最后 18% 是猛掉，这两层从半程之后就开始慢慢收，
+ * 读作「余辉」而不是「灯被关掉」）。
+ *
+ * 出段占比必须 ≤ 0.5，否则中段就已经在掉了 —— 用例「中段满亮」会直接红。
+ */
+export const HERO_GLOW_FADE_IN = 0.14;
+export const HERO_GLOW_FADE_OUT = 0.42;
+export const BAR_GLOW_FADE_IN = 0.1;
+export const BAR_GLOW_FADE_OUT = 0.34;
+
+/** 角色本体发光的强度包络（0..1）。 */
+export function heroGlowAt(progress: number): number {
+    return shineEnvelopeAt(progress, HERO_GLOW_FADE_IN, HERO_GLOW_FADE_OUT);
+}
+
+/** 进度条边缘发光的强度包络（0..1）；比本体收得更慢一点，读作「光是从条上淌出去的」。 */
+export function barGlowAt(progress: number): number {
+    return shineEnvelopeAt(progress, BAR_GLOW_FADE_IN, BAR_GLOW_FADE_OUT);
+}
+
+/**
+ * 三处发光的峰值不透明度。
+ *
+ * 本体刻意不到 1：纯白剪影会把角色画成一块看不出是谁的色块；0.82 是「亮得起来、
+ * 还看得出是这张卡」的位置。要更像参考图（整只烧白）就把它往 1 推，只改这一个数。
+ */
+export const HERO_GLOW_ALPHA = 0.82;
+/** 角色身后那层柔光的峰值（低一档：光晕只是把角色从背景里托出来，不该抢主体）。 */
+export const HERO_HALO_ALPHA = 0.38;
+/** 进度条边缘光的峰值。 */
+export const BAR_GLOW_ALPHA = 0.72;
+
+// ============================================================
+// 光柱分层（2026-11-24 刷光样式优化）
+// ============================================================
+
+/**
+ * 一条光柱的一层。
+ *
+ * `frame` 指两层贴图：`shine` = 横向中间亮、两端透明的白色光带（128×32，**竖直方向没有渐变**）；
+ * `glow` = 径向柔光（200×200，中心亮、四周淡出）。宽的内层用 `shine` 压白热芯、
+ * 外层用 `glow` 撑开柔和的绿黄外晕 —— 竖直方向的柔软度只能靠 `glow` 给，
+ * `shine` 撑高只会得到一块边缘生硬的矩形。
+ */
+export interface IShineLayerSpec {
+    readonly frame: 'shine' | 'glow';
+    readonly width: number;
+    /** 层高；`'area'` = 跟目标区同高（属性框那条光带要贴着框）。 */
+    readonly height: number | 'area';
+    readonly rgb: readonly [number, number, number];
+    /** 该层自己的相对不透明度（再乘父层峰值与包络）。 */
+    readonly alpha: number;
+}
+
+/**
+ * 进度条光柱：三层同轴叠出来，横截面从外到内 = 绿黄 → 淡黄绿 → 白热。
+ *
+ * 2026-11-24 用户口径：「刷光的光柱宽度增加，有明显的渐变色效果」。
+ * 改前只有一层 120 宽的纯白光带 —— 宽度窄、又没有颜色过渡，读起来就是「一条白线划过」。
+ * 现在最外层 210（≈ 442 宽的底条一半），三层宽度 210 / 170 / 98 逐级收窄，
+ * 靠**宽度差 + 色相差**做出渐变；最外层用径向柔光，光柱上下两端才是软的。
+ */
+export const PROGRESS_BEAM_LAYERS: readonly IShineLayerSpec[] = [
+    { frame: 'glow', width: 210, height: 116, rgb: [150, 236, 96], alpha: 0.5 },
+    { frame: 'shine', width: 170, height: 54, rgb: [208, 255, 168], alpha: 0.8 },
+    { frame: 'shine', width: 98, height: 40, rgb: [255, 255, 242], alpha: 1 },
+];
+
+/**
+ * 属性框光柱：同样是三层同轴，但**配色走中性白**，不吃进度条那套绿黄。
+ *
+ * 2026-11-25 用户：「属性条对要有对应属性样式的刷光效果，和进度刷光同步播放」。
+ * 上半场只有一层 96 宽的白带（alpha 0.55），压在框上一闪就没了，读不出「这道光是为这个框打的」。
+ *
+ * 🔴 为什么是白而不是绿黄：属性框的底图**按品质换色** ——
+ * `frame_01` 金 `#D78F29` / `frame_02` 蓝 `#3B7CBA` / `frame_03` 紫 `#9C54BB` / `frame_04` 绿 `#6B9C16`
+ * （截图那张是绿的）。绿黄光压在金/蓝/紫框上会脏，只有白光在四种底色上都读作「被照亮」。
+ *
+ * 尺寸按属性框 271×65 定：主带 `'area'` 贴框高，外晕与白热芯各留一档 ——
+ * 外晕用径向图（`shine.png` 竖直方向没有渐变，只能是硬边），白热芯收窄一点别碰框沿。
+ */
+export const SLOT_BEAM_LAYERS: readonly IShineLayerSpec[] = [
+    { frame: 'glow', width: 150, height: 96, rgb: [255, 253, 242], alpha: 0.34 },
+    { frame: 'shine', width: 120, height: 'area', rgb: [255, 255, 255], alpha: 0.52 },
+    { frame: 'shine', width: 74, height: 46, rgb: [255, 255, 255], alpha: 0.86 },
+];
 
 /**
  * 进度条比例：满格 → 顿一拍 → **清空到 0** → 再从 0 涨到 `to`（2026-11-24）。

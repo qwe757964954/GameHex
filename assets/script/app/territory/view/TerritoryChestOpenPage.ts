@@ -115,6 +115,12 @@ export class TerritoryChestOpenPage extends PopupBase {
 
     private _revealPlaying = false;
     private _revealDone = false;
+    private _prepared: {
+        readonly entries: readonly IRewardEntry[];
+        readonly icons: readonly (SpriteFrame | null)[];
+        readonly frames: ReadonlyMap<string, SpriteFrame | null>;
+        readonly tables: IRewardGoodsTables;
+    } | null = null;
 
     protected onInit(): void {
         this.chestSprite = this.chestNode.getComponent(Sprite);
@@ -154,11 +160,16 @@ export class TerritoryChestOpenPage extends PopupBase {
         }
         const icons = await Promise.all(iconPromises);
         if (!context || context.cancelled) return;
-        // 等一帧让根节点的 cc.Widget 生效，卡片区缩放兜底要用到真实屏高。
-        if (!(await this.nextPopupFrame())) return;
+        this._prepared = { entries, icons, frames, tables };
+    }
 
-        this.presentCards(entries, icons, frames, tables);
-        this._entries = entries;
+    /** 首帧 Widget 对齐就绪后由框架调用：排卡时需读取真实屏高做短屏缩放兜底。 */
+    protected onViewReady(): void {
+        const prepared = this._prepared;
+        if (!prepared) return;
+        this._prepared = null;
+        this.presentCards(prepared.entries, prepared.icons, prepared.frames, prepared.tables);
+        this._entries = prepared.entries;
         this._waitingToOpen = true;
         this.bgOpacity.opacity = 255;
         this.chestNode.active = true;
@@ -172,6 +183,7 @@ export class TerritoryChestOpenPage extends PopupBase {
     }
 
     protected onClose(): void {
+        this._prepared = null;
         this._waitingToOpen = false;
         this._entries = [];
         this._revealPlaying = false;
@@ -320,6 +332,7 @@ export class TerritoryChestOpenPage extends PopupBase {
     }
 
     private resetRevealState(): void {
+        this._prepared = null;
         this._revealElapsed = 0;
         this._revealPlaying = false;
         this._revealDone = false;
@@ -379,7 +392,7 @@ export class TerritoryChestOpenPage extends PopupBase {
         for (const card of this._cards) card.settle();
         this.skipButton.node.active = true;
         this.skipOpacity.opacity = 255;
-        EventMgr.instance.emit(TerritoryUiEvent.ChestRevealed, { entries: this._entries }, this);
+        EventMgr.instance.emit(TerritoryUiEvent.ChestRevealed, { entries: this._entries });
     }
 
     /** 入场期间 = 直接落静止态；已静止 = 等同于关闭（按钮不留死状态）。 */

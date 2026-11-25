@@ -331,3 +331,34 @@ test('★Model / Controller 接线：意图 → 网关 → 仓储，三层都在
     assert.match(MODEL_SRC, /readonly monsterBoxes: readonly ITerritoryMonsterBox\[\]/);
     assert.match(VIEW_STATE_SRC, /monsterBoxLv: boxLvByCell\.get\(site\.cellId\) \?\? 0/);
 });
+
+/**
+ * 结果提示（通用系统 toast）的**时机**：演完才弹。
+ *
+ * 回包只要 100~300ms、动画要 1.2s + 顿 + 褪白 ⇒ 在回包那一刻弹提示等于剧透。
+ * 视图只报「这一格演完了」，文案由 Model 按 `monsterBoxAttempt` 决定。
+ */
+test('★★ 升级结果提示挂「演完」而不是回包：视图发 settled，Model 取文案', () => {
+    const PANEL_SRC = readFileSync('assets/script/app/territory/view/TerritoryMonsterBoxPanel.ts', 'utf8');
+    const EVENTS_SRC = readFileSync('assets/script/app/territory/application/TerritoryEvents.ts', 'utf8');
+    // ① 意图类型与 Controller 分支都在。
+    assert.match(EVENTS_SRC, /kind: 'monsterBoxRollSettled'; readonly cellId: number/);
+    assert.match(CONTROLLER_SRC, /case 'monsterBoxRollSettled': this\.model\.notifyMonsterBoxRollSettled\(intent\.cellId\)/);
+    // ② 视图在收尾那一刻发（而不是回包 / 点击时发）。
+    assert.match(PANEL_SRC, /private notifyRollSettled\(\): void \{[\s\S]{0,220}?kind: 'monsterBoxRollSettled'/,
+        '面板收尾要发 settled');
+    assert.match(PANEL_SRC, /private finishRoll\(\): void \{[\s\S]{0,400}?this\.notifyRollSettled\(\)/,
+        'finishRoll 必须先发 settled 再清 roll（否则拿不到 cellId）');
+    // ③ 回包路径不再直接弹提示：把 `upgradeMonsterBox` 到 `notifyMonsterBoxRollSettled` 之间那段切出来，
+    //    里面一个字都不许出现结果 toast（否则回包抢在动画前面剧透）。
+    const upgradeStart = MODEL_SRC.indexOf('async upgradeMonsterBox(');
+    const notifyStart = MODEL_SRC.indexOf('notifyMonsterBoxRollSettled(cellId: number): void');
+    assert.ok(upgradeStart > 0 && notifyStart > upgradeStart, '两个方法都该在 Model 里');
+    assert.doesNotMatch(MODEL_SRC.slice(upgradeStart, notifyStart), /showTip\(TERRITORY_TEXTS\.monsterBoxUpgrade/,
+        '失败/成功提示都不能在回包时弹（会抢在动画前面剧透）');
+    // ④ Model 侧：成功/失败都要有一条，等级取快照、拿不到就报「升级成功」。
+    assert.match(MODEL_SRC, /notifyMonsterBoxRollSettled\(cellId: number\): void/);
+    assert.match(MODEL_SRC, /this\.showTip\(TERRITORY_TEXTS\.monsterBoxUpgradeFailed\)/);
+    assert.match(MODEL_SRC, /TERRITORY_TEXTS\.monsterBoxUpgraded\(box\.lv\) : TERRITORY_TEXTS\.monsterBoxUpgradeSucceeded/,
+        '拿不到等级不能瞎猜，退回「升级成功」');
+});

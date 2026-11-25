@@ -718,8 +718,8 @@ test('E2 ⚠️ 虚拟列表三处时序守点：renderItemFn 只绑一次 / 取
     const initEnd = page.indexOf('protected async onOpen');
     const initBody = page.slice(page.indexOf('protected onInit(): void {'), initEnd > 0 ? initEnd : undefined);
     assert.ok(initBody.includes('this.levelList.renderItemFn ='), '`renderItemFn` 要在 onInit 里赋一次');
-    // ② `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()` ⇒ 必须 defer
-    assert.ok(page.includes('await this.nextPopupFrame()'), '⚠️ 铺数据前必须 await nextPopupFrame()，否则列表空白');
+    // ② VirtualScrollView 已支持 start() 前入队，不再手动 nextPopupFrame
+    assert.ok(!page.includes('nextPopupFrame()'), '不应再手写 nextPopupFrame()');
     assert.ok(page.includes('this.levelList.refreshList('), '没调用 refreshList');
     assert.ok(page.includes('this.levelList.scrollToTop('), '刷新后要回到顶部');
     // ③ 异步回来时必须复核「还活着 / 还是这一趟打开」

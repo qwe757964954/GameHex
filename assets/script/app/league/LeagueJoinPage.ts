@@ -171,7 +171,7 @@ export class LeagueJoinPage extends Component {
     }
 
     private emit(intent: ILeagueJoinIntent): void {
-        EventMgr.instance.emit(LeagueJoinEvent.Intent, intent, this);
+        EventMgr.instance.emit(LeagueJoinEvent.Intent, intent);
     }
 
     /** 按名字接按钮；prefab 必须挂 `cc.Button`（缺节点只 warn，不再用 TOUCH_END 兜底）。 */

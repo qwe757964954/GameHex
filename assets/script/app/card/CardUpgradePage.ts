@@ -309,7 +309,7 @@ export class CardUpgradePage extends PopupBase {
     };
 
     private openSkill(skillId: number): void {
-        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'skills', skillId }, this);
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'skills', skillId });
     }
 
     /**
@@ -327,11 +327,11 @@ export class CardUpgradePage extends PopupBase {
     };
 
     private readonly onPreviousClick = (): void => {
-        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'previous' }, this);
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'previous' });
     };
 
     private readonly onNextClick = (): void => {
-        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'next' }, this);
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'next' });
     };
 
     /** 唯一的写 UI 入口：头部 + 详情区 + 升级状态。 */
@@ -615,7 +615,7 @@ export class CardUpgradePage extends PopupBase {
     }
 
     private readonly onUpgradeClick = (): void => {
-        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'submit' }, this);
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'submit' });
     };
 
     protected onClose(): void {

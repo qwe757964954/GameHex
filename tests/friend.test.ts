@@ -1285,13 +1285,12 @@ test('D7 ⚠️ 三个页面的 `renderItemFn` 都只绑**一次**（在 `onInit
     }
 });
 
-test('D8 ⚠️ 两个子弹窗 `onOpen` 里必须 `await this.nextPopupFrame()` 再铺列表（VirtualScrollView 的 start 更晚）', () => {
+test('D8 ⚠️ 两个子弹窗与主容器不再手动等 `nextPopupFrame()`（由 VirtualScrollView.start 自动消费）', () => {
     for (const [label, code] of [['FriendApplyPage', APPLY_PAGE_CODE], ['FriendGetEndPage', GET_END_PAGE_CODE]] as const) {
-        const at = code.indexOf('await this.nextPopupFrame()');
-        assert.ok(at > 0, `${label}: 必须 await nextPopupFrame()（否则槽位还没建，列表空白）`);
+        assert.ok(!code.includes('nextPopupFrame()'), `${label}: 不应再手写 nextPopupFrame()`);
         assert.ok(code.includes('this.present('), `${label}: 铺列表要收一个入口`);
     }
-    assert.ok(PAGE_CODE.includes('await this.nextPopupFrame()'), '主容器同样要等一帧');
+    assert.ok(!PAGE_CODE.includes('nextPopupFrame()'), '主容器同样无需手写 nextPopupFrame()');
     // 载荷并发用 revision 守卫（同一存活期在途回来的旧数据不许落地）；关闭由 alive 覆盖。
     for (const [label, code] of [['FriendPage', PAGE_CODE], ['FriendApplyPage', APPLY_PAGE_CODE], ['FriendGetEndPage', GET_END_PAGE_CODE]] as const) {
         assert.ok(code.includes('++this.revision'), `${label}: 必须有同存活期 revision 守卫`);

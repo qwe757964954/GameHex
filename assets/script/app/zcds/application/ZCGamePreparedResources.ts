@@ -4,7 +4,7 @@ import type { ZCAttackTrait, ZCUnitId } from '../model/ZCCombatCatalog';
 import type { ZCMatchConfig } from '../model/ZCMatchConfig';
 import type { IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay';
 import type { IZCMonsterFocusFrames } from '../view/ZCHexView';
-import type { IZCGuidePreparedContent } from './ZCGuideLoader';
+import type { IZCGuidePreparedContent } from '../model/ZCGuideConfig';
 
 /** 首帧之后分项发布的表现资源，仍归当前战斗作用域。*/
 export interface IZCDeferredBattleArt {

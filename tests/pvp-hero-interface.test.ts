@@ -91,6 +91,6 @@ test('阵容编辑入口不再自建状态锁，下一帧等待统一走弹窗�
     assert.match(controller,/onDeckSaved[\s\S]*?void this\.refresh\(\)/);
     assert.doesNotMatch(page,/LineupBoardPage\.open|session\.saved/);
     assert.doesNotMatch(page, /teamEditOpening|const unlock|onClose: unlock/);
-    assert.match(board, /await this\.nextPopupFrame\(\)/);
-    assert.doesNotMatch(board, /scheduleOnce|director\.once/);
+    assert.doesNotMatch(board, /nextPopupFrame|scheduleOnce|director\.once/);
+    assert.match(board, /list\.setTotalCount\(pool\.length\)/);
 });

@@ -18,6 +18,7 @@ import type {
 } from '../application/TerritoryEvents';
 import { BigMapPlayerLevelPanel, type IBigMapPlayerLevelContent, type IBigMapPlayerLevelReward } from '../view/BigMapPlayerLevelPanel';
 import { TerritoryMonsterBoxPanel, type ITerritoryMonsterBoxContent } from '../view/TerritoryMonsterBoxPanel';
+import type { ITerritoryBattleArt } from '../application/TerritoryPageAssets';
 
 /**
  * 宿主提供给 DetailCoordinator 的上下文契约。
@@ -26,7 +27,11 @@ export interface ITerritoryDetailHost {
     readonly isValid: boolean;
     readonly assets: AssetService;
     readonly staminaIcon: SpriteFrame | null;
-    readonly state: { readonly detail: ITerritoryDetailState } | null;
+    /**
+     * `art` 里带巡逻怪描边用的 `unit-outline-copy` 材质：巡逻宝箱「变白」叠层也用它
+     * （只采样 alpha、输出顶点色 ⇒ 白 tint = 纯白剪影）。老章节可能没有 ⇒ 面板降级为只闪虚影。
+     */
+    readonly state: { readonly detail: ITerritoryDetailState; readonly art?: ITerritoryBattleArt } | null;
     refRows<T>(table: string): Promise<readonly T[]>;
 }
 
@@ -148,6 +153,8 @@ export class TerritoryDetailCoordinator {
             upgrading: detail.upgrading,
             upgradeProgress: detail.upgradeProgress,
             upgradeAttempt: detail.upgradeAttempt,
+            // 摇奖成功时宝箱「变白 → 换下一等级图 → 褪白」用的纯白剪影材质
+            whiteMaskMaterial: this.host.state?.art?.monsterOutlineMaterial ?? null,
         };
     }
 

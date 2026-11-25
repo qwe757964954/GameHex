@@ -741,7 +741,7 @@ test('页面接线：领地宝箱先播地图开箱表演，再交棒组合层�
     assert.doesNotMatch(body, /playChestThenSettle|wireRewardCatch/, '旧的前置表演写法不复存在');
     assert.match(body, /this\.presentChestRewards\(rewards, cellId, tier\)/, '档位齐了才进开箱链');
     assert.match(body, /this\.mapView\.playChestOpen\(cellId, tier, entries, handOff\)/, '要真的播 chest_seq 开箱表演');
-    assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ rewards: goods \}, this\)/,
+    assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ rewards: goods \}\)/,
         '演完交给组合层：橙卡英雄页（id 升序）→ 统一奖励弹窗');
 });
 

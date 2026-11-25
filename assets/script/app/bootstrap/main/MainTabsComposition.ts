@@ -118,13 +118,12 @@ export class MainTabsComposition extends ControllerBase {
         this.page = next;
     }
     /**
-     * 宝箱奖励的兜底路由：页面组合还活着时由它处理；页面已销毁或已换成新页时由主 tabs 接手，
+     * 宝箱奖励的兜底路由：页面组合还活着时由它处理；页面已销毁或已换成非主页时由主 tabs 接手，
      * 避免 `fastOpen/open` 回包迟到导致奖励丢失。
      */
-    private onTreasureRewardsFallback(event: { readonly goods: readonly CmdGoods[] }, source: { readonly node: Node }): void {
+    private onTreasureRewardsFallback(event: { readonly goods: readonly CmdGoods[] }): void {
         if (!event.goods.length) return;
-        const route = this.page?.treasureRewardRoute?.(source) ?? 'fallback';
-        if (route === 'active') return;
+        if (this.page?.handlesTreasureRewards) return;
         void TerritoryChestOpenPageModule.TerritoryChestOpenPage.open({ userData: { goods: event.goods } }).then(popup => {
             if (this.isDisposed) popup?.close();
         }).catch(error => console.warn('[MainTabsComposition] 宝箱奖励展示失败', error));

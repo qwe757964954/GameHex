@@ -114,19 +114,19 @@ export class LoginPage extends Component {
         // GM 按钮可见性
         if (this.gmBtn) this.gmBtn.active = state.gmVisible;
     }
-    private readonly onServers = (): void => { EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'servers' }, this); };
+    private readonly onServers = (): void => { EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'servers' }); };
     private readonly onLogin = (): void => { this.submit('login'); };
     private readonly onRegister = (): void => { this.submit('register'); };
-    private readonly onPlatformLogin = (): void => { EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'platform-login' }, this); };
+    private readonly onPlatformLogin = (): void => { EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'platform-login' }); };
     private readonly onToggleAgreement = (): void => {
         // 取当前勾选状态的反值，由 Controller 更新状态后 render 回来
         const currentlyChecked = this.agreementCheck?.active ?? false;
-        EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'toggle-agreement', agreed: !currentlyChecked }, this);
+        EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'toggle-agreement', agreed: !currentlyChecked });
     };
     private readonly onTogglePasswordVisibility = (): void => {
-        EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'toggle-password-visibility' }, this);
+        EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'toggle-password-visibility' });
     };
     private submit(kind: 'login' | 'register'): void {
-        EventMgr.instance.emit(LoginUiEvent.Intent, { kind, account: this.accountInput.string, password: this.passwordInput.string }, this);
+        EventMgr.instance.emit(LoginUiEvent.Intent, { kind, account: this.accountInput.string, password: this.passwordInput.string });
     }
 }

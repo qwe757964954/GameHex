@@ -120,11 +120,11 @@ const BATTLE_POPUPS: IZCBattleRuntimeServices['popups'] & IZCBattleSettlementSer
         return wrapPopup(ZCSettlementPage.open({ layer: PopupLayer.SYSTEM, closeOnBlank: false, userData: options }));
     },
     openGuide(content) { return wrapPopup(ZCGuidePanel.open({ userData: { content } })); },
-    async openDamage(players) {
-        const popup = await GameRunAway.open({ closeOnBlank: true, userData: { players } });
+    async openDamage(units, seats) {
+        const popup = await GameRunAway.open({ closeOnBlank: true, userData: { units, seats } });
         return popup ? {
             get isOpen() { return popup.isPopupOpen; },
-            refresh: players => popup.refresh(players),
+            refresh: units => popup.refresh(units),
             close: () => { if (popup.isPopupOpen) popup.close(PopupCloseReason.Force); },
         } : null;
     },

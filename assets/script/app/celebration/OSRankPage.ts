@@ -49,7 +49,7 @@ const { ccclass, property } = _decorator;
  * 1. `renderItemFn` 只在 `onInit` 绑一次，行内容按 `index` 现取 `this._snapshot`，不把 `rows` 闭包进去；
  * 2. 先 `applyTab()` 再 `pushList()`：槽位在 `VirtualScrollView.start()` 里建，节点隐藏时不建，
  *    隐藏时 `setTotalCount` 静默无效；
- * 3. `onOpen` 早于 `start()`，喂条数前要 `await nextPopupFrame()`（关闭期间返回 false，不留悬空 Promise）。
+ * 3. `VirtualScrollView` 会在 `start()` 就绪后自动补跑待铺条数，无需手动等帧。
  */
 
 /** 倒计时刷新间隔（老端 `toolSet.addTimer(1000, this.UpdateTime, this)`）。 */
@@ -134,9 +134,6 @@ export class OSRankPage extends PopupBase {
     /** 当前页签（见 `ECelebrationTab`）。 */
     private _tab: number = CL_DEFAULT_TAB;
 
-    /** 列表推送代号：切页签连点时只有最后一次允许落地。 */
-    private _listSeq = 0;
-
     protected onInit(): void {
         this.backBtn.on('click', this._onBack, this);
         this.rankDetailBtn.on('click', this._onRankDetail, this);
@@ -166,7 +163,6 @@ export class OSRankPage extends PopupBase {
      */
     protected onClose(): void {
         this.unschedule(this._tick);
-        this._listSeq++;
         this._snapshot = null;
         this._frames?.dispose();
         this._frames = null;
@@ -190,7 +186,7 @@ export class OSRankPage extends PopupBase {
         this._snapshot = snapshot;
 
         this.applySnapshot();
-        await this.pushList();
+        this.pushList();
     }
 
     /** 用当前快照铺一次（同步，探针可直接调）。 */
@@ -245,16 +241,11 @@ export class OSRankPage extends PopupBase {
         if (index < 0 || index >= CL_TAB_COUNT) return;
         this._tab = index;
         this.applyTab();
-        void this.pushList();
+        this.pushList();
     }
 
     /** 把当前页签的条数交给虚拟列表；只推当前页签，另外两个是隐藏的，喂了也不生效。 */
-    private async pushList(): Promise<void> {
-        const seq = ++this._listSeq;
-        if (!await this.nextPopupFrame()) return;
-        if (seq !== this._listSeq) return;
-        if (!this.isValid || !this.node.isValid) return;
-
+    private pushList(): void {
         const list = this._listOfTab();
         if (!list.node.isValid) return;
         list.setTotalCount(this._countOfTab());

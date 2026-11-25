@@ -94,12 +94,12 @@ export class LeagueDonatePage extends PopupBase {
 
     private emitFree(): void {
         if (this.busy) return;
-        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'free' }, this);
+        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'free' });
     }
 
     private emitCoin(): void {
         if (this.busy) return;
-        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'coin' }, this);
+        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'coin' });
     }
 
     // 渲染（控制器推来的状态一律绝对赋值）

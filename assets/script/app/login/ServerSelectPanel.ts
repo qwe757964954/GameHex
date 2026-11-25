@@ -47,12 +47,9 @@ export class ServerSelectPanel extends PopupBase {
         this.selectedServerId = userData.selectedServerId;
         // 新服优先；**不按宿主槽位数截断** —— 虚拟列表按真实条数铺，多出来的靠滚动。
         this.servers = userData.servers.slice().sort((a, b) => b.serverOpenTime - a.serverOpenTime);
+    }
 
-        // 列表的槽位 / 视口尺寸都在 `VirtualScrollView.start()` 里建，而 onOpen 早于 start
-        // （规则 108：出厂 active=false 的容器里的组件，生命周期会推迟到第一次激活）
-        // ⇒ 必须等一帧再喂数据，否则列表一片空白且**一条日志都不打**。
-        await this.nextPopupFrame();
-        if (!this.isValid) return;
+    protected onViewReady(): void {
         this.serverList.refreshList(this.servers.length);
     }
 

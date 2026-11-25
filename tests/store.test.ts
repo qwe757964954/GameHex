@@ -71,6 +71,7 @@ import {
     storeSectionTop,
 } from './fixtures/store-section-layout';
 import type { StoreSectionKey } from '../assets/script/app/store/StoreTable';
+import { STORE_COST_ICON_GAP, storeCostRowX } from '../assets/script/app/store/StoreCostTable';
 import {
     STORE_CHEST_ROWS,
     STORE_GIFT_ROW,
@@ -394,6 +395,14 @@ interface InstanceShell {
 }
 
 /**
+ * 只可能属于**实例根节点**的属性名。
+ *
+ * 嵌套实例的 `propertyOverrides` 里同时装着「段根的位置/名字」和「卡内零件的位置/字号」，
+ * 两者共用 `_lpos` 这类属性路径 ⇒ 必须按 `targetInfo.localID` 区分归属（见 `shellOf`）。
+ */
+const SHELL_NODE_PROPS = new Set(['_name', '_lpos', '_lrot', '_euler', '_lscale', '_layer', '_active']);
+
+/**
  * 读一张 prefab 并反解每个节点的「视觉框」。
  *
  * `originX / originY` = **根节点锚点**所在的那个点在「FGUI 像素」里的坐标：
@@ -423,9 +432,19 @@ function analyze(rel: string, originX: number, originY: number) {
         const instance = prefabInfo.instance ? at(prefabInfo.instance) : null;
         const overrides: Record<string, unknown> = {};
         for (const ref of ((instance?.propertyOverrides ?? []) as unknown[])) {
-            const entry = at(ref) as { propertyPath?: string[]; value?: unknown } | null;
+            const entry = at(ref) as { propertyPath?: string[]; value?: unknown; targetInfo?: unknown } | null;
             const path = entry?.propertyPath?.join('.');
-            if (path) overrides[path] = entry!.value;
+            if (!path) continue;
+            // ⚠️ 嵌套实例里**子节点也会有覆盖项**（在场景里拖过卡内零件、改过 Label 字号就会落盘），
+            //    它们同样叫 `_lpos` ⇒ 按「后者覆盖前者」收，子节点坐标会把段根的坐标顶掉。
+            //    实测 `Store.prefab` 的 `Sec0_StoreGemBox` 带了 16 条深覆盖，其中一条 `_lpos`
+            //    是 (41.5,−24)（卡内 `Cost`），C2 于是报「第 0 段 x 应为 0，实得 41.5」。
+            //    节点自身属性只可能属于「实例根」⇒ 用 `targetInfo.localID` 对上 `prefabInfo.fileId`
+            //    才收；脚本自定义属性（如 `resKeys`）锚在组件上，不在此列，照旧「后者胜」。
+            const target = at(entry!.targetInfo as unknown) as { localID?: string[] } | null;
+            const onRoot = (target?.localID?.[0] ?? null) === (prefabInfo.fileId ?? null);
+            if (SHELL_NODE_PROPS.has(path) && !onRoot) continue;
+            overrides[path] = entry!.value;
         }
         return { uuid: ((prefabInfo.asset as { __uuid__?: string } | undefined)?.__uuid__) ?? null, overrides };
     };
@@ -798,8 +817,11 @@ test('C5 段二 `StoreLevelGift`：横向翻页一张卡 + 左右箭头 + 5 个�
     // 购买按钮 160×80 `@(394,151) pivot(0.5,0.5) scale(0.8,0.7)`（无 anchor）
     // ⇒ 视觉框 128×56 居中于 (474,191) ⇒ 盒左 410、顶 163（旧版错成 314 / 111）
     expectRect(gift, 'StoreLevelGift/List/Card/BuyBtn', 410, CARD_TOP + 163, 128, 56, '购买按钮 ');
-    // `item_icon` 40×40 `@(19,22)`：按钮内绝对坐标 ⇒ 视觉盒左 = 410 + 19×0.8 = 425.2
-    expectRect(gift, 'StoreLevelGift/List/Card/BuyBtn/Icon', 425.2, CARD_TOP + 178.4, 32, 28, '价签货币图标 ');
+    // `item_icon` 50×50 `@(19,22)`：按钮内绝对坐标 ⇒ 中心 474 − 46×0.8 = 437.2，盒左 = 437.2 − 50×0.8/2 = 417.2
+    // ⚠️ 2026-11-24 与「普通宝箱」的消耗条对齐，口径是**屏上一样大**：宝箱那枚币 35（缩放 1.0），
+    //    本按钮 scale(0.8, 0.7) ⇒ 边长 35÷0.7 = 50，落地 40×35。`_lpos.x` 同步 −41 → −46，
+    //    否则右缘会盖住「1280」的文案框（数值 26 时左缘在按钮内 −19）。
+    expectRect(gift, 'StoreLevelGift/List/Card/BuyBtn/Icon', 417.2, CARD_TOP + 178.4, 40, 35, '价签货币图标 ');
     // `title` 84×42 `@(61,21)` ⇒ 视觉盒左 = 410 + 61×0.8 = 458.8、顶 = 163 + 21×0.7 = 177.7
     expectRect(gift, 'StoreLevelGift/List/Card/BuyBtn/Label', 458.8, CARD_TOP + 177.7, 67.2, 29.4, '价格文案 ');
     // `按钮_宝箱` 80×80 `@(8,5) scale 0.9`（组件根 pivot 0.5,0.5）⇒ 视觉框 72×72 居中于 (48,45）
@@ -877,7 +899,9 @@ test('C7 段四 `StoreSilver`：4 张竖卡两行，后两格带折扣角标', (
     assert.ok(!silver.rects.has('StoreSilver/List/Card0/Price/Icon'), '免费档不该有货币图标');
     expectRect(silver, 'StoreSilver/List/Card0/Price/Video', 18 + 55, 79 + 224, 39, 28, '看视频图标 ');
     // 第 3 格是「可购买」档：`icon_res` 右缘贴卡内 97、`title` 左缘起于卡内 97
-    expectRect(silver, 'StoreSilver/List/Card2/Price/Icon', 448 + 20 + 47, 79 + 225, 30, 30, '货币图标 ');
+    // 2026-11-24 对齐「普通宝箱」消耗条 ⇒ 图标 30→35、字号 22→20。**右缘必须还在 97**
+    // ⇒ 中心从 530 让到 527.5（`_lpos.x` −18 → −20.5），否则放大后会压进数字里 2.5px。
+    expectRect(silver, 'StoreSilver/List/Card2/Price/Icon', 448 + 20 + 42, 79 + 225, 35, 35, '货币图标 ');
     expectRect(silver, 'StoreSilver/List/Card2/Price/Label', 448 + 20 + 77, 79 + 224, 80, 32, '价格数字 ');
     assert.ok(!silver.rects.has('StoreSilver/List/Card2/Price/Video'), '可购买档不该有看视频图标');
 });
@@ -905,11 +929,53 @@ test('C8 段五 `StoreGoods`：7 格（2 行 + 1 行 3 格），品质物品框 
     // `n45 组件_消耗` = 按钮_公用_消耗 170×60 `@(15,210) scale 0.8`（组件根 pivot 0.5,0.5）
     // ⇒ 视觉框 136×48 居中于卡内 (100,240) ⇒ 盒左 32、顶 216
     expectRect(goods, 'StoreGoods/List/Card0/Price', 18 + 32, 88 + 216, 136, 48, '价格条 ');
-    // 组件内 `icon` 40×40 `@(80,30) pivot(0.5,0.5) anchor` ⇒ 视觉盒左 = 32 + (80−20)×0.8 = 80，
-    // 视觉盒宽高都乘 0.8 ⇒ **32×32**（早期写成 40×32：宽漏乘了缩放）。
-    expectRect(goods, 'StoreGoods/List/Card0/Price/Icon', 18 + 80, 88 + 216 + 8, 32, 32, '货币图标 ');
-    // 组件内 `title` 左缘起于 100、纵向中心 30 ⇒ 视觉盒左 = 32 + 100×0.8 = 112
-    expectRect(goods, 'StoreGoods/List/Card0/Price/Value', 18 + 112, 88 + 216 + 11.2, 48, 25.6, '价格数字 ');
+    // 组件内 `icon` 44×44 `@(80,30)`，2026-11-24 改成「与数字整组居中」：锚点 `(0.5,0.5)`、
+    // `_lpos` 落在按钮竖直中线 `-30` ⇒ 视觉框中心 = (100 − 20.25×0.8, 216 + 30×0.8) = (83.8, 240)，
+    // 盒左 83.8 − 17.6 = 66.2。边长仍是 44（屏上 35.2，对齐普通宝箱那枚 35）。
+    // `x` 在运行时由 `storeCostRowX()` 按实测文字宽重算，这里钉的是「锚点 + 竖直中线」。
+    expectRect(goods, 'StoreGoods/List/Card0/Price/Icon', 18 + 66.2, 88 + 222.4, 35.2, 35.2, '货币图标 ');
+    // 组件内 `title`：锚点同步改 `(0.5,0.5)`、`_lpos=(23.25,-30)` ⇒ 中心 (118.6, 240)，
+    // 盒左 118.6 − 30.4/2 = 103.4、顶 240 − 19.2/2 = 230.4。
+    // ⚠️ 序列化的 38×24 只是编辑器预览（`overflow` 已改 0=NONE，运行时盒子会贴住实测文字宽）；
+    //    这里守「位置 = 整组居中算出来的那个点」，任意位数仍居中的保证在 C8b 的纯函数里。
+    expectRect(goods, 'StoreGoods/List/Card0/Price/Value', 18 + 103.4, 88 + 230.4, 30.4, 19.2, '价格数字 ');
+});
+
+/**
+ * C8b 价格条整组居中：`storeCostRowX` 的几何。
+ *
+ * 为什么单独一条：`C8` 只钉「prefab 里那个点」，而价格文案是运行时 `setText` 写进去的，
+ * 位数一变宽窄就变 ⇒ 真正保证「任意位数都居中、间距恒 2px」的是这个纯函数。
+ * 顺带守两种退化：宽度读到 0 / NaN 必须返回 `null`（否则会把整组甩到左边）。
+ */
+test('C8b 价格条「图标 + 数字」整组居中：任何位数都对称、间距恒定', () => {
+    // 黑市：`Price` 的 `_lscale = 0.8` ⇒ 作者 2.5 = 设计稿 2px。
+    assert.equal(STORE_COST_ICON_GAP, 2.5, '间距常量是作者单位，改缩放要跟着改');
+    const ICON = 44;
+    const GAP = STORE_COST_ICON_GAP;
+    for (const textWidth of [24, 38, 52, 66]) {
+        const x = storeCostRowX(ICON, textWidth)!;
+        // 组宽关于原点对称：图标左缘 = −组宽/2、数字右缘 = +组宽/2。
+        assert.ok(near(x.iconX - ICON / 2, -(ICON + GAP + textWidth) / 2), `位数 ${textWidth}：组左缘不对称`);
+        assert.ok(near(x.textX + textWidth / 2, (ICON + GAP + textWidth) / 2), `位数 ${textWidth}：组右缘不对称`);
+        // 间距 = 数字左缘 − 图标右缘。
+        assert.ok(near(x.textX - textWidth / 2 - (x.iconX + ICON / 2), GAP), `位数 ${textWidth}：间距不是 ${GAP}`);
+    }
+    // 位数变多：图标左缘外扩、数字右缘外扩，两侧同时撑开。
+    // ⚠️ 数字节点的**中心** `textX` 是与位数无关的定值 —— 它的右缘跟着组宽走、
+    //    左缘跟着自己的宽度走，两边正好抵消。别拿 `textX` 当"位置变了"的判据。
+    const narrow = storeCostRowX(ICON, 38)!;
+    const wide = storeCostRowX(ICON, 66)!;
+    assert.ok(near(narrow.textX, wide.textX), '数字节点中心不随位数移动');
+    assert.ok(wide.iconX < narrow.iconX, '位数变多要把图标往左推');
+    assert.ok(wide.textX + 66 / 2 > narrow.textX + 38 / 2, '位数变多要把数字右缘往外推');
+    // 退化：没量到宽度 ⇒ null（调用方保持 prefab 摆位）。
+    assert.equal(storeCostRowX(0, 80), null);
+    assert.equal(storeCostRowX(ICON, 0), null);
+    assert.equal(storeCostRowX(Number.NaN, 80), null);
+    // 锚点可传：换成分段里常见的左锚点（`anchorX = 0`）时，`textX` 就是数字左缘。
+    const leftAligned = storeCostRowX(ICON, 38, 0.5, 0)!;
+    assert.ok(near(leftAligned.textX, leftAligned.iconX + ICON / 2 + GAP), '锚点 0 时 textX = 图标右缘 + 间距');
 });
 
 test('C9 六张 prefab 的**根 UITransform** = 真实版心（改版面表就会在这里炸）', () => {

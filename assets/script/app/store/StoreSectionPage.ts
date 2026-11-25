@@ -1,4 +1,4 @@
-import { _decorator, Button, Component, Label, Node, Sprite } from 'cc';
+import { _decorator, Button, Component, Label, Node, Sprite, UITransform } from 'cc';
 import { CacheMgr } from '../net/CacheMgr';
 import { countItem } from '../card/ItemBag';
 import { StringUtil } from '../../framework/utils/StringUtil';
@@ -15,7 +15,7 @@ import {
     type IStoreGiftReward,
 } from './StoreShopTable';
 import { loadStoreIcon } from './StoreArt';
-import { resolveDrawCost } from './StoreCostTable';
+import { resolveDrawCost, storeCostRowX } from './StoreCostTable';
 import { storeRepository } from './StoreRepository';
 import type { IStoreActionContext, StoreActionKind } from './StoreActions';
 import { StoreEvent } from './StoreEvents';
@@ -189,6 +189,7 @@ export class StoreSectionPage extends Component {
             // 老端 `text_remainTime` 的变量是 `限购{剩余}/{上限}次`；静态视图按「未买过」= 满额。
             this.setText(`${card}/Remain`, `限购${row.limit - row.bought}/${row.limit}次`);
             this.setText(`${card}/Price/Value`, row.price);
+            this.centerPriceRow(`${card}/Price`);
         });
     }
 
@@ -262,6 +263,33 @@ export class StoreSectionPage extends Component {
             if (!root) throw new Error('StoreSectionPage requires StorePage');
             EventMgr.instance.emit(StoreEvent.Action, { kind, context: ctx }, root.getComponent(StorePage));
         }, this);
+    }
+
+    /**
+     * 把价格条的「币种图标 + 数字」当**一个整体**横向居中；上下居中靠 prefab 的锚点。
+     *
+     * 两个节点的锚点都是 `(0.5, 0.5)`、`_lpos.y` 都定在价格条竖直中线上 ⇒ 竖直方向不随
+     * 文案变化，这里只算 `x`，几何全在 `storeCostRowX`（纯函数，单测直接测）。
+     *
+     * ⚠️ 必须先 `updateRenderData(true)`：`overflow = NONE` 时 Label 是**延迟**把实测宽度
+     * 写回 `UITransform` 的，不逼一下读到的是上一句的宽度（数字看着像"跳到一半"）——
+     * 与 `TerritoryResourceGainView.layoutContent` 同一个坑。
+     *
+     * 量不到宽度（首帧未排版 / 空串）⇒ 原样保留 prefab 摆位，不把整组甩到左边。
+     */
+    private centerPriceRow(pricePath: string): void {
+        const icon = this.find(`${pricePath}/Icon`);
+        const value = this.find(`${pricePath}/Value`);
+        if (!icon || !value) return;
+        const label = value.getComponent(Label);
+        const iconUI = icon.getComponent(UITransform);
+        const valueUI = value.getComponent(UITransform);
+        if (!iconUI || !valueUI) return;
+        if (label) label.updateRenderData(true);
+        const x = storeCostRowX(iconUI.width, valueUI.width, iconUI.anchorX, valueUI.anchorX);
+        if (!x) return;
+        icon.setPosition(x.iconX, icon.position.y, icon.position.z);
+        value.setPosition(x.textX, value.position.y, value.position.z);
     }
 
     /** 按相对段根的斜杠路径查子节点。 */

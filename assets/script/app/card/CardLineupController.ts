@@ -62,7 +62,7 @@ export class CardLineupController extends ControllerBase {
     }
     private publish(data: CardLineupData): void {
         this.data = data;
-        EventMgr.instance.emit(CardLineupUiEvent.Render, { data } satisfies ICardLineupRender, this.options.owner);
+        EventMgr.instance.emit(CardLineupUiEvent.Render, { data } satisfies ICardLineupRender);
     }
     private onDeckSaved(): void {
         void this.refresh();
@@ -78,10 +78,7 @@ export class CardLineupController extends ControllerBase {
         void this.refresh(false);
     }
 
-    private onIntent(event: ICardLineupIntent, source: object): void {
-        if (source !== this.options.owner) {
-            return;
-        }
+    private onIntent(event: ICardLineupIntent): void {
         if (event.kind === 'refresh') {
             void this.refresh();
             return;

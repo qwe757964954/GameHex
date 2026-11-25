@@ -57,7 +57,7 @@ export enum ZCGameUiEvent {
      * 结算页：「查看完整队伍」（MVP 卡片右下）。
      *
      * 不复用运行期的 `OpenDamageStats`：结算时 `phase.isSettled` 已置位，运行期入口会直接 return。
-     * 由结算控制器订阅后调 `popup.openDamage(players)` —— 数据取自本局结束时冻结的席位统计。
+     * 由结算控制器订阅后调 `popup.openDamage(units)` —— 数据取自本局结束时冻结的逐单位统计。
     */
     SettlementViewTeam = 'zcgame-ui-settlement-view-team',
     /** 选点：绿勾「确认位置」（失效态也派发，由选点模型给原因文案）。*/

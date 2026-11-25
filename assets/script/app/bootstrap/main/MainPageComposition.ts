@@ -23,6 +23,10 @@ import { RoleController, type IRoleGemDialog } from '../../role/RoleController';
 import { CommonTips } from '../../common/CommonTips';
 import { roleRepository } from '../../role/RoleRepository';
 import { MilitiaTalentPage } from '../../role/MilitiaTalentPage';
+import { EquipEvolvePage } from '../../role/EquipEvolvePage';
+import { RoleEquipInfoPopup } from '../../role/RoleEquipInfoPopup';
+import { RoleGemInfoPopup } from '../../role/RoleGemInfoPopup';
+import { RoleGongMingPopup } from '../../role/RoleGongMingPopup';
 import { StorePage } from '../../store/StorePage';
 import { StoreController } from '../../store/StoreController';
 import { storeAction } from '../../store/StoreActions';
@@ -56,7 +60,10 @@ interface IPageLifecycle {
 export class MainPageComposition extends ControllerBase {
     private readonly pages = new Map<object, IPageLifecycle>();
     private territoryView: MainTerritoryMap | null = null;
+    private hasMainPage = false;
+    private activeChestOpen: TerritoryChestOpenPage | null = null;
     get territory(): MainTerritoryMap | null { return this.territoryView; }
+    get handlesTreasureRewards(): boolean { return !this.isDisposed && this.hasMainPage; }
 
     constructor(private readonly context: IControllerContext, private readonly root: Node, private readonly presented: () => void,
         private readonly requestOwner?: object) {
@@ -80,7 +87,10 @@ export class MainPageComposition extends ControllerBase {
         const league = root.getComponent(LeagueTabPage);
         if (league) this.mountLeague(league);
         const main = root.getComponent(MainPage);
-        if (main) main.initialize(this.resources);
+        if (main) {
+            this.hasMainPage = true;
+            main.initialize(this.resources);
+        }
         this.territoryView = root.getComponentInChildren(MainTerritoryMap);
         if (this.territoryView) this.mountTerritory(this.territoryView, main);
         const guide = new GuideComposition(this.context, this.root, 'main', this.territoryView);
@@ -133,32 +143,31 @@ export class MainPageComposition extends ControllerBase {
             main.hasTerritoryMap = true;
         }
     }
-    /**
-     * 宝箱奖励应落到哪一层：本页活跃时由本组合消费；其余情况交给主 tab 兜底，
-     * 保证切页/重开后迟到回包的奖励仍然可见。
-     */
-    treasureRewardRoute(owner: { readonly node: Node }): 'active' | 'fallback' {
-        return !this.isDisposed && owner.node === this.root ? 'active' : 'fallback';
-    }
-    private onTreasureRewards(event: { readonly goods: readonly unknown[] }, source: MainPage): void {
-        if (source.node !== this.root || !event.goods.length) return;
+    private onTreasureRewards(event: { readonly goods: readonly unknown[] }): void {
+        if (!this.hasMainPage || !event.goods.length) return;
         void TerritoryChestOpenPage.open({ userData: { goods: event.goods } }).then(popup => {
             if (this.isDisposed) popup?.close();
         }).catch(reportMainPageFailure);
     }
 
-    private onChestRevealed(event: { readonly entries: readonly IRewardEntry[] }, source: { readonly isValid: boolean }): void {
+    private onChestRevealed(event: { readonly entries: readonly IRewardEntry[] }): void {
         // 宝箱开启页（宝箱栏 / 巡逻等入口）那条：页内已经把奖励画出来了，这里只补英雄页。
-        void this.presentChestHeroes(event.entries, source).catch(reportMainPageFailure);
+        const self = this;
+        const active = this.activeChestOpen;
+        const owner = active
+            ? { get isValid(): boolean { return self.activeChestOpen === active && active.isValid; } }
+            : { isValid: true };
+        void this.presentChestHeroes(event.entries, owner).catch(reportMainPageFailure);
     }
 
     private onTerritoryPlayerProfileChange(): void {
         this.territoryView?.refreshPlayerBubble();
     }
-    private onChestRewardsReady(event: { readonly rewards: readonly IRewardEntry[] }, source: MainTerritoryMap): void {
+    private onChestRewardsReady(event: { readonly rewards: readonly IRewardEntry[] }): void {
         // 领地宝箱：地图上的开箱粒子动画演完了（奖励还没给玩家看）⇒ 英雄页 → 统一奖励弹窗。
-        if (source !== this.territoryView) return;
-        void this.runChestRewardChain(source, event.rewards).catch(reportMainPageFailure);
+        const territory = this.territoryView;
+        if (!territory) return;
+        void this.runChestRewardChain(territory, event.rewards).catch(reportMainPageFailure);
     }
 
     /**
@@ -264,8 +273,16 @@ export class MainPageComposition extends ControllerBase {
     }
     private createRoleController(role: RolePage): RoleController<Awaited<ReturnType<typeof roleRepository.load>>> {
         const dialog = this.createRoleGemDialog();
-        return new RoleController(this.context, {
+        const roleCtrl = new RoleController(this.context, {
             owner: role,
+            growth: {
+                equip: (id, partId) => roleRepository.equipmentGrowth(id, partId),
+                washAttributes: (ids, values) => roleRepository.equipmentWashAttributes(ids, values),
+                plans: () => roleRepository.equipPlans(),
+                gem: id => roleRepository.gemGrowth(id),
+                filters: () => roleRepository.gemFilters(),
+                request: (proto, payload, apply) => roleRepository.requestGrowth(proto, payload, role, apply),
+            },
             gems: {
                 source: () => role.node,
                 slots: () => roleRepository.equipParts(),
@@ -290,15 +307,42 @@ export class MainPageComposition extends ControllerBase {
             view: {
                 render: snapshot => role.renderSnapshot(snapshot),
                 selectBag: tab => role.selectBag(tab),
-                showBag: tab => role.showBag(tab)
+                showBag: (tab, filter, filterName) => role.showBag(tab, filter, filterName)
             },
             popups: {
-                openTalent: () => { void MilitiaTalentPage.open(); }
+                openTalent: () => { void MilitiaTalentPage.open(); },
+                openEquipInfo: (partId, bagUniqueId) => {
+                    void RoleEquipInfoPopup.open({
+                        userData: {
+                            partId: partId || (bagUniqueId ? 0 : 1),
+                            bagUniqueId,
+                            onForgeClick: targetPartId => {
+                                void EquipEvolvePage.open({ userData: { partId: targetPartId } });
+                            },
+                            onChanged: () => { void roleCtrl.refresh(false); },
+                        }
+                    });
+                },
+                openEquipEvolve: (partId, tab) => {
+                    void EquipEvolvePage.open({ userData: { partId, tab } });
+                },
+                openGemInfo: gemId => {
+                    void RoleGemInfoPopup.open({
+                        userData: {
+                            gemId,
+                            onChanged: () => { void roleCtrl.refresh(false); },
+                        },
+                    });
+                },
+                openGongMing: () => {
+                    void RoleGongMingPopup.open();
+                },
             },
             feedback: {
                 tip: text => FW.showTip(text)
             },
         });
+        return roleCtrl;
     }
     private createRoleGemDialog() {
         let cancel: (() => void) | null = null;
@@ -391,6 +435,13 @@ export class MainPageComposition extends ControllerBase {
         });
     }
     private onLifecycle(event: IViewLifecycle, source: object): void {
+        if (typeof TerritoryChestOpenPage === 'function' && source instanceof TerritoryChestOpenPage) {
+            if (event.phase === 'enabled') this.activeChestOpen = source;
+            else if ((event.phase === 'disabled' || event.phase === 'destroyed') && this.activeChestOpen === source) {
+                this.activeChestOpen = null;
+            }
+            return;
+        }
         const page = this.pages.get(source);
         if (!page) return;
         if (event.phase === 'presented') { this.presented(); return; }
@@ -403,6 +454,8 @@ export class MainPageComposition extends ControllerBase {
         // 输入解除由 super.dispose() 统一完成（先 offTarget 再释放资源），这里只丢生命周期表。
         this.pages.clear();
         this.territoryView = null;
+        this.hasMainPage = false;
+        this.activeChestOpen = null;
         super.dispose();
     }
 }

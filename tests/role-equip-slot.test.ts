@@ -21,7 +21,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildEquipSlotPlan } from '../assets/script/app/role/RoleTable';
+import { buildEquipSlotPlan, equipLevelOf } from '../assets/script/app/role/RoleTable';
 
 /** 造一条 `CmdEquipPart`。 */
 const part = (equipId: unknown, equip: unknown) => ({ equipId, equip });
@@ -69,6 +69,22 @@ test('★ 等级按「分页行 equipId = 装备 resId」匹配 —— 用部位
     // 行的 equipId 给部位号（旧误解）⇒ 不命中，等级 0
     const miss = buildEquipSlotPlan([part(1, eq(1, 401111))], [page([{ equipId: 1, level: 4 }])], []);
     assert.equal(miss[0].level, 0);
+});
+
+test('equipLevelOf：按 resId 取等级，传 baseId（部位号）不得命中', () => {
+    const rows = [{ equipId: 401116, level: 10 }];
+    assert.equal(equipLevelOf(rows, 401116), 10);
+    // CmdEquipItem.baseId = 6（靴子部位号），拿它当等级键是红点误报的根因
+    assert.equal(equipLevelOf(rows, 6), 0);
+    assert.equal(equipLevelOf([], 401116), 0);
+    assert.equal(equipLevelOf(null, 401116), 0);
+    assert.equal(equipLevelOf([{ equipId: 401116, level: 0 }], 401116), 0);
+});
+
+test('equipLevelOf：同 resId 多行取最小非零', () => {
+    const rows = [{ equipId: 401116, level: 20 }, { equipId: 401116, level: 0 },
+        { equipId: 401116, level: 12 }, { equipId: 401117, level: 3 }];
+    assert.equal(equipLevelOf(rows, 401116), 12);
 });
 
 test('等级跨页取最小非零（page0=20 / page1=12 ⇒ 12）', () => {

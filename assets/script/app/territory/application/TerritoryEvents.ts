@@ -59,7 +59,15 @@ export type TerritoryIntent =
      * 只带 `cellId`：章节由 Model 按当前地图取，消耗由服务端按当前等级扣
      * —— 视图不传钱、也不预扣。
      */
-    | { readonly kind: 'upgradeMonsterBox'; readonly cellId: number };
+    | { readonly kind: 'upgradeMonsterBox'; readonly cellId: number }
+    /**
+     * 摇奖**演完**了（面板收尾 / 中途被收掉时发）。
+     *
+     * 结果提示（通用 toast）挂在这里而不是回包那一刻：回包只要 100~300ms，而宝箱要演
+     * 1.2s + 顿 + 褪白，**提示先到就等于剧透**（玩家还没看到换图就知道成了）。
+     * 视图只报「这一格演完了」，成功/失败与文案都由 Model 按 `monsterBoxAttempt` 决定。
+     */
+    | { readonly kind: 'monsterBoxRollSettled'; readonly cellId: number };
 export interface ITerritoryIntentEvent { readonly intent: TerritoryIntent }
 export type TerritoryViewCommand = Exclude<TerritoryModelOutput, { readonly kind: 'changed' | 'navigate' }>
     | { readonly kind: 'navigate'; readonly payload: import('./TerritoryModel').ITerritoryNavigateBattlePayload; readonly ready?: Promise<unknown> }

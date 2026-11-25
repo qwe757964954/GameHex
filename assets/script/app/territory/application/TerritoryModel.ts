@@ -819,6 +819,14 @@ export class TerritoryModel {
      */
     private monsterBoxAttempt: ITerritoryMonsterBoxAttempt | null = null;
     private monsterBoxAttemptSeq = 0;
+    /**
+     * 这一轮的结果提示是不是「已经被服务端顶掉了」。
+     *
+     * 结果 toast 改在动画演完才弹（见 `notifyMonsterBoxRollSettled`），而那时
+     * `silentWriteTip` 早已随 `finishWrite` 复位。若错误包（`CmdTips`）已经说过原因，
+     * 这里记下来，演完就不再补第二条。
+     */
+    private monsterBoxTipSuppressed = false;
     /** 巡逻宝箱升级失败次数（cellId → 失败次数）。升级成功或等级变化时清零。 */
     private readonly monsterBoxFailCounts = new Map<number, number>();
     /** 在途写请求票（只发不等；回包 / 超时都从这里收尾）。 */
@@ -1502,9 +1510,9 @@ export class TerritoryModel {
                     // 服务端明确拒绝（摇奖失败）：面板据此把黄条停在**灰区**。
                     // 离线 / 超时不带结果语义（可能已经升上去了），标 `success = false` 但 tip 仍是「升级失败」，
                     // 与重拉快照后的真值对得上 —— 别在这里把「没网」演成「摇中灰区」以外的第三种结论。
+                    // ⚠️ 提示不在这里弹：等动画演完由 `notifyMonsterBoxRollSettled` 统一弹（否则剧透）。
                     this.recordMonsterBoxFail(cellId);
                     this.noteMonsterBoxAttempt(cellId, false);
-                    this.showTip(TERRITORY_TEXTS.monsterBoxUpgradeFailed);
                     // 只有服务端明确拒绝才重拉：离线 / 超时时重拉会把本地已有的快照再打一次空请求。
                     if (failure === TERRITORY_REQUEST_STATUS.rejected) void this.mergeServerState(chapterId, loadId);
                     return false;
@@ -1526,7 +1534,7 @@ export class TerritoryModel {
                         monsterBoxes: withTerritoryMonsterBox(latest.monsterBoxes, box),
                     };
                 }
-                this.showTip(TERRITORY_TEXTS.monsterBoxUpgraded(box.lv));
+                // 提示同样留到演完（`notifyMonsterBoxRollSettled` 会读这里的快照等级）
                 return false;
             },
         );
@@ -1541,6 +1549,30 @@ export class TerritoryModel {
     private noteMonsterBoxAttempt(cellId: number, success: boolean): void {
         this.monsterBoxAttemptSeq += 1;
         this.monsterBoxAttempt = { cellId, seq: this.monsterBoxAttemptSeq, success };
+        // 演完才提示 ⇒ 那一刻 `silentWriteTip` 已经复位，现在就得把「服务端说过原因」记下来
+        this.monsterBoxTipSuppressed = this.silentWriteTip;
+    }
+
+    /**
+     * 摇奖演完 ⇒ 弹**通用系统提示**（成功 / 失败各一条）。
+     *
+     * 为什么不在回包那一刻弹：回包 100~300ms 就到了，而宝箱要演 1.2s + 顿 + 褪白，
+     * 提示比换图先出现等于剧透。面板收尾时发 `monsterBoxRollSettled`，这里再按结果取文案。
+     *
+     * 成功文案优先带等级（服务端回包 / 重拉后的快照），拿不到等级只说「升级成功」——
+     * 不本地 `lv + 1`，也不猜。
+     */
+    notifyMonsterBoxRollSettled(cellId: number): void {
+        const attempt = this.monsterBoxAttempt;
+        if (!attempt || attempt.cellId !== cellId) return;
+        if (this.monsterBoxTipSuppressed) return;
+        if (!attempt.success) {
+            this.showTip(TERRITORY_TEXTS.monsterBoxUpgradeFailed);
+            return;
+        }
+        const boxes = this.chapter?.serverCellStateCache?.monsterBoxes ?? null;
+        const box = boxes?.find(item => item.cellId === cellId) ?? null;
+        this.showTip(box ? TERRITORY_TEXTS.monsterBoxUpgraded(box.lv) : TERRITORY_TEXTS.monsterBoxUpgradeSucceeded);
     }
 
     private loadMonsterBoxFailCounts(): void {

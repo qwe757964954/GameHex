@@ -277,6 +277,8 @@ export function loadViews() {
             './ZCEffectTuning': 'assets/script/app/zcds/model/ZCEffectTuning.ts',
             // P2-6 把 sin 噪声下沉到 core 后，view/model 里的相对路径别名。
             '../math/Scalar': 'assets/script/core/math/Scalar.ts',
+            // 统计行 / 纯函数组件会从 ui 值导入 model 的伤害格式化模块，后者再取 ZCOwner。
+            './ZCMapConfig': 'assets/script/app/zcds/model/ZCMapConfig.ts',
         };
         const relative = name.replace(/^\.\//, '');
         const viewPath = join('assets/script/app/zcds/view', `${relative}.ts`);

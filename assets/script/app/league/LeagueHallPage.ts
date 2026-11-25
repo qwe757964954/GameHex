@@ -751,20 +751,9 @@ export class LeagueHallPage extends PopupBase {
         void LeagueLevelPreviewPage.open({});
     }
 
-    /**
-     * 铺列表。
-     *
-     * `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-     * ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
-     */
+    /** 铺列表（`VirtualScrollView` 会在 `start()` 就绪后自动补跑待铺条数）。 */
     private refreshList(list: VirtualScrollView | null, count: number): void {
-        if (!list) return;
-        void this.deferRefresh(list, count);
-    }
-
-    private async deferRefresh(list: VirtualScrollView, count: number): Promise<void> {
-        await this.nextPopupFrame();
-        if (!this.alive || !list.isValid) return;
+        if (!list || !list.isValid) return;
         list.refreshList(count);
         list.scrollToTop(false);
     }

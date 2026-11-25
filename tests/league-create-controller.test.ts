@@ -62,9 +62,9 @@ function fixture() {
         requests: { removeCaller: caller => cancelled.push(caller) },
     });
     controller.start();
-    const emit = (intent: ILeagueCreateIntent, source: object) => EventMgr.instance.emit(LeagueCreateEvent.Intent, intent, source);
-    const submit = (name = '联盟名', quickJoin = true, target: object = owner) =>
-        emit({ kind: 'submit', name, quickJoin }, target);
+    const emit = (intent: ILeagueCreateIntent) => EventMgr.instance.emit(LeagueCreateEvent.Intent, intent);
+    const submit = (name = '联盟名', quickJoin = true) =>
+        emit({ kind: 'submit', name, quickJoin });
     return {
         owner, model, controller, states, tips, cancelled, joined,
         costCalls, createCalls, emit, submit,
@@ -99,22 +99,14 @@ test('首屏由 Controller 主动推（组合会话晚于 onOpen），费用回�
     } finally { h.controller.dispose(); }
 });
 
-test('意图按 owner 隔离；名字 / 旗帜 / 勾选同步并只派发原文，视图不持有回调', async () => {
+test('名字 / 旗帜 / 勾选同步并只派发原文，视图不持有回调', async () => {
     const h = fixture();
     try {
         h.costCalls[0].resolve(cost(true)); await flush();
-        const stranger = {};
-        h.emit({ kind: 'banner', index: 5 }, stranger);
-        h.emit({ kind: 'quickJoin', quickJoin: false }, stranger);
-        h.submit('陌生名', false, stranger);
-        assert.equal(h.model.selectIndex, 0);
-        assert.equal(h.model.quickJoin, true);
-        assert.equal(h.createCalls.length, 0);
-
-        h.emit({ kind: 'name', name: '名字' }, h.owner);
+        h.emit({ kind: 'name', name: '名字' });
         assert.equal(h.model.name, '名字');
-        h.emit({ kind: 'banner', index: 4 }, h.owner);
-        h.emit({ kind: 'quickJoin', quickJoin: false }, h.owner);
+        h.emit({ kind: 'banner', index: 4 });
+        h.emit({ kind: 'quickJoin', quickJoin: false });
         assert.equal(h.model.banner, 4);
         assert.equal(h.model.quickJoin, false);
         assert.equal(h.states[h.states.length - 1].selectIndex, 4);

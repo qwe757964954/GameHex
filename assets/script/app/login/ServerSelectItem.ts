@@ -65,7 +65,7 @@ export class ServerSelectItem extends Component {
 
     private readonly handleSelect = (): void => {
         const selection = this.selection;
-        if (selection) EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'select', serverId: selection.serverId } satisfies ILoginIntent, selection.owner);
+        if (selection) EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'select', serverId: selection.serverId } satisfies ILoginIntent);
     };
 
 }

@@ -431,6 +431,16 @@ const unit = (over: Record<string, unknown> = {}) => ({
     ...over,
 });
 
+test('宝石修改器 ID 保序、保留重复项并过滤无效 uint64', () => {
+    const parsed = normalizeBattleUnit(unit({
+        modifyList: [Long.fromInt(36800122, true), Long.fromInt(0, true),
+            Long.fromString('9007199254740993', true), Long.fromInt(36800123, true),
+            Long.fromInt(36800122, true)],
+    }) as CmdBattleUnitInfo);
+    assert.deepEqual(parsed?.modifyIds, [36800122, 36800123, 36800122]);
+    assert.deepEqual(normalizeBattleUnit(unit() as CmdBattleUnitInfo)?.modifyIds, []);
+});
+
 const rsp = (over: Record<string, unknown> = {}) => ({
     code: 1,
     seed: Long.fromString('1234567890123456789', true),

@@ -55,8 +55,7 @@ export class LeagueCreateController extends ControllerBase {
         void this.refreshCost();
     }
 
-    private readonly onIntent = (event: ILeagueCreateIntent, source: object): void => {
-        if (source !== this.options.owner) return;
+    private readonly onIntent = (event: ILeagueCreateIntent): void => {
         const model = this.options.model;
         if (event.kind === 'name') {
             model.name = event.name;

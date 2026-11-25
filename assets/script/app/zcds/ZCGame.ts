@@ -226,7 +226,7 @@ export class ZCGame extends Component {
 
     update(dt: number): void {
         this.framePayload.dt = dt;
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, this.framePayload, this);
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, this.framePayload);
     }
 
 
@@ -259,7 +259,7 @@ export class ZCGame extends Component {
 
     onDestroy(): void {
         this.shutdown();
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, undefined, this);
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED);
     }
 
     /**

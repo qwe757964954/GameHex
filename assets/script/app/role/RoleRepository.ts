@@ -15,9 +15,12 @@ import { RequestMsg, type ProtoInput } from '../../framework/net/RequestMsg';
 import { cardRepository } from '../card/CardRepository';
 import { readItemCounts } from '../card/ItemBag';
 import type { IRoleBagEntry, IRoleEquipSlotData, IRoleGemEntry, IRoleSnapshot, RoleBagTabId, RoleGemChange } from './RoleTypes';
-import { ROLE_BAG_TAB_KINDS, buildEquipSlotPlan, buildGemSockets, buildRoleNavs, sortBagEntries } from './RoleTable';
+import { ROLE_BAG_TAB_KINDS, buildEquipSlotPlan, buildGemSockets, buildRoleNavs, equipLevelOf, sortBagEntries } from './RoleTable';
 
 import { HEAD_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
+import type { IRoleEquipGrowth, IRoleEquipPlan, IRoleGemGrowth, IRoleGrowthProtocol } from './RoleTypes';
+import { ROLE_TEXTS } from './RoleTexts';
+import { EQUIP_EXTRA_ATTR_KEYS } from './RolePowerTable';
 /** 宝石「镶嵌中」锁定阈值：GemLockState.wear = 2（lock / wearLock 也算已镶嵌）。 */
 const GEM_LOCK_WEAR = 2;
 
@@ -31,8 +34,8 @@ function indexBy<T>(rows: readonly T[] | null | undefined, field: keyof T): Map<
     return map;
 }
 
-class RoleGemRequest<TRequest, TResponse> extends RequestMsg<TRequest, TResponse> {
-    static readonly __cname = 'RoleGemRequest';
+class RoleRequest<TRequest, TResponse> extends RequestMsg<TRequest, TResponse> {
+    static readonly __cname = 'RoleRequest';
 
     constructor(
         private readonly proto: ReqMsgProtoName,
@@ -49,7 +52,7 @@ class RoleGemRequest<TRequest, TResponse> extends RequestMsg<TRequest, TResponse
     }
 }
 
-const GEM_REQUEST_OPTIONS = { timeoutMs: 8000, tag: 'RoleGem' } as const;
+const ROLE_REQUEST_OPTIONS = { timeoutMs: 8000, tag: 'Role' } as const;
 
 type ReportMissingConfig = (table: string, key: string) => void;
 
@@ -135,37 +138,203 @@ class RoleRepository {
         return this._gemBag.find(gem => gem.gemId === id) ?? this.describeGem(id);
     }
 
+    findBagEntry(kind: 'gem' | 'equip' | 'item', uniqueIdOrResId: string | number): IRoleBagEntry | null {
+        const idStr = String(uniqueIdOrResId);
+        if (kind === 'equip') {
+            return this._equipBag.find(e => e.uniqueId === idStr || String(e.id) === idStr) ?? null;
+        }
+        if (kind === 'gem') {
+            return this._gemBag.find(e => (e as IRoleGemEntry).gemId === idStr || String(e.id) === idStr) ?? null;
+        }
+        return this._itemBag.find(e => String(e.resId) === idStr || String(e.id) === idStr) ?? null;
+    }
+
+    async requestGrowth<K extends keyof IRoleGrowthProtocol>(
+        proto: K, payload: ProtoInput<IRoleGrowthProtocol[K][0]>, caller: object,
+        apply?: (response: IRoleGrowthProtocol[K][1]) => void,
+    ): Promise<GameRequestStatus> {
+        let received = false;
+        const status = await GameNet.sendRequest(() => new RoleRequest<IRoleGrowthProtocol[K][0], IRoleGrowthProtocol[K][1]>(
+            proto, payload, caller, response => {
+                if ((proto === 'CmdEquipReplaceReqMsg' || proto === 'CmdEquipUpQualityReqMsg' || proto === 'CmdEquipWashReqMsg')
+                    && !(response as CmdEquipReplaceRspMsg | CmdEquipUpQualityRspMsg | CmdEquipWashRspMsg).ret) return;
+                received = true;
+                this.applyGrowthResponse(proto, response);
+                apply?.(response);
+            }), ROLE_REQUEST_OPTIONS);
+        return status === 'ok' && !received ? 'failed' : status;
+    }
+
+    private applyGrowthResponse(proto: keyof IRoleGrowthProtocol, response: IRoleGrowthProtocol[keyof IRoleGrowthProtocol][1]): void {
+        const cache = CacheMgr.instance;
+        if ('equipPart' in response && response.equipPart) cache.getCache('CmdEquipPart').addOrUpdate(response.equipPart);
+        if (proto === 'CmdEquipReplaceReqMsg') {
+            const replace = response as CmdEquipReplaceRspMsg;
+            if (replace.uniqueId) cache.getCache('CmdEquipItem').delete(toIdString(replace.uniqueId));
+            if (replace.equip) cache.getCache('CmdEquipItem').addOrUpdate(replace.equip);
+        } else if (proto === 'CmdEquipDecomposeReqMsg') {
+            for (const id of (response as CmdEquipDecomposeRspMsg).tlUniqueIds ?? []) {
+                cache.getCache('CmdEquipItem').delete(toIdString(id));
+            }
+        }
+    }
+
+    async equipmentGrowth(bagId: string | null, partId: number | null): Promise<IRoleEquipGrowth | null> {
+        const cache = CacheMgr.instance;
+        const cmd = partId === null
+            ? cache.getCmdEquipItem(bagId)
+            : cache.getCmdEquipPart(partId)?.equip;
+        if (!cmd) return null;
+        const page = cache.getTlCmdRole()[0]?.selectEquipPage;
+        const selected = page == null ? null : cache.getCmdEquipPage(page);
+        // 分页行的 equipId 是装备 resId；cmd.baseId 是初始部位 1..6，不能拿来比。
+        const level = equipLevelOf(selected?.tlCmdEquip, cmd.resId);
+        const ref = RefUtil.instance;
+        const [item, levelRow, nextLevel, rank, prevRank, nextRank, costConfig] = await Promise.all([
+            ref.getRefAsync('equip', 'resId', cmd.resId),
+            ref.getRefAsync('equipLevel', 'equipLevel', level),
+            ref.getRefAsync('equipLevel', 'equipLevel', level + 1),
+            ref.getRefAsync('equipRank', ['rank', 'qualityLevel'], cmd.rank, cmd.curQuality),
+            ref.getRefAsync('equipRank', ['rank', 'qualityLevel'], cmd.rank, cmd.curQuality - 1),
+            ref.getRefAsync('equipRank', ['rank', 'qualityLevel'], cmd.rank, cmd.curQuality + 1),
+            ref.getRefAsync('gameConfig', 'key', 'equipAddQualityCostId'),
+        ]) as Array<Record<string, unknown> | undefined>;
+        if (!item) return null;
+        const rankRow = rank ?? prevRank;
+        const [drawings, qualityMaterial, libraries] = await Promise.all([
+            ref.getRefAsync(ITEM_TABLE, 'resId', toCount(item.consumeId)),
+            ref.getRefAsync(ITEM_TABLE, 'resId', toCount(costConfig?.value)),
+            ref.getRefAllAsync('equipLib'),
+        ]) as [Record<string, unknown> | undefined, Record<string, unknown> | undefined, Record<string, unknown>[]];
+        const libById = indexBy(libraries, 'id');
+        const amount = (name: unknown, id: unknown, count: unknown) => `${name ?? id} × ${toCount(count)}`;
+        // 宝石只挂在穿戴中的分页装备上（`CmdEquipPage.tlCmdEquip[].tlCmdGemInfo`），背包装备没有。
+        const gemEffects = partId === null ? [] : await this.gemEffectsOf(cmd.resId);
+        return {
+            id: toIdString(cmd.uniqueId),
+            baseId: cmd.baseId,
+            name: String(item.name ?? ''),
+            level,
+            rank: cmd.rank,
+            worn: partId !== null,
+            attack: toCount(levelRow?.attack) + toCount(rankRow?.attack),
+            hpPercent: (toCount(levelRow?.hpPer) + toCount(rankRow?.hpPer)) / 100,
+            effects: (cmd.tlEffects ?? []).map((id, index) =>
+                `${libById.get(id)?.attribute ?? id} +${toCount(rankRow?.[EQUIP_EXTRA_ATTR_KEYS[index]])}`),
+            gemEffects,
+            washValues: EQUIP_EXTRA_ATTR_KEYS.map(key => toCount(rankRow?.[key])),
+            levelCost: nextLevel ? [
+                amount('金币', 2, nextLevel.gold), amount(drawings?.name, item.consumeId, nextLevel.drawings),
+            ] : [],
+            qualityCost: rankRow && nextRank ? amount(qualityMaterial?.name, costConfig?.value, rankRow.cost) : null,
+            washCost: rankRow && toCount(rankRow.libCount) >= 2
+                ? amount(qualityMaterial?.name, costConfig?.value, rankRow.washCost) : null,
+        };
+    }
+
+    /**
+     * 已镶嵌宝石的属性文案（`gemAttribute.modifyDesc`，按孔位顺序）。
+     *
+     * 数据源与 `buildGemSockets` 同一条：当前装备页 `CmdEquipPage.tlCmdEquip[].tlCmdGemInfo`，
+     * 再按 `CmdGem.attribute`（缺省退 gemId 末四位，与 {@link readGemBag} 同口径）查 `gemAttribute`。
+     * 只读缓存、不发请求；页快照过期时它和孔位一起陈旧。
+     */
+    private async gemEffectsOf(equipResId: number): Promise<string[]> {
+        const cache = CacheMgr.instance;
+        const pageId = cache.getTlCmdRole()[0]?.selectEquipPage;
+        if (pageId == null) return [];
+        const row = cache.getCmdEquipPage(pageId)?.tlCmdEquip?.find(item => toCount(item.equipId) === equipResId);
+        const out: string[] = [];
+        for (const info of row?.tlCmdGemInfo ?? []) {
+            const gemId = toIdString(info.gemId);
+            if (!/^[1-9]\d*$/.test(gemId)) continue;
+            const attrId = cache.getCmdGem(gemId)?.attribute || Number(gemId.slice(-4));
+            if (!attrId) continue;
+            const attr = await RefUtil.instance.getRefAsync('gemAttribute', 'id', attrId);
+            const desc = String(attr?.modifyDesc ?? '');
+            if (desc) out.push(desc);
+        }
+        return out;
+    }
+
+    async equipmentWashAttributes(ids: readonly number[], values: readonly number[]): Promise<readonly string[]> {
+        const rows = await RefUtil.instance.getRefAllAsync('equipLib') as Record<string, unknown>[];
+        const byId = indexBy(rows, 'id');
+        return ids.map((id, index) => `${byId.get(id)?.attribute ?? id} +${values[index] ?? 0}`);
+    }
+
+    async equipPlans(): Promise<readonly IRoleEquipPlan[]> {
+        const config = await RefUtil.instance.getRefAsync('gameConfig', 'key', 'gemTabOpen');
+        const requirements: readonly number[] = Array.isArray(config?.value) ? config.value : [];
+        const cache = CacheMgr.instance;
+        const role = cache.getTlCmdRole()[0];
+        if (!role) return [];
+        const pages = cache.getTlCmdEquipPage();
+        const pageIds = new Set([...requirements.map((_, index) => index + 1), ...pages.map(plan => plan.page)]);
+        return Array.from(pageIds, page => {
+            const plan = pages.find(row => row.page === page);
+            const level = requirements[page - 1] ?? 0;
+            return {
+                page,
+                name: plan?.name || ROLE_TEXTS.pageFallback(page),
+                selected: role.selectEquipPage === page,
+                lockedUntil: !plan && role.lv < level ? level : 0,
+            };
+        });
+    }
+
+    async gemFilters(): Promise<readonly { id: number; name: string }[]> {
+        const rows = await RefUtil.instance.getRefAllAsync('gem') as Record<string, unknown>[];
+        return (rows ?? []).map(row => ({ id: toCount(row.equipId), name: String(row.desc) }));
+    }
+
+    async gemGrowth(id: string): Promise<IRoleGemGrowth | null> {
+        const cmd = CacheMgr.instance.getCmdGem(id);
+        const gem = this.findGem(id);
+        if (!cmd || !gem) return null;
+        const ref = RefUtil.instance;
+        const [quality, pending] = await Promise.all([
+            ref.getRefAsync('gemQuality', 'quality', gem.quality),
+            cmd.newAttribute ? ref.getRefAsync('gemAttribute', 'id', cmd.newAttribute) : null,
+        ]) as Array<Record<string, unknown> | null>;
+        return {
+            lock: cmd.lock,
+            refineCost: toCount(quality?.consume1),
+            pendingAttribute: cmd.newAttribute ? String(pending?.modifyDesc ?? cmd.newAttribute) : '',
+        };
+    }
+
     changeGem(change: RoleGemChange, caller: object): Promise<GameRequestStatus> {
         switch (change.kind) {
             case 'on':
-                return GameNet.sendRequest(() => new RoleGemRequest<CmdGemOnReqMsg, CmdGemOnRspMsg>(
-                    'CmdGemOnReqMsg', change.payload, caller), GEM_REQUEST_OPTIONS);
+                return GameNet.sendRequest(() => new RoleRequest<CmdGemOnReqMsg, CmdGemOnRspMsg>(
+                    'CmdGemOnReqMsg', change.payload, caller), ROLE_REQUEST_OPTIONS);
             case 'down':
-                return GameNet.sendRequest(() => new RoleGemRequest<CmdGemDownReqMsg, CmdGemDownRspMsg>(
-                    'CmdGemDownReqMsg', change.payload, caller), GEM_REQUEST_OPTIONS);
+                return GameNet.sendRequest(() => new RoleRequest<CmdGemDownReqMsg, CmdGemDownRspMsg>(
+                    'CmdGemDownReqMsg', change.payload, caller), ROLE_REQUEST_OPTIONS);
             case 'replace':
-                return GameNet.sendRequest(() => new RoleGemRequest<CmdGemReplaceReqMsg, CmdGemReplaceRspMsg>(
-                    'CmdGemReplaceReqMsg', change.payload, caller), GEM_REQUEST_OPTIONS);
+                return GameNet.sendRequest(() => new RoleRequest<CmdGemReplaceReqMsg, CmdGemReplaceRspMsg>(
+                    'CmdGemReplaceReqMsg', change.payload, caller), ROLE_REQUEST_OPTIONS);
         }
     }
 
     async previewGemCompose(caller: object): Promise<{ status: GameRequestStatus; materials: readonly CmdGemPreview[] }> {
         let materials: readonly CmdGemPreview[] = [];
-        const status = await GameNet.sendRequest(() => new RoleGemRequest<CmdGemComposePreviewReqMsg, CmdGemComposePreviewRspMsg>(
+        const status = await GameNet.sendRequest(() => new RoleRequest<CmdGemComposePreviewReqMsg, CmdGemComposePreviewRspMsg>(
             'CmdGemComposePreviewReqMsg', {}, caller, response => {
                 materials = response.tlCmdGemPreview ?? [];
             }),
-            GEM_REQUEST_OPTIONS);
+            ROLE_REQUEST_OPTIONS);
         return { status, materials };
     }
 
     async composeGems(caller: object): Promise<{ status: GameRequestStatus; rewards: CmdGoods[] }> {
         let rewards: CmdGoods[] = [];
-        const status = await GameNet.sendRequest(() => new RoleGemRequest<CmdGemComposeReqMsg, CmdGemComposeRspMsg>(
+        const status = await GameNet.sendRequest(() => new RoleRequest<CmdGemComposeReqMsg, CmdGemComposeRspMsg>(
             'CmdGemComposeReqMsg', {}, caller, response => {
                 rewards = response.tlCmdGoods ?? [];
             }),
-            GEM_REQUEST_OPTIONS);
+            ROLE_REQUEST_OPTIONS);
         return { status, rewards };
     }
 
@@ -272,19 +441,21 @@ class RoleRepository {
         }
 
         const out: IRoleBagEntry[] = [];
-        for (const cmd of cmds) {
-            // `resId` / `rank` / `curQuality` 是 `sint32` ⇒ number；`uniqueId` 是 `sint64` ⇒ `Long`。
+        const seenUniqueIds = new Set<number>();
+        const pushEquip = (cmd: CmdEquipItem, equipped: boolean) => {
             const resId = cmd.resId;
             const equip = equipByResId.get(resId);
             if (!equip) {
                 reportMissing('equip', `resId=${resId}`);
-                continue;
+                return;
             }
             const uniqueId = toCount(cmd.uniqueId);
+            if (seenUniqueIds.has(uniqueId)) return;
+            seenUniqueIds.add(uniqueId);
             const quality = cmd.curQuality || toCount(equip.quality) || 1;
-
             out.push({
                 id: uniqueId,
+                uniqueId: toIdString(cmd.uniqueId),
                 resId,
                 kind: 'equip',
                 iconKey: String(equip.icon ?? ''),
@@ -294,9 +465,17 @@ class RoleRepository {
                 quality,
                 rank: cmd.rank,
                 count: 1,
-                equipped: equippedIds.has(uniqueId),
+                equipped,
                 upMark: false,
             });
+        };
+
+        // 对齐老端 `ModelEquipItem.GetItemBagDataIncludePart()`：已穿戴装备只在 `CmdEquipPart.equip` 中，需并入背包列表。
+        for (const part of parts) {
+            if (part.equip) pushEquip(part.equip, true);
+        }
+        for (const cmd of cmds) {
+            pushEquip(cmd, equippedIds.has(toCount(cmd.uniqueId)));
         }
 
         const slots = this.buildEquipSlots(parts, equipRows, equipByResId);
@@ -311,10 +490,8 @@ class RoleRepository {
      *     ⚠️ 不能按 uniqueId 回查 `CmdEquipItem` 缓存反推 —— **已穿戴的装备不在那个缓存里**
      *     （2026-09-26 真服实测：缓存 0 行，穿着中的装备只在 `CmdEquipPart.equip` 里），
      *     回查永远 miss ⇒ 6 格全空；
-     *   · **等级** —— `CmdEquipPage.tlCmdEquip[].level`，那行的 `equipId` 是**装备 resId**
-     *     （实测 `{equipId:401111,...}`），按 resId **分页取小值**。
-     *     老端是「当前选中页」的等级；新端角色页还没做分页切换，这里跨页取**最小非零**值 ——
-     *     宁可保守也不要显示一个别的分页的等级（后续接分页时改成取当前页即可，一处）。
+     *   · **等级 / 孔位** —— `CmdRole.selectEquipPage` 对应页的 `CmdEquip`。
+     *     页快照未到时沿用装备栏原有的等级回退口径。
      */
     private buildEquipSlots(
         parts: readonly unknown[],
@@ -325,15 +502,17 @@ class RoleRepository {
         const pages = cache.getTlCmdEquipPage();
         const activePage = cache.getTlCmdRole()[0]?.selectEquipPage;
         const selected = pages.find(page => page.page === activePage);
-        const baseIds = new Map((selected?.tlCmdEquip ?? []).map(row => [
-            toCount(equipByResId.get(row.equipId)?.equipType), row.equipId,
+        const selectedByPart = new Map((selected?.tlCmdEquip ?? []).map(row => [
+            toCount(equipByResId.get(row.equipId)?.equipType), row,
         ]));
-        return buildEquipSlotPlan(parts, pages, equipRows).map(plan => ({
-            ...plan,
-            sockets: plan.entry && selected
-                ? buildGemSockets(selected.page, baseIds.get(plan.partId) ?? 0, [selected])
-                : [],
-        }));
+        return buildEquipSlotPlan(parts, pages, equipRows).map(plan => {
+            const row = selectedByPart.get(plan.partId);
+            return {
+                ...plan,
+                level: plan.entry && row ? row.level : plan.level,
+                sockets: plan.entry && selected && row ? buildGemSockets(selected.page, row.equipId, [selected]) : [],
+            };
+        });
     }
 
     // ============================================================

@@ -140,6 +140,8 @@ export interface ZCBattleUnit {
     /** 供卡牌技能解锁和升级在开局前编译。 */
     readonly heroes?: readonly ZCBattleHero[];
     readonly heroAttrs?: readonly ZCBattleHeroAttrs[];
+    /** 阵营宝石修改器，重复 ID 对应多个宝石。 */
+    readonly modifyIds?: readonly number[];
     readonly artifactId: number;
     readonly artifactLevel: number;
     /** 来源类型；缺省或未知值不能当成玩家。 */
@@ -274,6 +276,7 @@ export function normalizeBattleUnit(info: CmdBattleUnitInfo | null | undefined):
         unitType: normalizeBattleUnitType(info.unitType),
         buffs: parseBattleBuffs(info.buffInfo),
         heroAttrs: parseBattleHeroAttrs(info.attrs),
+        modifyIds: (info.modifyList ?? []).map(toPositiveInt).filter((id) => id !== null),
     };
 }
 

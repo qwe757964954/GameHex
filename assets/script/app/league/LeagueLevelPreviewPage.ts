@@ -81,10 +81,6 @@ export class LeagueLevelPreviewPage extends PopupBase {
 
         const rows = buildLeagueLevelViews(parseUnionLevelRows(raw));
 
-        // `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-        // ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
-        if (!(await this.nextPopupFrame()) || !this.alive || context?.cancelled) return;
-
         this.rows = rows;
         this.present();
     }

@@ -1141,23 +1141,29 @@ test('兵种视觉 prefab 关闭 Sprite 裁剪模式，画布统一 256 使各�
     assert.deepEqual([...canvasSizes], ['256x256']);
 });
 
-test('RunAwayPlayerItem 刷新两列统计，处理零上限并在复用时清空旧头像', () => {
-    const { load, bar } = loadViews();
-    const view = new (load('./RunAwayPlayerItem').RunAwayPlayerItem)();
+test('RunAwayUnitItem 按单位刷新数值与进度条，复用时清空旧头像', () => {
+    const { load } = loadViews();
+    const view = new (load('./RunAwayUnitItem').RunAwayUnitItem)();
+    view.base = { spriteFrame: {} };
     view.avatar = { spriteFrame: {} };
-    view.nameLabel = { string: '' };
-    view.damageLabel = { string: '' }; view.damageTakenLabel = { string: '' };
-    view.damageProgress = bar(); view.damageTakenProgress = bar();
-    view.background = { color: null }; view.faction = { color: null }; view.selfBadge = { active: false };
-    view.refresh({ owner: 'player', name: '主公', headSpriteFrame: null, damage: 120.5, damageTaken: 30, maxDamage: 240, maxDamageTaken: 0 });
+    view.valueLabel = { string: '' };
+    view.fill = { fillRange: 1 };
+    const frame = { name: 'unit-head' }, base = { name: 'common_img_pzk_01' };
+    view.render(265700, 265700, frame, base);
+    assert.equal(view.avatar.spriteFrame, frame);
+    assert.equal(view.base.spriteFrame, base, '底框按品级换图');
+    assert.equal(view.valueLabel.string, '265.7K');
+    assert.equal(view.fill.fillRange, 1);
+    (view as any).defaultBase = base;
+    view.render(0, 265700, null, null);
+    assert.equal(view.base.spriteFrame, base, '品级图缺档时退回预制体兜底底框');
     assert.equal(view.avatar.spriteFrame, null);
-    assert.equal(view.damageLabel.string, '120');
-    assert.equal(view.damageProgress.progress, .5);
-    assert.equal(view.damageTakenProgress.progress, 0);
+    assert.equal(view.valueLabel.string, '0');
+    assert.equal(view.fill.fillRange, 0);
     view.clear();
-    assert.equal(view.nameLabel.string, '');
-    assert.equal(view.damageTakenLabel.string, '0');
-    assert.equal(view.damageProgress.progress, 0);
+    assert.equal(view.base.spriteFrame, base);
+    assert.equal(view.valueLabel.string, '');
+    assert.equal(view.fill.fillRange, 0);
 });
 
 test('两份 HealthBar 预制体为横向进度条，建筑内置径向 Cooldown，无独立冷却资源', () => {
@@ -1184,9 +1190,20 @@ test('两份 HealthBar 预制体为横向进度条，建筑内置径向 Cooldown
         } else assert.ok(!data.some((o: any) => o._name === 'Cooldown'));
     }
     assert.equal(existsSync('assets/resources/ui/game/ZCGameCooldown.prefab'), false);
-    const players = read('RunAwayPlayerItem');
-    const view = players[players[1]._components.at(-1).__id__];
-    for (const key of ['avatarFrame', 'avatar', 'nameLabel', 'damageProgress', 'damageTakenProgress', 'damageLabel', 'damageTakenLabel']) assert.ok(players[view[key].__id__], key);
+    const item = read('RunAwayUnitItem');
+    const script = item.find((o: any) => o.base && o.avatar && o.valueLabel && o.fill);
+    assert.ok(script, '列表项必须绑定底框 / 头像 / 数值 / 进度条');
+    for (const key of ['base', 'avatar', 'valueLabel', 'fill']) assert.ok(item[script[key].__id__], key);
+    assert.equal(item[script.base.__id__].__type__, 'cc.Sprite');
+    // 底色直接用品级卡框原图（不另出裁切版），靠头像位上的 Mask 裁掉底部卡名条。
+    const baseNode = item[item[script.base.__id__].node.__id__];
+    const maskHost = item[baseNode._parent.__id__];
+    const mask = maskHost._components.map((r: any) => item[r.__id__]).find((c: any) => c.__type__ === 'cc.Mask');
+    assert.ok(mask, '底框节点必须挂在 Mask 下');
+    assert.equal(mask._type, 0);
+    assert.equal(item[script.avatar.__id__].__type__, 'cc.Sprite');
+    assert.equal(item[script.valueLabel.__id__].__type__, 'cc.Label');
+    assert.equal(item[script.fill.__id__]._type, 3, '填充条必须用 FILLED');
 });
 
 

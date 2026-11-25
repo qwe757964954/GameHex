@@ -575,7 +575,7 @@ test('E2｜`runChestOpening`：先演 `chest_seq_*`，演完发 ChestRewardsRead
 
     // ② 动画演完 → 发事件交棒组合层（英雄页 / 统一奖励窗由组合层决定）
     assert.match(body, /const goods = rewards\.map\(\(reward\) => \(\{ resId: Number\(reward\.resId\), number: Number\(reward\.amount\) \|\| 0 \}\)\);/);
-    assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ rewards: goods \}, this\)/);
+    assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ rewards: goods \}\)/);
     // ②' 动画最后一帧到交棒之间要留一拍缓冲（用户 2026-11-17 第 13 条 ④）：
     //     粒子动画结束 → 0.1s → 才接奖励窗 / 下一段台词，硬接会显得很急。
     assert.match(body, /this\.chestHandOffTimer = setTimeout\(/, '交棒必须延时，不能和动画最后一帧硬接');
@@ -737,7 +737,6 @@ test('待开启先显示闭箱，点击后才揭晓；跳过和重复点击只�
         isValid = true;
         closes = 0;
         closeByButton() { this.closes++; }
-        nextPopupFrame() { return Promise.resolve(true); }
     }
     const { exports, unresolved } = loadTsModule<{ TerritoryChestOpenPage: new () => any }>(PAGE_TS, {
         globals: { performance: { now: () => now } },
@@ -774,6 +773,8 @@ test('待开启先显示闭箱，点击后才揭晓；跳过和重复点击只�
         await page.onOpen({ goods: [{ resId: 18003, number: 1 }] }, { cancelled: false });
         assert.equal(lifecycle[lifecycle.length - 1].phase, 'enabled',
             '一进 onOpen 就报 enabled：引导层要立刻让位，否则放奖励对话会盖在这一页上');
+        assert.equal(page._waitingToOpen, false, '首帧对齐就绪前先不展示开箱');
+        page.onViewReady();
         assert.equal(page.cardsRoot.active, false);
         assert.equal(page.chestSprite.spriteFrame, page.closedChestFrame);
         assert.equal(page.closeLabel.string, TERRITORY_TEXTS.chestOpenClaim);
@@ -912,18 +913,18 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
         assert.deepEqual(events.map(one => [one.name, one.payload.playing]),
             [['territory:chest-presentation', false]]);
 
-    const root = {};
     const treasureHost = Object.create(loaded.exports.MainPageComposition.prototype);
-    treasureHost.root = root; treasureHost.isDisposed = false;
+    treasureHost.hasMainPage = false; treasureHost.isDisposed = false;
     const goods = [{ resId: 18001, number: 2 }];
-    treasureHost.onTreasureRewards({ goods }, { node: {} });
-    treasureHost.onTreasureRewards({ goods: [] }, { node: root });
-    assert.equal(chestOpens.length, 0, '忽略其他宿主及空奖励');
-    treasureHost.onTreasureRewards({ goods }, { node: root });
+    treasureHost.onTreasureRewards({ goods });
+    treasureHost.hasMainPage = true;
+    treasureHost.onTreasureRewards({ goods: [] });
+    assert.equal(chestOpens.length, 0, '忽略非主页组合及空奖励');
+    treasureHost.onTreasureRewards({ goods });
     await tick();
     assert.equal(chestOpens.length, 1);
     assert.equal((chestOpens[0] as { userData: { goods: unknown } }).userData.goods, goods);
-    treasureHost.onTreasureRewards({ goods }, { node: root });
+    treasureHost.onTreasureRewards({ goods });
     treasureHost.isDisposed = true;
     await tick();
     assert.equal(chestCloses, 1, '开箱页加载期间退出时关闭迟到弹窗');

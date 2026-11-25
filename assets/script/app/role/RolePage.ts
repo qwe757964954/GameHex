@@ -1,4 +1,4 @@
-import { _decorator, Button, Color, Component, Label, Node, sp } from 'cc';
+import { _decorator, Button, Color, Component, Label, Node, sp, UITransform } from 'cc';
 import { roleRepository } from './RoleRepository';
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { RoleEvent } from './RoleEvents';
@@ -23,11 +23,14 @@ const BAG_TAB_NODES: ReadonlyArray<readonly [string, RoleBagTabId]> = [
     ['BagTabItem', 3],
 ];
 
-/** 设计稿顶部「宝石背包」入口（复用页签 1；点击直接切到宝石列表）。 */
+/** 设计稿顶部「宝石背包」入口（仅在宝石页签生效，装备/道具页签隐藏）。 */
 const BAG_ENTRY_GEM = 'BagBtnGem';
 
+/** 宝石「一键合成」按钮（仅在宝石页签显示）。 */
 const BAG_ENTRY_COMPOSE = 'BagBtnCompose';
-const BAG_ENTRY_PENDING: readonly string[] = ['BagBtnAll'];
+
+/** 宝石「全部/部位筛选」按钮（仅在宝石页签显示）。 */
+const BAG_ENTRY_FILTER = 'BagBtnAll';
 
 /** 未选中页签的文字色 / 描边色（设计稿：灰底深棕字；选中态白字 + 深棕描边）。 */
 const TAB_LABEL_IDLE = new Color(74, 55, 38, 255);
@@ -130,6 +133,9 @@ export class RolePage extends Component {
     /** 每趟 `onEnable` 递增，丢弃过期的异步结果（切走时页面可能已被销毁）。 */
     private revision = 0;
 
+    /** 顶部宝石功能行的占位高度（隐藏后列表区上探这段距离，取自 prefab 节点高度）。 */
+    private gemHeaderHeight = 0;
+
     /** 气泡闪烁定时器（嵌套 setTimeout 句柄；`null` = 没在闪）。 */
     private qipaoTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -152,34 +158,52 @@ export class RolePage extends Component {
         EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'enabled' }, this);
     }
 
-    selectBag(tab: RoleBagTabId): void { this.activeTab = tab; this.applyTabLook(); }
-    showBag(tab: RoleBagTabId): Promise<void> { return this.bagPanelComp.show(tab); }
+    /**
+     * 选中指定背包页签：更新底部按钮高亮，并联动控制顶部宝石专属功能按钮（一键合成/部位筛选）显隐。
+     */
+    selectBag(tab: RoleBagTabId): void {
+        this.activeTab = tab;
+        this.applyTabLook();
+        const isGem = tab === 1;
+        const btnGem = this.node.getChildByName(BAG_ENTRY_GEM);
+        const btnCompose = this.node.getChildByName(BAG_ENTRY_COMPOSE);
+        const btnFilter = this.node.getChildByName(BAG_ENTRY_FILTER);
+        if (btnGem) btnGem.active = isGem;
+        if (btnCompose) btnCompose.active = isGem;
+        if (btnFilter) btnFilter.active = isGem;
+        this.bagPanelComp.setTopExtra(isGem ? 0 : this.gemHeaderHeight);
+    }
+    showBag(tab: RoleBagTabId, gemEquipId = 0, gemFilterName = '全部'): Promise<void> {
+        this.node.getChildByName(BAG_ENTRY_FILTER).getChildByName('title').getComponent(Label).string = gemFilterName;
+        return this.bagPanelComp.show(tab, gemEquipId);
+    }
 
     /** 仅由 onLoad 取得 prefab 引用并绑定输入。 */
     private ensureInit(): void {
 
         for (const [name, tab] of BAG_TAB_NODES) {
             const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab }, this), this);
+            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab }), this);
         }
 
         for (const [name, navId] of NAV_NODES) {
             const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'nav', navId }, this), this);
+            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'nav', navId }), this);
         }
 
         const gemEntry = this.node.getChildByName(BAG_ENTRY_GEM)?.getComponent(Button);
-        gemEntry?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 }, this), this);
+        gemEntry?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 }), this);
         this.node.getChildByName(BAG_ENTRY_COMPOSE).on(Button.EventType.CLICK,
-            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'compose' }, this), this);
-        for (const name of BAG_ENTRY_PENDING) {
-            const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'nav', navId: 7 }, this), this);
-        }
+            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'compose' }), this);
+        this.node.getChildByName(BAG_ENTRY_FILTER).on(Button.EventType.CLICK,
+            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'gemFilter' }), this);
+        this.node.getChildByName('ForgeBtn').on(Button.EventType.CLICK,
+            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'forge' }), this);
 
         // prefab 已绑好，不判空：绑错应当场抛出来，而不是静默留个死界面。
         this.bagPanelComp = this.bagPanel.getComponent(RoleBagPanel);
         this.powerLabel = this.powerValue.getComponent(Label);
+        this.gemHeaderHeight = this.node.getChildByName(BAG_ENTRY_GEM).getComponent(UITransform).height;
 
         // 主角立绘（`skel/主角铁拳` 嵌套实例）上的骨架 —— 它挂在 HeroIcon 下（见文件头说明）。
         // 布局与其余 36 套单位一致：Skeleton 在子节点 `spine` 上（`skel/yueka` 例外，直接挂在根）；

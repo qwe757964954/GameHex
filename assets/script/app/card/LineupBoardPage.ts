@@ -42,10 +42,7 @@ const EMPTY_BOARD_CARD_FRAMES: ZCBoardCardFrames = { frame: null, hero: null, ba
 @ccclass('LineupBoardPage')
 export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     private renderRevision = 0;
-    private poolRevision = 0;
-    private classRevision = 0;
     private previewAssets: CardUnitPreviewAssets<Prefab> | null = null;
-    private arenaRevision = 0;
 
     /** 弹窗预制体在 resources 下的路径（`PopupManager` 用它加载）。 */
     static prefabPath = 'ui/card/LineupBoard';
@@ -181,17 +178,16 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         this.saveButton.interactable = data.canSave;
         this.saveLabel.string = data.saveText;
         this.updatePresetTabs(data.selectedPreset);
-        await Promise.all([this.renderArena(data.cards), this.renderPool(data.pool), this.renderClassRow(data.cards)]);
+        await Promise.all([this.renderArena(data.cards, revision), this.renderPool(data.pool), this.renderClassRow(data.cards, revision)]);
         if (scope.disposed || !this.alive || revision !== this.renderRevision) return;
         this.rerenderPoolItems();
     }
 
     /**
      * 组件所在节点是否仍然有效。
-     * `Component.node` 在组件被销毁后会变成 `null`，所以两种形态都要挡。
      */
     private get alive(): boolean {
-        return this.isPopupOpen && (!this.node || this.node.isValid) && !this.resourceScope.disposed;
+        return this.isPopupOpen && Boolean(this.node?.isValid) && !this.resourceScope.disposed;
     }
 
     /**
@@ -206,16 +202,15 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     /** 上阵区：按卡组顺序填满 8 个站台，多出来的站台置空。 */
-    private async renderArena(deck: readonly ZCDeckCard[]): Promise<void> {
+    private async renderArena(deck: readonly ZCDeckCard[], revision: number): Promise<void> {
         const scope = this.resourceScope;
-        const revision = ++this.arenaRevision;
         const slots = this.arenaSlots();
         const previewAssets = this.unitPreviewAssets();
         const ready = await Promise.all(deck.slice(0, slots.length).map(async (card) => {
             const [frames, prefab] = await Promise.all([cardArtProvider.loadBoardSlot(card, this.art), previewAssets.load(card)]);
             return { card, frames, prefab };
         }));
-        if (scope.disposed || !this.alive || revision !== this.arenaRevision) return;
+        if (scope.disposed || !this.alive || revision !== this.renderRevision) return;
         for (let index = 0; index < slots.length; index += 1) {
             // 站台会长期存活，但宿主每次刷新仍要重指，避免节点复用后悬空。
             slots[index].tapHost = this;
@@ -243,11 +238,9 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
      */
     private async renderPool(pool: readonly ZCDeckCard[]): Promise<void> {
         if (pool === this.poolCards && this.poolArt.size > 0) {
-            this.rerenderPoolItems();
             return;
         }
         const scope = this.resourceScope;
-        const revision = ++this.poolRevision;
         this.poolCards = pool;
 
         // 首屏仅预加载前 15 张可见卡牌，避免 30~50 张卡瞬间并发全量 IO
@@ -260,30 +253,27 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         }));
 
         // 预加载期间面板可能已经关了，节点销毁后 poolList 也没了，先在这挡一下。
-        if (scope.disposed || !this.alive || revision !== this.poolRevision) return;
+        if (scope.disposed || !this.alive) return;
 
         const list = this.poolList;
         if (!list.node.isValid) return;
         list.renderItemFn = this.applyPoolItem;
-        // `VirtualScrollView` 的槽位是在 start() 里建的，而 onOpen 早于 start。
-        // 统一走 PopupBase 的取消安全帧等待：关闭期间会返回 false，不留下悬空 Promise。
-        if (!await this.nextPopupFrame()) return;
-        if (scope.disposed || !this.alive || revision !== this.poolRevision || !list.node.isValid) return;
+        // `VirtualScrollView` 会在 `start()` 就绪后自动补跑待铺条数，无需手动等帧。
         list.setTotalCount(pool.length);
 
         // 剩余未加载卡牌异步预热，不阻塞首屏与主线程
         const remaining = pool.slice(INITIAL_BATCH).filter(card => !this.poolArt.has(card.id));
         if (remaining.length > 0) {
-            void this.warmRemainingPoolArt(remaining, revision);
+            void this.warmRemainingPoolArt(remaining);
         }
     }
 
-    private async warmRemainingPoolArt(remaining: readonly ZCDeckCard[], revision: number): Promise<void> {
+    private async warmRemainingPoolArt(remaining: readonly ZCDeckCard[]): Promise<void> {
         for (const card of remaining) {
-            if (this.resourceScope.disposed || !this.alive || revision !== this.poolRevision) return;
+            if (this.resourceScope.disposed || !this.alive) return;
             if (!this.poolArt.has(card.id)) {
                 const frames = await cardArtProvider.loadBoardCard(card, this.art);
-                if (this.resourceScope.disposed || !this.alive || revision !== this.poolRevision) return;
+                if (this.resourceScope.disposed || !this.alive) return;
                 this.poolArt.set(card.id, frames);
             }
         }
@@ -305,9 +295,8 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         }
         // 图未就绪时先渲染槽位并就地异步加载，图就绪后若节点仍在展示当前卡则刷新
         view.render(card, EMPTY_BOARD_CARD_FRAMES, this.deployedIds.has(card.id), this.levelOf(card, this.fallbackPoolLevel));
-        const revision = this.poolRevision;
         void cardArtProvider.loadBoardCard(card, this.art).then((loadedFrames) => {
-            if (this.resourceScope.disposed || !this.alive || revision !== this.poolRevision) return;
+            if (this.resourceScope.disposed || !this.alive) return;
             this.poolArt.set(card.id, loadedFrames);
             if (node.isValid && view.node.isValid && this.poolCards[index]?.id === card.id) {
                 view.render(card, loadedFrames, this.deployedIds.has(card.id), this.levelOf(card, this.fallbackPoolLevel));
@@ -327,9 +316,8 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     /** 中间那行「职业图标 + 数量」，顺序取表内 `cardUiArtClass` 的行序（`lineup.classes`）。 */
-    private async renderClassRow(deck: readonly ZCDeckCard[]): Promise<void> {
+    private async renderClassRow(deck: readonly ZCDeckCard[], revision: number): Promise<void> {
         const scope = this.resourceScope;
-        const revision = ++this.classRevision;
         const tallies = tallyDeckClasses(deck, this.art.lineup);
         //  ClassRow 挂的是水平 Layout，顺序 = 节点树顺序（同 `arenaSlots`：坐标是 Layout 算的，别反推）。
         const items = this.classBar.getComponentsInChildren(LineupBoardClassItem);
@@ -344,7 +332,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
                 count: tally?.count ?? 0,
                 reached: tally?.reached ?? false,
             });
-            if (scope.disposed || !this.alive || revision !== this.classRevision) return;
+            if (scope.disposed || !this.alive || revision !== this.renderRevision) return;
             items[index].render(tally, frame);
         }
     }
@@ -356,7 +344,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     selectPreset(index: number): void {
-        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'preset', index }, this);
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'preset', index });
     }
 
     private updatePresetTabs(index: number): void {
@@ -379,31 +367,24 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     onResetAll(): void {
-        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'reset' }, this);
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'reset' });
     }
 
     private onCloseClick(): void { this.closeByButton(); }
 
     onSave(): void {
-        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'save' }, this);
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'save' });
     }
 
     onCardTap(card: ZCDeckCard): void {
-        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'toggle', cardId: card.id }, this);
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'toggle', cardId: card.id });
     }
 
     protected onClose(): void {
-        this.renderRevision++;
-        this.arenaRevision++;
-        this.poolRevision++;
-        this.classRevision++;
         this.previewAssets = null;
     }
 
     onDestroy(): void {
-        this.resetButton?.node?.off(Button.EventType.CLICK, this.onResetAll, this);
-        this.saveButton?.node?.off(Button.EventType.CLICK, this.onSave, this);
-        this.closeButton?.node?.off(Button.EventType.CLICK, this.onCloseClick, this);
         this.arenaSlotCache = null;
         this.poolArt.clear();
         super.onDestroy();

@@ -42,7 +42,7 @@ for (const mode of ['manual', 'timeout'] as const) {
         const h = runtimeFixture({}, true);
         try {
             if (mode === 'manual') EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
-            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 }, h.view);
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 });
             h.finishShowcase();
             const model = h.runtime.currentModel;
             assert.ok(model);

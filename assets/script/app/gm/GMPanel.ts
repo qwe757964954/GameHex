@@ -146,17 +146,11 @@ export class GMPanel extends PopupBase {
     // ============================================================
 
     /**
-     * 把当前指令条数交给虚拟列表。
-     *
-     *  `VirtualScrollView` 的槽位是在它自己的 `start()` 里建的，而 `onOpen` **早于**
-     * `start()`；不等一帧就 `setTotalCount`，槽位数组还是空的，列表会一片空白。
-     * 统一走 `PopupBase.nextPopupFrame()`：关闭期间返回 false，不留悬空 Promise。
+     * 把当前指令条数交给虚拟列表（`VirtualScrollView` 会在 `start()` 就绪后自动铺表）。
      */
-    private async _pushList(): Promise<void> {
+    private _pushList(): void {
         const list = this.listView;
         if (!list.node.isValid) return;
-        if (!await this.nextPopupFrame()) return;
-        if (!this.isValid || !this.node.isValid || !list.node.isValid) return;
 
         list.setTotalCount(this._defs.length);
         // 条数变化后可能停在越界位置；回到顶部（不播动画）。

@@ -162,3 +162,55 @@ export function formatProbabilityText(sections: readonly IStoreProbabilitySectio
         .map((s) => [`【${s.heading}】`, ...s.lines].join('\n'))
         .join('\n\n');
 }
+
+/**
+ * 价格条「币种图标 + 数字」整组的横向摆位。
+ *
+ * 为什么需要算：`Value` 的 `overflow = NONE` ⇒ 盒子宽度跟着文字走（`10` / `100` / `1000`
+ * 各不一样），静态 prefab 只能对**一种位数**居中；换一位数就偏一截。
+ *
+ * 输入是两格的**实测宽度**（`UITransform.width`），输出是相对价格条原点的两个 `x`，
+ * 组宽 `iconWidth + gap + textWidth` 关于 0 对称 ⇒ 整组横向居中。
+ */
+export interface IStoreCostRowX {
+    /** 币种图标节点的 `x`。 */
+    readonly iconX: number;
+    /** 数字节点的 `x`。 */
+    readonly textX: number;
+}
+
+/**
+ * 图标与数字之间的间距（**作者单位**）。
+ *
+ * 黑市 `Price` 的 `_lscale = 0.8` ⇒ 2.5 × 0.8 = 设计稿 2px（用户口径「间隔 2px」）。
+ * 换分段要跟着改：`StoreSilver` 是 1.0、`StoreLevelGift` 是 0.8×0.7。
+ */
+export const STORE_COST_ICON_GAP = 2.5;
+
+/**
+ * 算出「图标 + 数字」整组居中时两个节点的 `x`。
+ *
+ * @param iconWidth  图标实测宽（`> 0`）
+ * @param textWidth  数字实测宽（`> 0`）
+ * @param iconAnchorX 图标锚点 x（默认 0.5 = 以中心对位）
+ * @param textAnchorX 数字锚点 x（默认 0.5）
+ * @param gap        两者间距
+ * @returns `null` = 还没量到宽度（首帧未排版 / 空串），调用方保持 prefab 摆位
+ *
+ * 宽高为 0 时返回 `null` 而不是算个 0 出来：那样会把整组甩到左边，看起来像"抖一下"。
+ */
+export function storeCostRowX(
+    iconWidth: number,
+    textWidth: number,
+    iconAnchorX = 0.5,
+    textAnchorX = 0.5,
+    gap = STORE_COST_ICON_GAP,
+): IStoreCostRowX | null {
+    if (!(Number.isFinite(iconWidth) && iconWidth > 0)) return null;
+    if (!(Number.isFinite(textWidth) && textWidth > 0)) return null;
+    const left = -(iconWidth + gap + textWidth) / 2;
+    return {
+        iconX: left + iconWidth * iconAnchorX,
+        textX: left + iconWidth + gap + textWidth * textAnchorX,
+    };
+}

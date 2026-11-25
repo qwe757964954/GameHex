@@ -16,6 +16,7 @@ import type { ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { ZCTileSystem } from '../assets/script/app/zcds/model/systems/ZCTileSystem';
 import { ZCEconomySystem } from '../assets/script/app/zcds/model/systems/ZCEconomySystem';
 import { ZCCaptureSystem } from '../assets/script/app/zcds/model/systems/ZCCaptureSystem';
+import { ZCDevelopmentSystem } from '../assets/script/app/zcds/model/systems/ZCDevelopmentSystem';
 import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../assets/script/app/zcds/model/ZCSpawnSelection';
 import type { ZCCombatTarget, ZCProjectileState, ZCHexState, ZCSnapshot } from '../assets/script/app/zcds/model/ZCGameTypes';
 import type { ZCDamageSource } from '../assets/script/app/zcds/model/ZCGameTypes';
@@ -941,6 +942,45 @@ test('割草机启动时已有建筑也不截断路线', () => {
     Object.assign(f.state.hexes[next], { owner: 'enemy', building: 'barracks' });
     f.system.claim(f.state);
     assert.equal(f.hex.neutralFeature.lineHexIds[1], next);
+});
+
+test('小兵穿过中立推车或号角后能继续占领空地，资源格保留原归属', () => {
+    for (const type of [8, 10]) {
+        const { config, state, hex, unit } = fixture(type, {});
+        const resource = config.map.hexes[hex.id];
+        const anchor = config.map.hexes[resource.neighbors[0]];
+        const next = config.map.hexes[resource.neighbors.find(id => id !== anchor.id && !anchor.neighbors.includes(id))];
+        const map = { ...config.map, homes: [anchor.id, config.map.enemyHomeId] };
+        const capture = new ZCCaptureSystem(new ZCMapGeometry(map), map,
+            { ...config.rules, captureSeconds: 0.1, captureRequireSupply: true });
+        for (const tile of state.hexes) tile.owner = 'neutral';
+        const runner = unit(1);
+        state.units = [runner];
+        capture.beginStep(state.units);
+        runner.freeX = next.x;
+        runner.freeY = next.y;
+        const target = state.hexes[next.id];
+
+        capture.update(state, 0.05, ZCDevelopmentSystem.captureEmptyTile);
+        assert.equal(target.captureSeconds, 0, '离开主城补给仍不能推进占领');
+        state.hexes[anchor.id].owner = 'player';
+        hex.owner = 'enemy';
+        capture.update(state, 0.05, ZCDevelopmentSystem.captureEmptyTile);
+        assert.equal(target.captureSeconds, 0, '敌方资源格仍会阻断补给');
+
+        hex.owner = 'neutral';
+        hex.wallHp = 1;
+        capture.update(state, 0.05, ZCDevelopmentSystem.captureEmptyTile);
+        assert.equal(target.captureSeconds, 0, '未破城墙仍会阻断补给');
+        hex.wallHp = 0;
+        capture.update(state, 0.05, ZCDevelopmentSystem.captureEmptyTile);
+        assert.equal(target.captureSeconds, 0.05, `资源类型 ${type} 后的空地应开始占领`);
+        capture.beginStep(state.units);
+        capture.update(state, 0.05, ZCDevelopmentSystem.captureEmptyTile);
+        assert.equal(target.owner, 'player');
+        assert.equal(hex.owner, 'neutral');
+        assert.equal(hex.neutralFeature.claimed, false);
+    }
 });
 
 test('已触发推车格可被路过小兵占领，未触发时保留资源', () => {

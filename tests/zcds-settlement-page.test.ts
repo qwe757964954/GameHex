@@ -4,7 +4,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { assetPath } from './helpers/asset-paths';
-import { calcMvpAdaptiveBadgeY, calcMvpEffectiveArtHeight, ZC_SETTLEMENT_STYLE } from '../assets/script/app/zcds/model/ZCSettlementStyle';
+import { calcMvpEffectiveArtHeight, ZC_SETTLEMENT_STYLE } from '../assets/script/app/zcds/model/ZCSettlementStyle';
 
 /**
  * 对局结算页（`ZCSettlementPage` + `ZCSettlement.prefab`）的结构守卫。
@@ -20,6 +20,7 @@ import { calcMvpAdaptiveBadgeY, calcMvpEffectiveArtHeight, ZC_SETTLEMENT_STYLE }
  */
 const pageSource = readFileSync('assets/script/app/zcds/ui/ZCSettlementPage.ts', 'utf8');
 const styleSource = readFileSync('assets/script/app/zcds/model/ZCSettlementStyle.ts', 'utf8');
+const actorSource = readFileSync('assets/script/app/zcds/view/ZCSettlementMvpActor.ts', 'utf8');
 const gameSource = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const pageMeta = JSON.parse(readFileSync('assets/script/app/zcds/ui/ZCSettlementPage.ts.meta', 'utf8'));
 const layoutMeta = JSON.parse(readFileSync('assets/script/app/zcds/view/ZCSettlementLayout.ts.meta', 'utf8'));
@@ -51,11 +52,13 @@ const DESIGN = {
     titleText: { x: 10, y: -6, w: 346, h: 74 },
     // MVP 整组：本地 y 95..405（设计 y ≈ 394..705），覆盖 MVP 标识 / 头像 / 两条进度条
     mvpBlock: { x: 0, y: 250, w: 623, h: 310 },
-    mvpIcon: { x: -46.5, y: 132.5, w: 120, h: 40 },
+    // 11-24 用户实机定案：徽标从「悬浮在角色头顶」改成「与 Lv/名字 同一行、贴区左沿」
+    // （原稿 -46.5 / 132.5，Lv/名字 也跟着上移 23.5 到 y=83），坐标以 prefab 为准。
+    mvpIcon: { x: -254, y: 85, w: 120, h: 40 },
     // 设计稿那里是 170×265 的立绘位：本局赢家输出最高卡的骨骼模型站在这里播 idle
     mvpActor: { x: -141.5, y: -7.5, w: 170, h: 265 },
-    mvpLevel: { x: 70.5, y: 106.5 },
-    mvpName: { x: 175.5, y: 106.5 },
+    mvpLevel: { x: 70, y: 83 },
+    mvpName: { x: 175, y: 83 },
     mvpDealtLabel: { x: 70.5, y: 32.5 },
     mvpDealtRate: { x: 235.5, y: 33.5 },
     mvpDealtBar: { x: 149.5, y: 4, w: 230, h: 27 },
@@ -670,9 +673,9 @@ test('外部战斗控制器装配结算页与伤害统计，ZCGame 只保留展�
     assert.match(runtime, /this\.settlement\.confirm\(\)/);
     // 「查看完整队伍」的数据在结算开始时就冻结进请求（结算期不回读模型）
     assert.match(runtime, /mvp: this\.settlementMvp\(\)/);
-    assert.match(runtime, /players: this\.damagePlayers\(\)/);
+    assert.match(runtime, /units: this\.damageUnits\(\), seats: this\.damageSeats\(\)/);
     assert.match(settlement, /this\.listen\(ZCGameUiEvent\.SettlementViewTeam, this\.onViewTeam\)/);
-    assert.match(settlement, /this\.services\.popup\.openDamage\(this\.players\)/);
+    assert.match(settlement, /this\.services\.popup\.openDamage\(this\.units, this\.seats\)/);
     assert.match(settlement, /mvp: request\.mvp \?\? null/);
     const close = settlement.indexOf("popup?.close('manual');");
     assert.ok(close >= 0 && close < settlement.indexOf('emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN'));
@@ -681,35 +684,33 @@ test('外部战斗控制器装配结算页与伤害统计，ZCGame 只保留展�
     assert.match(pageSource, /export class ZCSettlementPage extends PopupBase/);
 });
 
-test('MVP 徽标自适应落位：按角色可见头顶浮动，超高收敛、极矮保底、永不挡脸', () => {
-    const token = ZC_SETTLEMENT_STYLE.mvpBadge;
-    assert.equal(token.defaultY, 132.5, '默认位置与设计稿一致');
-    assert.equal(token.halfHeight, 20);
-    assert.equal(token.maxCenterY, 132.5, '徽标高度绝不超出设计稿基准，避免顶撞上方飘带');
+test('MVP 徽标 / Lv / 名字的坐标只认 prefab：立绘代码不许改写，徽标与文案同一行', () => {
+    const icon = nodeNamed('MvpIcon', 'MvpBlock')!;
+    const level = nodeNamed('MvpLevel', 'MvpBlock')!;
+    const name = nodeNamed('MvpName', 'MvpBlock')!;
+    const [iconX, iconY] = positionOf(icon);
+    const [levelX, levelY] = positionOf(level);
+    const [nameX, nameY] = positionOf(name);
+    const span = (node: any) => sizeOf(node)[0] / 2;
 
-    // 1. 无效或未建立模型：落回默认 132.5
-    assert.equal(calcMvpAdaptiveBadgeY(Number.NaN), token.defaultY);
+    // 同一行：徽标(40 高) 与两个 38 高的 Label 中心最多差 2px（视觉上共基线）
+    assert.ok(Math.abs(iconY - levelY) <= 2, `徽标 y=${iconY} 与 Lv y=${levelY} 必须同一行`);
+    assert.ok(Math.abs(levelY - nameY) <= 2, `Lv y=${levelY} 与名字 y=${nameY} 必须同一行`);
+    // 左 → 右：徽标 → Lv → 名字，且徽标右沿不压 Lv 左沿
+    assert.ok(iconX < levelX && levelX < nameX, `x 必须递增：徽标 ${iconX} < Lv ${levelX} < 名字 ${nameX}`);
+    assert.ok(iconX + span(icon) <= levelX - span(level), '徽标右沿不得压住 Lv 文案');
 
-    // 2. 正常身高（如懂王，高 231，头顶约在 91）：悬浮在头顶上方，徽标底边离头顶留白约 21.5px
-    const normalTop = 91;
-    const normalY = calcMvpAdaptiveBadgeY(normalTop);
-    assert.equal(normalY, token.maxCenterY); // 91 + 21.5 + 20 = 132.5 精准命中基准
-    assert.ok(normalY - token.halfHeight > normalTop, '徽标底边必须在头顶上方');
+    // 立绘只摆模型：`ZCSettlementMvpActor` 里出现 `MvpIcon` 就是在改 prefab 坐标 ⇒ 实机必然错位
+    const actor = stripComments(actorSource);
+    assert.doesNotMatch(actor, /MvpIcon/, 'MvpActor 不许碰徽标节点，坐标归 prefab');
+    // 头顶上限只管立绘收敛，不再兼职推徽标
+    assert.equal(ZC_SETTLEMENT_STYLE.mvpArt.maxHeadTopInBlock, 91);
+    assert.doesNotMatch(styleSource, /calcMvpAdaptiveBadgeY|mvpBadge/, '自适应推徽标那套 token 必须删干净');
 
-    // 3. 极高角色（如运动霸戴头盔、仙人侍卫举刀）：立绘高度被 maxHeadTopInBlock 压制到设计稿角色高 (231)
-    const footInBlock = -140; // -7.5 + (-132.5)
-    const giantDesiredHeight = 317.8;
-    const effectiveHeight = calcMvpEffectiveArtHeight(giantDesiredHeight, footInBlock);
-    assert.equal(effectiveHeight, token.maxHeadTopInBlock - footInBlock); // 91 - (-140) = 231
-    const clampedHeadTop = footInBlock + effectiveHeight;
-    assert.equal(clampedHeadTop, token.maxHeadTopInBlock);
-    const clampedY = calcMvpAdaptiveBadgeY(clampedHeadTop);
-    assert.equal(clampedY, token.maxCenterY); // 锁死在 132.5，绝不往上冲
-    assert.ok(clampedY <= token.maxCenterY, '不得超出上限顶撞上方飘带');
-    assert.ok(clampedY - token.halfHeight >= clampedHeadTop, '必须不遮挡头盔与面部');
-
-    // 4. 极矮角色（头顶 30）：徽标底线保底不低于 minCenterY (125)
-    const shortTop = 30;
-    const shortY = calcMvpAdaptiveBadgeY(shortTop);
-    assert.equal(shortY, token.minCenterY); // 125
+    const footInBlock = -140; // MvpActor.y(-7.5) + 底边(-132.5)
+    assert.equal(
+        calcMvpEffectiveArtHeight(317.8, footInBlock),
+        ZC_SETTLEMENT_STYLE.mvpArt.maxHeadTopInBlock - footInBlock,
+        '超高角色立绘必须收敛到头顶 91，别顶进上方飘带',
+    );
 });

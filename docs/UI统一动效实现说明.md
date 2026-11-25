@@ -159,7 +159,7 @@ npx tsx --test tests/ui-motion.test.ts tests/main-hud-intro.test.ts
 对应需求：「增加升级详情界面的 UI 表现动画」，由 5 阶段串联成一条严格的时间轴：
 
 1. **① 入场（Entrance）**：从上到下逐块从屏幕外滑到各自设计坐标，块间错峰间隔 `ENTRANCE_STAGGER = 0.1s`，单块时长 `0.55s`，滑移距离统一 `1500px`（五块分别为：Header / 立绘与影子 / 等级 / 属性 / 增益）。
-2. **② 角色升级特效（Fx）**：立绘块（Block 1）落位后开始播放，15 帧序列帧（`007-2-run_loop_05..19`，采样 12fps，时长 1.25s）。
+2. **② 角色升级特效（Fx）**：**与刷光 / 角色本体叠色同一拍起播**（2026-11-25 用户口径「光效需要等待本体叠颜色同步播放」，原来挂在「立绘落位」那拍）。特效本身在 2026-11-25 从 15 帧序列帧（`007-2-run_loop_05..19`）换成了美术新交的 spine `ddz_cj_nextlevel`：资源在 `assets/resources/skel/ddz_cj_nextlevel/`，只有一条同名动画、时长 `1.0s`、`loop = false`（只播一次），`CardUpgradeFx.prefab` 是单节点 `sp.Skeleton`（scale 1.4 烘在预制里，落位见 `FX_DROP_PX`）。
 3. **③ 等级数字跳动（Level Pop）**：特效起播 0.35s 后开始跳动，先放大至峰值切成新等级文字，再回弹复位。
 4. **④ 进度条刷光 + 换档** 与 **⑤ 属性数值刷光**：
    - 🔴 **硬约束**：「所有的刷光动画同步」。

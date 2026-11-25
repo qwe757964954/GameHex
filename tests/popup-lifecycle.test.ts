@@ -541,3 +541,208 @@ test('PopupBase 旧打开的迟到资源被释放并拒绝，不占用重开后�
     h.popup.onDestroy();
     assert.equal(newScope.disposed, true);
 });
+
+test('PopupBase 架构级生命周期：支持 onViewReady 并在首帧渲染就绪后自动调用', async () => {
+    const frameListeners = new Set<() => void>();
+    const director = {
+        once: (_event: string, callback: () => void) => { frameListeners.add(callback); },
+        off: (_event: string, callback: () => void) => { frameListeners.delete(callback); },
+    };
+    class Vector { x = 0; y = 0; z = 0; set() { return this; } }
+    class DummyNode {
+        static EventType = {
+            TOUCH_START: 'touch-start',
+            TOUCH_MOVE: 'touch-move',
+            TOUCH_END: 'touch-end',
+            TOUCH_CANCEL: 'touch-cancel',
+        };
+        isValid = true;
+        children: DummyNode[] = [];
+        addComponent<T>(cls: new () => T): T { return new cls(); }
+        getComponent() { return null; }
+        getChildByName() { return null; }
+        insertChild() {}
+        setPosition() {}
+        on() {}
+        off() {}
+        destroy() { this.isValid = false; }
+    }
+    class DummyComponent { node = new DummyNode(); isValid = true; }
+    const cc = {
+        _decorator: { ccclass: classDecorator, property: propertyDecorator },
+        Button: class {},
+        Component: DummyComponent,
+        director,
+        Director: { EVENT_AFTER_UPDATE: 'after-update' },
+        EditBox: class {},
+        EventTouch: class {},
+        Mask: class {},
+        Node: DummyNode,
+        PageView: class {},
+        ScrollView: class {},
+        Sprite: class {},
+        UITransform: class { width = 100; height = 100; setContentSize() {} },
+        Vec2: Vector,
+        Vec3: Vector,
+        view: { getVisibleSize: () => ({ width: 720, height: 1280 }) },
+    };
+    const { PopupBase } = loadModule(
+        'assets/script/framework/ui/PopupBase.ts',
+        { cc, './PopupDef': PopupDef, './PopupManager': { PopupManager: { inst: null } } },
+    );
+
+    const steps: string[] = [];
+    class ReadyPopup extends PopupBase {
+        closeOnBlank = false;
+        get readyFlag(): boolean { return this.isViewReady; }
+        protected async onOpen(userData: any): Promise<void> {
+            steps.push(`onOpen:${userData}`);
+            assert.equal(this.readyFlag, false, 'onOpen 尚未跨过首帧时 isViewReady 为 false');
+        }
+        protected async onViewReady(userData: any): Promise<void> {
+            assert.equal(this.readyFlag, true, '进入 onViewReady 时 isViewReady 必须为 true');
+            steps.push(`onViewReady:${userData}`);
+        }
+    }
+
+    const popup = new ReadyPopup();
+    assert.equal(popup.readyFlag, false);
+    const opening = popup._internalOpen(10, { userData: 'hero' }, PopupDef.PopupLayer.NORMAL);
+    await flushMicrotasks();
+    assert.deepEqual(steps, ['onOpen:hero'], 'onOpen 先行执行');
+
+    // 触发下一帧
+    assert.equal(frameListeners.size, 1, '框架自动等待首帧以保证子组件完成 start');
+    frameListeners.forEach(fn => fn());
+    frameListeners.clear();
+    await opening;
+    assert.deepEqual(steps, ['onOpen:hero', 'onViewReady:hero'], '首帧就绪后框架自动调用 onViewReady');
+    assert.equal(popup.readyFlag, true);
+    popup._internalClose(PopupDef.PopupCloseReason.Manual);
+    assert.equal(popup.readyFlag, false, '关闭后 isViewReady 复位为 false');
+
+    // 若 onOpen 自身异步跨过了首帧，onViewReady 不再额外空等第二帧
+    steps.length = 0;
+    let releaseAsyncOpen!: () => void;
+    class SlowOpenPopup extends PopupBase {
+        closeOnBlank = false;
+        protected async onOpen(): Promise<void> {
+            steps.push('slow-open-start');
+            await new Promise<void>(resolve => { releaseAsyncOpen = resolve; });
+            steps.push('slow-open-end');
+        }
+        protected onViewReady(): void {
+            steps.push('slow-ready');
+        }
+    }
+    const slowPopup = new SlowOpenPopup();
+    const slowOpening = slowPopup._internalOpen(12, {}, PopupDef.PopupLayer.NORMAL);
+    await flushMicrotasks();
+    assert.equal(frameListeners.size, 1, '首帧监听随 onOpen 并行注册');
+    frameListeners.forEach(fn => fn());
+    frameListeners.clear();
+    await flushMicrotasks();
+    assert.deepEqual(steps, ['slow-open-start'], 'onOpen 未完成前不提前触发 onViewReady');
+    releaseAsyncOpen();
+    await slowOpening;
+    assert.equal(frameListeners.size, 0, '已跨过首帧后不再注册多余的等帧监听');
+    assert.deepEqual(steps, ['slow-open-start', 'slow-open-end', 'slow-ready']);
+
+    // 若在 onOpen 期间关闭，onViewReady 绝不被调用
+    steps.length = 0;
+    class CancelledPopup extends PopupBase {
+        closeOnBlank = false;
+        protected onOpen(): Promise<void> {
+            steps.push('onOpen');
+            return new Promise(() => {}); // 模拟耗时拉取
+        }
+        protected onViewReady(): void {
+            steps.push('onViewReady');
+        }
+    }
+    const cancelPopup = new CancelledPopup();
+    const cancelOpening = cancelPopup._internalOpen(11, {}, PopupDef.PopupLayer.NORMAL);
+    await flushMicrotasks();
+    assert.deepEqual(steps, ['onOpen']);
+    cancelPopup._internalClose(PopupDef.PopupCloseReason.Manual);
+    await cancelOpening;
+    assert.deepEqual(steps, ['onOpen'], '关闭后 onViewReady 绝不被触发');
+});
+
+test('PopupBase.nextPopupFrame 契约：关闭、取消、销毁或作用域释放后必定安全返回 false', async () => {
+    const frameListeners = new Set<() => void>();
+    const director = {
+        once: (_event: string, callback: () => void) => { frameListeners.add(callback); },
+        off: (_event: string, callback: () => void) => { frameListeners.delete(callback); },
+    };
+    class Vector { x = 0; y = 0; z = 0; set() { return this; } }
+    class DummyNode {
+        static EventType = { TOUCH_START: 'touch-start', TOUCH_MOVE: 'touch-move', TOUCH_END: 'touch-end', TOUCH_CANCEL: 'touch-cancel' };
+        isValid = true;
+        children: DummyNode[] = [];
+        addComponent<T>(cls: new () => T): T { return new cls(); }
+        getComponent() { return null; }
+        getChildByName() { return null; }
+        insertChild() {}
+        setPosition() {}
+        on() {}
+        off() {}
+        destroy() { this.isValid = false; }
+    }
+    class DummyComponent { node = new DummyNode(); isValid = true; }
+    const cc = {
+        _decorator: { ccclass: classDecorator, property: propertyDecorator },
+        Button: class {},
+        Component: DummyComponent,
+        director,
+        Director: { EVENT_AFTER_UPDATE: 'after-update' },
+        EditBox: class {},
+        EventTouch: class {},
+        Mask: class {},
+        Node: DummyNode,
+        PageView: class {},
+        ScrollView: class {},
+        Sprite: class {},
+        UITransform: class { width = 100; height = 100; setContentSize() {} },
+        Vec2: Vector,
+        Vec3: Vector,
+        view: { getVisibleSize: () => ({ width: 720, height: 1280 }) },
+    };
+    const { PopupBase } = loadModule(
+        'assets/script/framework/ui/PopupBase.ts',
+        { cc, './PopupDef': PopupDef, './PopupManager': { PopupManager: { inst: null } } },
+    );
+
+    class TestPopup extends PopupBase {
+        closeOnBlank = false;
+        async waitFrame(): Promise<boolean> {
+            return this.nextPopupFrame();
+        }
+    }
+
+    const popup = new TestPopup();
+    // 未 open 时直接调用
+    assert.equal(await popup.waitFrame(), false, '未 open 时直接返回 false');
+
+    // 正常 open
+    const opening = popup._internalOpen(1, {}, PopupDef.PopupLayer.NORMAL);
+    await flushMicrotasks();
+    const waitTask = popup.waitFrame();
+    assert.equal(frameListeners.size, 1);
+    frameListeners.forEach(fn => fn());
+    frameListeners.clear();
+    const result = await waitTask;
+    assert.equal(result, true, '正常情况下跨帧返回 true');
+    await opening;
+
+    // 等帧期间被关闭
+    const waitTask2 = popup.waitFrame();
+    assert.equal(frameListeners.size, 1);
+    popup._internalClose(PopupDef.PopupCloseReason.Manual);
+    const result2 = await waitTask2;
+    assert.equal(result2, false, '等待帧期间关闭，立即返回 false');
+
+    // 已销毁后再调
+    popup.onDestroy();
+    assert.equal(await popup.waitFrame(), false, '销毁后调用立即返回 false');
+});

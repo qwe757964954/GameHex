@@ -1,6 +1,6 @@
 import { _decorator, Component, instantiate, Node, Prefab, sp, UITransform } from 'cc';
 import { cardPreviewFactor } from '../../card/CardPreviewScale';
-import { calcMvpAdaptiveBadgeY, calcMvpEffectiveArtHeight, ZC_SETTLEMENT_STYLE } from '../model/ZCSettlementStyle';
+import { calcMvpEffectiveArtHeight, ZC_SETTLEMENT_STYLE } from '../model/ZCSettlementStyle';
 import { measureSpineArtBounds, type ISpineArtBounds, type ISpineArtSkeleton } from './ZCSpineArtBounds';
 
 const { ccclass } = _decorator;
@@ -29,6 +29,10 @@ class ZCSettlementMvpActorPlayer extends Component {
  * 高度按 **idle 首帧美术包围盒** 归一（设计稿 288 可见高 / 265 宿主高），再乘
  * `pvpCard.prefabSize` 的体型系数；脚点用包围盒 `minY` 对齐宿主底边，影子不会压出框。
  * 宿主持久、每局只换模型 —— 换数据时 `clear()` 掉上一只，不重建宿主。
+ *
+ * ⚠️ 只负责**立绘**：`MvpBlock` 里其它节点（尤其 `MvpIcon` 徽标）的坐标一律归 prefab，
+ * 本类一个字都不写。曾按「角色头顶 + 间距」自适应挪徽标，prefab 改成「徽标与 Lv/名字 同一行、
+ * 贴区左沿」后那套自适应会把徽标拽回旧坐标，实机就和预制体对不上（2026-11-24 现场）。
  *
  * 不复用 `app/card/CardUnitPreview`：那个绑定 `Hero` 的 `cc.Sprite` 且会 `enabled=false`，
  * 结算立绘位是裸 `Node`（不带 Sprite），跨 feature 借用运行期组件也会破坏分层。
@@ -108,7 +112,6 @@ export class ZCSettlementMvpActor {
         this.appliedSize = Number.NaN;
         this.applySize(prefabSize);
         player.playIdle();
-        this.applyBadgePosition();
         return true;
     }
 
@@ -119,7 +122,6 @@ export class ZCSettlementMvpActor {
         this.appliedSize = Number.NaN;
         this.artHeight = Number.NaN;
         this.artMinY = 0;
-        this.resetBadgePosition();
     }
 
     /**
@@ -144,22 +146,6 @@ export class ZCSettlementMvpActor {
         }
     }
 
-    /**
-     * 角色头顶在 MvpBlock 局部坐标系中的真实 Y 坐标。
-     * NaN = 未建立模型或未量测出美术包围盒。
-     */
-    get headTopInBlock(): number {
-        const visual = this.visual;
-        if (!visual || !visual.isValid || !Number.isFinite(this.artHeight)) {
-            return Number.NaN;
-        }
-        const scaleY = Math.abs(visual.scale.y);
-        const baseScaleY = Math.abs(this.assetScale.y) || 1;
-        const renderedHeight = this.artHeight * (scaleY / baseScaleY);
-        const footInBlock = this.host.position.y + this.footY;
-        return footInBlock + renderedHeight;
-    }
-
     /** 「归一 × 体型 × 头顶上限」写进模型节点；系数没变就跳过（`setScale` 会置脏）。*/
     private applySize(prefabSize: number): void {
         const visual = this.visual;
@@ -178,29 +164,5 @@ export class ZCSettlementMvpActor {
         visual.setScale(this.assetScale.x * factor, this.assetScale.y * factor, this.assetScale.z * factor);
         // 包围盒最低点（影子/脚底）落在立绘底边；骨架原点不一定在脚底，不能直接贴原点。
         visual.setPosition(0, this.footY - this.artMinY * factor * this.assetScale.y, 0);
-    }
-
-    private get badgeNode(): Node | null {
-        return this.host.parent ? this.host.parent.getChildByName('MvpIcon') : null;
-    }
-
-    private applyBadgePosition(): void {
-        const badge = this.badgeNode;
-        if (!badge) return;
-        const targetX = ZC_SETTLEMENT_STYLE.mvpBadge.defaultX;
-        const targetY = calcMvpAdaptiveBadgeY(this.headTopInBlock);
-        const pos = badge.position;
-        if (pos.x === targetX && pos.y === targetY) return;
-        badge.setPosition(targetX, targetY, pos.z);
-    }
-
-    private resetBadgePosition(): void {
-        const badge = this.badgeNode;
-        if (!badge) return;
-        const targetX = ZC_SETTLEMENT_STYLE.mvpBadge.defaultX;
-        const targetY = ZC_SETTLEMENT_STYLE.mvpBadge.defaultY;
-        const pos = badge.position;
-        if (pos.x === targetX && pos.y === targetY) return;
-        badge.setPosition(targetX, targetY, pos.z);
     }
 }

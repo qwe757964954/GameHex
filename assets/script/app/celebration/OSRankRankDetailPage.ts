@@ -92,10 +92,9 @@ export class OSRankRankDetailPage extends PopupBase {
 
         this._rows = detail.list;
         this.heroRow.render(detail.myRank);
+    }
 
-        // 槽位在 VirtualScrollView.start() 里建，onOpen 早于 start()，喂条数前要等一帧。
-        if (!await this.nextPopupFrame()) return;
-        if (!this.isValid || !this.node.isValid) return;
+    protected onViewReady(): void {
         this.list.setTotalCount(this._rows.length);
         this.list.scrollToTop(false);
     }

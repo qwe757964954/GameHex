@@ -110008,7 +110008,7 @@ $root.com = (function() {
                      * @property {number|null} [unitType] CmdBattleUnitInfo unitType
                      * @property {Array.<com.xkhy.tafang.cmd.CmdPvpBuffInfo>|null} [buffInfo] CmdBattleUnitInfo buffInfo
                      * @property {Array.<com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo>|null} [attrs] CmdBattleUnitInfo attrs
-                     * @property {Array.<number>|null} [modifyList] CmdBattleUnitInfo modifyList
+                     * @property {Array.<Long>|null} [modifyList] CmdBattleUnitInfo modifyList
                      */
 
                     /**
@@ -110104,7 +110104,7 @@ $root.com = (function() {
 
                     /**
                      * CmdBattleUnitInfo modifyList.
-                     * @member {Array.<number>} modifyList
+                     * @member {Array.<Long>} modifyList
                      * @memberof com.xkhy.tafang.cmd.CmdBattleUnitInfo
                      * @instance
                      */
@@ -110156,7 +110156,7 @@ $root.com = (function() {
                                 $root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.encode(message.attrs[i], writer.uint32(/* id 9, wireType 2 =*/74).fork(), q + 1).ldelim();
                         if (message.modifyList != null && message.modifyList.length)
                             for (var i = 0; i < message.modifyList.length; ++i)
-                                writer.uint32(/* id 10, wireType 0 =*/80).uint32(message.modifyList[i]);
+                                writer.uint32(/* id 10, wireType 0 =*/80).uint64(message.modifyList[i]);
                         return writer;
                     };
 
@@ -110232,9 +110232,9 @@ $root.com = (function() {
                                     if ((tag & 7) === 2) {
                                         var end2 = reader.uint32() + reader.pos;
                                         while (reader.pos < end2)
-                                            message.modifyList.push(reader.uint32());
+                                            message.modifyList.push(reader.uint64());
                                     } else
-                                        message.modifyList.push(reader.uint32());
+                                        message.modifyList.push(reader.uint64());
                                     break;
                                 }
                             default:
@@ -111499,6 +111499,129 @@ $root.com = (function() {
                     return CmdPvpUnitHomeIndex;
                 })();
 
+                cmd.CmdPvpResourceMonsterAttrInfo = (function() {
+
+                    /**
+                     * Properties of a CmdPvpResourceMonsterAttrInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdPvpResourceMonsterAttrInfo
+                     * @property {Array.<com.xkhy.tafang.cmd.CmdPvpAttrInfo>|null} [monsterAttrs] CmdPvpResourceMonsterAttrInfo monsterAttrs
+                     */
+
+                    /**
+                     * Constructs a new CmdPvpResourceMonsterAttrInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdPvpResourceMonsterAttrInfo.
+                     * @implements ICmdPvpResourceMonsterAttrInfo
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdPvpResourceMonsterAttrInfo=} [properties] Properties to set
+                     */
+                    function CmdPvpResourceMonsterAttrInfo(properties) {
+                        this.monsterAttrs = [];
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdPvpResourceMonsterAttrInfo monsterAttrs.
+                     * @member {Array.<com.xkhy.tafang.cmd.CmdPvpAttrInfo>} monsterAttrs
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo
+                     * @instance
+                     */
+                    CmdPvpResourceMonsterAttrInfo.prototype.monsterAttrs = $util.emptyArray;
+
+                    /**
+                     * Creates a new CmdPvpResourceMonsterAttrInfo instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdPvpResourceMonsterAttrInfo=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo} CmdPvpResourceMonsterAttrInfo instance
+                     */
+                    CmdPvpResourceMonsterAttrInfo.create = function create(properties) {
+                        return new CmdPvpResourceMonsterAttrInfo(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdPvpResourceMonsterAttrInfo message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo} message CmdPvpResourceMonsterAttrInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdPvpResourceMonsterAttrInfo.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        if (message.monsterAttrs != null && message.monsterAttrs.length)
+                            for (var i = 0; i < message.monsterAttrs.length; ++i)
+                                $root.com.xkhy.tafang.cmd.CmdPvpAttrInfo.encode(message.monsterAttrs[i], writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdPvpResourceMonsterAttrInfo message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo} CmdPvpResourceMonsterAttrInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdPvpResourceMonsterAttrInfo.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    if (!(message.monsterAttrs && message.monsterAttrs.length))
+                                        message.monsterAttrs = [];
+                                    message.monsterAttrs.push($root.com.xkhy.tafang.cmd.CmdPvpAttrInfo.decode(reader, reader.uint32(), undefined, long + 1));
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdPvpResourceMonsterAttrInfo
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdPvpResourceMonsterAttrInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo";
+                    };
+
+                    return CmdPvpResourceMonsterAttrInfo;
+                })();
+
                 cmd.CmdPvpResourcePointInfo = (function() {
 
                     /**
@@ -111509,6 +111632,7 @@ $root.com = (function() {
                      * @property {number} column CmdPvpResourcePointInfo column
                      * @property {number} groupId CmdPvpResourcePointInfo groupId
                      * @property {number} resourceId CmdPvpResourcePointInfo resourceId
+                     * @property {Uint8Array|null} [dataBytes] CmdPvpResourcePointInfo dataBytes
                      */
 
                     /**
@@ -111559,6 +111683,14 @@ $root.com = (function() {
                     CmdPvpResourcePointInfo.prototype.resourceId = 0;
 
                     /**
+                     * CmdPvpResourcePointInfo dataBytes.
+                     * @member {Uint8Array} dataBytes
+                     * @memberof com.xkhy.tafang.cmd.CmdPvpResourcePointInfo
+                     * @instance
+                     */
+                    CmdPvpResourcePointInfo.prototype.dataBytes = $util.newBuffer([]);
+
+                    /**
                      * Creates a new CmdPvpResourcePointInfo instance using the specified properties.
                      * @function create
                      * @memberof com.xkhy.tafang.cmd.CmdPvpResourcePointInfo
@@ -111590,6 +111722,8 @@ $root.com = (function() {
                         writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.column);
                         writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.groupId);
                         writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.resourceId);
+                        if (message.dataBytes != null && Object.hasOwnProperty.call(message, "dataBytes"))
+                            writer.uint32(/* id 5, wireType 2 =*/42).bytes(message.dataBytes);
                         return writer;
                     };
 
@@ -111631,6 +111765,10 @@ $root.com = (function() {
                                 }
                             case 4: {
                                     message.resourceId = reader.uint32();
+                                    break;
+                                }
+                            case 5: {
+                                    message.dataBytes = reader.bytes();
                                     break;
                                 }
                             default:

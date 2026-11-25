@@ -28,7 +28,7 @@ function fixture(failRuntime = false) {
         },
         dispose() { this.scope.dispose(); },
     };
-    const popup = { isPopupOpen: true, refresh(players: unknown) { calls.push(['refreshDamage', players]); }, close(reason: unknown) { calls.push(['close', reason]); } };
+    const popup = { isPopupOpen: true, refresh(units: unknown) { calls.push(['refreshDamage', units]); }, close(reason: unknown) { calls.push(['close', reason]); } };
     const { BattleComposition } = loadBattleComposition({
         '../zcds/application/ZCClientCombatConfig': {}, '../zcds/model/ZCRankBoard': {},
         '../zcds/ZCGame': {}, './ZCGameLoader': {}, '../../territory/application/TerritorySaveStoreAdapter': {},
@@ -118,14 +118,14 @@ test('composition popup adapters preserve data and manual/force close semantics'
         const content = { entries: [], params: { panelTitle: 'guide', footerText: '', emptyText: '' }, iconFrames: new Map() };
         await h.runtime.popups.openGuide(content);
         assert.equal((h.calls.at(-1)[1] as { userData: { content: unknown } }).userData.content, content);
-        const players = [{ owner: 'player' as const, name: 'me', headKey: '', damage: 1, damageTaken: 2 }];
-        const damage = await h.runtime.popups.openDamage(players);
-        const damageOptions = h.calls.at(-1)[1] as { userData: { players: unknown }; closeOnBlank: boolean };
-        assert.equal(damageOptions.userData.players, players);
+        const units = [{ owner: 'player' as const, unitId: '68001', cardId: '68001', name: '豌豆游侠', iconKey: '', rarity: 'green' as const, damage: 1, damageTaken: 2 }];
+        const damage = await h.runtime.popups.openDamage(units);
+        const damageOptions = h.calls.at(-1)[1] as { userData: { units: unknown }; closeOnBlank: boolean };
+        assert.equal(damageOptions.userData.units, units);
         assert.equal(damageOptions.closeOnBlank, true);
         assert.equal(damage.isOpen, true);
-        damage.refresh(players);
-        assert.deepEqual(h.calls.at(-1), ['refreshDamage', players]);
+        damage.refresh(units);
+        assert.deepEqual(h.calls.at(-1), ['refreshDamage', units]);
         const seats = [], profiles = new Map();
         await h.runtime.popups.openRank(seats, profiles);
         assert.equal((h.calls.at(-1)[1] as { userData: { seats: unknown } }).userData.seats, seats);

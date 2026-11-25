@@ -57,8 +57,8 @@ export class LeagueDonateController extends ControllerBase {
         void this.reload();
     }
 
-    private readonly onIntent = (event: ILeagueDonateIntent, source: object): void => {
-        if (source !== this.options.owner || this.busy) return;
+    private readonly onIntent = (event: ILeagueDonateIntent): void => {
+        if (this.busy) return;
         if (event.kind === 'free') void this.donateFree();
         else void this.donateByCoin();
     };

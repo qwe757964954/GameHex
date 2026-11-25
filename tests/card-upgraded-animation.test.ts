@@ -9,13 +9,13 @@
  *     每块在自己那个方向上第 0 帧就完整在屏幕外、换数字正好在放大峰值、
  *     换数值 == 刷光结束、进度条到点才退格；
  *  ② **同步**：只有一份刷光进度，三条光带共用，但**各扫各的框**（不是一个大的刷光）；
- *  ③ **资源**：15 帧与磁盘上的 `007-2-run_loop_05..19` 一一对应、不循环、不自播，
- *     且序列帧必须关掉 trimmed（每帧 trim 尺寸不同，开着整柱会逐帧抖）；
+ *  ③ **资源**：`CardUpgradeFx` 是单节点 `sp.Skeleton`，绑 `resources/skel/ddz_cj_nextlevel`、
+ *     播 1 次不自播；骨骼的 atlas 22 个区域齐全（少一张就是播到一半闪空、且零报错）；
  *  ④ **装配**：特效在立绘上层且压在角色中心（下移 `FX_DROP_PX`）、旧值/新值都由控制器带进来、
  *     逐帧回调在关闭时收干净。
  */
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
     ENTRANCE_BLOCK_COUNT,
@@ -23,21 +23,25 @@ import {
     ENTRANCE_DURATION,
     ENTRANCE_TRAVEL,
     FX_DURATION,
-    FX_FRAME_COUNT,
     LEVEL_POP_SCALE,
+    PROGRESS_BEAM_LAYERS,
     PROGRESS_GROW,
     PROGRESS_HOLD,
     PROGRESS_POP_SCALE,
     PROGRESS_RESET,
     SHINE_DURATION,
     SHINE_SWEEP_EASE,
+    SLOT_BEAM_LAYERS,
     buildCardUpgradedSchedule,
+    barGlowAt,
     entranceDirectionAt,
     entranceOffsetAt,
+    heroGlowAt,
     levelScaleAt,
     progressPopScaleAt,
     progressRatioAt,
     progressZeroTextOf,
+    shineEnvelopeAt,
     shineOpacityAt,
     shineProgressAt,
     shineSweepAt,
@@ -47,11 +51,21 @@ import { BUNDLE_DIRECTORIES, MAIN_PAGES_BUNDLE, bundleForPath } from '../assets/
 const schedule = buildCardUpgradedSchedule();
 const pageSource = readFileSync('assets/script/app/card/CardUpgradedPage.ts', 'utf8');
 const controllerSource = readFileSync('assets/script/app/card/CardUpgradeController.ts', 'utf8');
+const previewSource = readFileSync('assets/script/app/card/CardUnitPreview.ts', 'utf8');
 
 const PRE_FAB = 'assets/bundles/main-pages/ui/card/CardUpgraded.prefab';
 const FX_PREFAB = 'assets/bundles/main-pages/ui/card/CardUpgradeFx.prefab';
-const FX_ANIM = 'assets/bundles/main-pages/ui/card/anim/CardUpgradeFx.anim';
 const FRAME_DIR = 'assets/bundles/main-pages/image/card_effect_levelup';
+/** 升级特效用到的骨骼（2026-11-25 起替代旧的 15 帧序列帧）。 */
+const FX_SKEL_DIR = 'assets/resources/skel/ddz_cj_nextlevel';
+const FX_SKEL_NAME = 'ddz_cj_nextlevel';
+const FX_ANIMATION = 'ddz_cj_nextlevel';
+/** 骨骼画布（`.skel` 的 x/y/width/height），prefab 的 UITransform 必须与它一致。 */
+const FX_CANVAS = { width: 275.7550048828125, height: 600, anchorX: 0.49436096299886895, anchorY: 0.16295000712076824 };
+/** prefab 里烘死的显示缩放：600×1.4=840，约等于立绘 426 高的两倍（旧序列帧是 885.6）。 */
+const FX_SCALE = 1.4;
+/** atlas 里的 22 个区域：4 层光 + 18 颗上升的光丝。 */
+const FX_ATLAS_REGIONS = 22;
 
 /** 设计分辨率 720×1610 ⇒ 上沿 +805、右沿 +360；越过去才算「完全在屏幕外」。 */
 const SCREEN_TOP = 1610 / 2;
@@ -139,17 +153,34 @@ test('入场：所有块同时起播，各自从屏幕的不同方向滑进来',
     }
 });
 
-test('入场一结束就落位；特效在立绘落位那一拍起播', () => {
+test('入场一结束就落位；光效改成与「本体叠色」同一拍起播', () => {
     for (const { index } of entranceBlocks) {
         assert.equal(entranceOffsetAt(schedule, schedule.entranceEnd, index), 0,
             `第 ${index} 块在 entranceEnd 必须正好归零`);
     }
-    // 立绘是第 2 块（序号 1），它落位 = 自己的起播（现在都是 0）+ 时长
+    // 2026-11-25 用户：「升级界面的光效需要等待本体叠颜色同步播放，现在是角色加载动画就播放了」。
+    // 所以光效不再挂「立绘落位」，而是挂到刷光那一拍 —— 起播时刻必须**精确相等**，差一帧就是「各亮各的」。
+    assert.equal(schedule.fxAt, schedule.shineStart, '特效起播必须与刷光/本体叠色同拍');
     const heroLand = schedule.entrance[1] + ENTRANCE_DURATION;
-    assert.ok(schedule.fxAt >= heroLand,
-        `特效 ${schedule.fxAt}s 早于立绘落位 ${heroLand}s —— 会在滑行途中就炸开`);
-    assert.ok(schedule.fxAt - heroLand < 0.2, '落位到起播之间不要拖太久');
-    assert.equal(schedule.fxEnd - schedule.fxAt, FX_DURATION, '特效时长必须等于序列帧时长');
+    assert.ok(schedule.fxAt > heroLand + 0.5,
+        `特效 ${schedule.fxAt}s 还在角色刚滑进来（${heroLand}s）附近 —— 这就是用户说的「加载动画就播放了」`);
+    assert.ok(schedule.fxAt >= schedule.levelSettleEnd, '等级数字的回弹要演完，别叠在一起');
+    assert.equal(schedule.fxEnd - schedule.fxAt, FX_DURATION, '特效时长必须等于 spine 动画时长（1.0s）');
+});
+
+test('起播那一刻本体还没上色，起播后才跟着刷光一起亮', () => {
+    // 「同步播放」的判据：起播前一帧叠色为 0，起播那一帧进度也是 0（两者同一根时间轴）
+    assert.equal(heroGlowAt(shineProgressAt(schedule, schedule.fxAt - 0.01)), 0,
+        '起播前本体不许已经亮着');
+    assert.equal(shineProgressAt(schedule, schedule.fxAt), 0, '起播与刷光起点是同一帧');
+    assert.equal(heroGlowAt(0), 0, '刷光第 0 帧的叠色必须为 0（淡入的起点）');
+    // 起播 0.1s 后本体已经亮起来，特效这时还在播（1.0s）⇒ 两件事真的同时发生
+    const glowMid = heroGlowAt(shineProgressAt(schedule, schedule.fxAt + 0.1));
+    assert.ok(glowMid > 0.6, `起播 0.1s 时本体只亮到 ${glowMid}，读不出「同步」`);
+    assert.ok(schedule.fxAt + 0.1 < schedule.fxEnd, '此时特效必须还在播');
+    // 视图侧：特挂由 `fxAt` 起播，本体叠色由同一个 shine 驱动 —— 没有第二根时间轴
+    assert.match(pageSource, /if \(!this\.fxStarted && t >= timeline\.fxAt\)/);
+    assert.match(pageSource, /this\.applyHeroGlow\(heroGlowAt\(shine\)\);/);
 });
 
 test('等级数字在放大峰值换字：换字时刻的倍数正好是峰值，之后落回 1', () => {
@@ -203,8 +234,8 @@ test('三条刷光带共用同一份进度，但各扫各的框（不是一个�
         '左右属性框必须各自按自己的框建光带');
     assert.equal((pageSource.match(/this\.createShineForFrame\(/g) ?? []).length, 2,
         '属性左框、右框各一条：两条，不多不少');
-    assert.match(pageSource, /this\.createShineForFrame\(this\.frameLeft, 2,/);
-    assert.match(pageSource, /this\.createShineForFrame\(this\.frameRight, 3,/);
+    assert.match(pageSource, /this\.createShineForFrame\(this\.frameLeft, 2\)/);
+    assert.match(pageSource, /this\.createShineForFrame\(this\.frameRight, 3\)/);
     // 每条的行程以「自己的框中心」为原点，不再一律从父节点 0 点起；位移过一道缓进快出
     assert.match(pageSource, /const x = streak\.centerX - streak\.travel \/ 2 \+ streak\.travel \* swept;/,
         '光带必须以框中心为原点扫过，否则左框那条会从整体中心开始');
@@ -330,68 +361,76 @@ test('整条时间轴单调、有限，且终点收在最后一段动画之后',
 });
 
 // ============================================================
-// ③ 序列帧特效资源
+// ③ 升级特效资源（spine `ddz_cj_nextlevel`）
 // ============================================================
 
-test('特效预制：不自播、关 trimmed、挂在 Sprite 上、引用同一份动画片段', () => {
+test('特效预制：单节点 sp.Skeleton、绑 ddz_cj_nextlevel、播 1 次不自播', () => {
     assert.ok(existsSync(FX_PREFAB), '缺少 CardUpgradeFx.prefab');
     const fx = JSON.parse(readFileSync(FX_PREFAB, 'utf8')) as Array<Record<string, any>>;
-    const root = fx[1];
+    const nodes = fx.filter((item) => item.__type__ === 'cc.Node');
+    assert.equal(nodes.length, 1, '特效预制只该有一个节点（sp.Skeleton 直接挂根节点）');
+    const root = nodes[0];
     const components = (root._components as { __id__: number }[]).map((ref) => fx[ref.__id__]);
-    const sprite = components.find((item) => item.__type__ === 'cc.Sprite');
-    const animation = components.find((item) => item.__type__ === 'cc.Animation');
-    assert.ok(sprite, '根节点缺 cc.Sprite（序列帧没地方贴）');
-    assert.ok(animation, '根节点缺 cc.Animation');
-    assert.equal(animation.playOnLoad, false, '必须由页面在时间轴上显式 play，不许实例化就自播');
-    assert.equal(sprite._sizeMode, 0, '尺寸必须走 CUSTOM，按 772×2214 原图算');
-    assert.equal(sprite._isTrimmedMode, false,
-        '15 帧的 trim 尺寸各不相同，开着 trimmed 会让整柱逐帧抖动');
-    assert.equal(sprite._type, 0, '简单图，不要九宫格');
+    assert.equal(components.filter((item) => item.__type__ === 'cc.Sprite').length, 0,
+        '旧序列帧的 Sprite 必须摘掉，否则新特效底下还压着一张旧图');
+    assert.equal(components.filter((item) => item.__type__ === 'cc.Animation').length, 0,
+        '旧序列帧的 Animation 必须摘掉，否则页面拿 sp.Skeleton 之外的组件起播');
 
-    const clipUuid = animation._clips[0].__uuid__;
-    assert.equal(animation._defaultClip.__uuid__, clipUuid, 'defaultClip 必须与 clips[0] 一致，否则 play() 播空');
-    const clipMeta = JSON.parse(readFileSync(FX_ANIM + '.meta', 'utf8'));
-    assert.equal(clipMeta.uuid, clipUuid, '预制引用的动画片段 uuid 与 .anim.meta 对不上');
+    const skeleton = components.find((item) => item.__type__ === 'sp.Skeleton');
+    assert.ok(skeleton, '根节点缺 sp.Skeleton');
+    assert.equal(skeleton.defaultAnimation, FX_ANIMATION, '默认动画必须指向骨骼里那条 1.0s 动画');
+    assert.equal(skeleton.loop, false, '只播 1 次（升级特效播完就停）');
+    assert.notEqual(skeleton.playOnLoad, true, '不许实例化就自播，起播时刻由时间轴给');
 
-    // 锚点在底边：光柱立在角色脚下往上长
+    const skelMeta = JSON.parse(readFileSync(`${FX_SKEL_DIR}/${FX_SKEL_NAME}.skel.meta`, 'utf8'));
+    assert.equal(skeleton._skeletonData.__uuid__, skelMeta.uuid, 'SkeletonData 引用与 skel.meta 对不上');
+    assert.equal(skeleton._skeletonData.__expectedType__, 'sp.SkeletonData');
+    assert.ok(!('uuid' in skeleton._skeletonData),
+        '引用必须落成 __uuid__：写成 {uuid} 反序列化会读成 null，运行时整条特效空白且零报错');
+
+    assert.equal(root._layer, 33554432, 'layer 必须 UI_2D，落 DEFAULT 在 UI 相机下整棵不渲染');
+    assert.equal(root._lscale.x, FX_SCALE);
+    assert.equal(root._lscale.y, FX_SCALE);
+    assert.equal(root._lscale.z, 1);
+
     const transform = components.find((item) => item.__type__ === 'cc.UITransform');
-    assert.equal(transform._anchorPoint.y, 0, '锚点要在底边，否则光柱会以中心为原点往上下各长一半');
-    assert.equal(transform._contentSize.width, 772);
-    assert.equal(transform._contentSize.height, 2214);
+    assert.ok(transform, '缺 cc.UITransform');
+    assert.equal(transform._contentSize.width, FX_CANVAS.width);
+    assert.equal(transform._contentSize.height, FX_CANVAS.height);
+    // 锚点由 Cocos 按骨骼 bounds 反算；`FX_DROP_PX` 的推导依赖这两个数，换图必须重算
+    assert.ok(Math.abs(transform._anchorPoint.x - FX_CANVAS.anchorX) < 1e-9,
+        `锚点 x 变了（骨骼 bounds 换过？）：${transform._anchorPoint.x}`);
+    assert.ok(Math.abs(transform._anchorPoint.y - FX_CANVAS.anchorY) < 1e-9,
+        `锚点 y 变了（骨骼 bounds 换过？）：${transform._anchorPoint.y}`);
 });
 
-test('动画片段：15 帧、逐帧引用磁盘上真实的序列帧、播 1 次不循环', () => {
-    assert.ok(existsSync(FX_ANIM), '缺少 CardUpgradeFx.anim');
-    const clip = JSON.parse(readFileSync(FX_ANIM, 'utf8')) as Record<string, any>;
-    assert.equal(clip.__type__, 'cc.AnimationClip');
-    assert.equal(clip.sample, 12);
-    assert.equal(clip.wrapMode, 1, 'wrapMode 1 = Normal：播 1 次停住（需求要求只播 1 次）');
-    assert.equal(clip._duration, FX_DURATION);
-
-    const curve = clip._tracks[0]._channel._curve;
-    const path = clip._tracks[0]._binding.path._paths;
-    assert.equal(path[0].__type__, 'cc.animation.ComponentPath');
-    assert.equal(path[0].component, 'cc.Sprite');
-    assert.equal(path[1], 'spriteFrame', '驱动的必须是 Sprite.spriteFrame');
-
-    assert.equal(curve._times.length, FX_FRAME_COUNT);
-    assert.equal(curve._values.length, FX_FRAME_COUNT);
-    for (let i = 1; i < curve._times.length; i++) {
-        assert.ok(curve._times[i] > curve._times[i - 1], `第 ${i} 帧时间没有递增`);
+test('骨骼资源：png/skel/atlas 同目录、atlas 22 个区域齐全、png 走 sprite-frame', () => {
+    for (const ext of ['.png', '.skel', '.atlas.txt']) {
+        assert.ok(existsSync(`${FX_SKEL_DIR}/${FX_SKEL_NAME}${ext}`), `缺少 ${FX_SKEL_NAME}${ext}`);
     }
+    const skelMeta = JSON.parse(readFileSync(`${FX_SKEL_DIR}/${FX_SKEL_NAME}.skel.meta`, 'utf8'));
+    const atlasMeta = JSON.parse(readFileSync(`${FX_SKEL_DIR}/${FX_SKEL_NAME}.atlas.txt.meta`, 'utf8'));
+    assert.equal(skelMeta.userData.atlasUuid, atlasMeta.uuid, '.skel.meta 必须绑到同名的 .atlas.txt');
+    const pngMeta = JSON.parse(readFileSync(`${FX_SKEL_DIR}/${FX_SKEL_NAME}.png.meta`, 'utf8'));
+    assert.equal(pngMeta.userData.type, 'sprite-frame');
+    assert.equal(pngMeta.userData.hasAlpha, true, '特效图必须带 alpha，否则图集是黑底');
+    assert.equal(pngMeta.userData.fixAlphaTransparencyArtifacts, false);
 
-    // 逐帧 uuid == 磁盘上 007-2-run_loop_05..19 的 spriteFrame（顺序也要对）
-    const expected = readdirSync(FRAME_DIR)
-        .filter((name) => /^007-2-run_loop_\d+\.png\.meta$/.test(name))
-        .map((name) => name.replace('.png.meta', ''))
-        .sort()
-        .map((base) => {
-            const meta = JSON.parse(readFileSync(`${FRAME_DIR}/${base}.png.meta`, 'utf8'));
-            return `${meta.uuid}@f9941`;
-        });
-    assert.equal(expected.length, FX_FRAME_COUNT, '磁盘上应该有 15 帧');
-    assert.deepEqual(curve._values.map((value: { __uuid__: string }) => value.__uuid__), expected,
-        '动画片段的帧序列与磁盘上的 05..19 必须一一对应（错位就是「播到一半闪空」）');
+    const atlas = readFileSync(`${FX_SKEL_DIR}/${FX_SKEL_NAME}.atlas.txt`, 'utf8').split(/\r?\n/);
+    const regions = atlas.filter((line) => line.length > 0
+        && !/^\s/.test(line) && !line.includes(':') && !/\.png$/i.test(line));
+    assert.equal(regions.length, FX_ATLAS_REGIONS, `atlas 区域数变了：${regions.length}`);
+
+    // 骨骼（二进制）里引用到的贴图名必须都能在 atlas 里找到，缺一张就是「播到一半闪空、控制台零报错」。
+    // slot 表里还留着 `images/cj_dz_glow4` / `glow5` 两个历史名（不是区域名，实际挂的是 glow04），
+    // 所以这里只校验真正按编号取的区域引用。
+    const skelText = readFileSync(`${FX_SKEL_DIR}/${FX_SKEL_NAME}.skel`, 'latin1');
+    const referenced = new Set(skelText.match(/images\/[A-Za-z0-9_]+/g) ?? []);
+    const numbered = [...referenced].filter((name) => /^images\/(lizi_\d+|cj_dz_glow0\d)$/.test(name));
+    const missing = numbered.filter((name) => !regions.includes(name));
+    assert.deepEqual(missing, [], `骨骼引用了 atlas 里没有的区域：${missing.join(', ')}`);
+    assert.equal(numbered.filter((name) => /lizi_/.test(name)).length, 18, '光丝应该是 18 帧');
+    assert.equal(numbered.filter((name) => /glow0/.test(name)).length, 4, '光层应该是 4 张');
 });
 
 test('刷光条贴图存在且已登记到 main-pages 分包（漏了会落回 resources 报 Bundle doesn\'t contain）', () => {
@@ -412,10 +451,10 @@ test('刷光条贴图存在且已登记到 main-pages 分包（漏了会落回 r
 test('特效压在角色上层、其它板块下层：紧跟立绘后一格插入', () => {
     assert.match(pageSource, /host\.insertChild\(node, Math\.min\(heroNode\.getSiblingIndex\(\) \+ 1, host\.children\.length\)\)/,
         '特效必须插在立绘的下一格：既压在角色上，又不盖住等级/属性/头部');
-    // 光柱立在角色脚下，再整体下移 FX_DROP_PX（二改：让亮芯中心对住角色中心）
+    // 特效原点不在矩形中心（spine 按 bounds 反算锚点），落位仍是「脚底再下移 FX_DROP_PX」
     assert.match(pageSource, /const footY = position\.y - \(transform \? transform\.height \* transform\.anchorY : 0\);/);
     assert.match(pageSource, /node\.setPosition\(position\.x, footY - FX_DROP_PX, 0\);/,
-        '特效必须相对脚底再下移 FX_DROP_PX，否则光柱全飘在头顶');
+        '特效必须相对脚底再下移 FX_DROP_PX，否则光爆中心会跑到角色胸口以上');
     assert.match(pageSource, /export const FX_DROP_PX = 70;/, '下移量按需求取 70px');
     // 内容层里 Hero 之上还有 Stats/Level/Header/Bonus（层级顺序不能反）
     const content = nodeNamed('Content');
@@ -506,4 +545,205 @@ test('打开弹窗：先落数据再等资源，样例文案（椰蛋战士）�
         '资源没到就置门闩 ⇒ 这次特效直接丢掉');
     assert.match(pageSource, /else if \(t >= timeline\.fxAt \+ FX_RETRY_WINDOW\) this\.fxStarted = true;/,
         '重试要有窗口，别每帧空转');
+});
+
+// ============================================================
+// ⑥ 刷光样式优化（2026-11-24）：本体发光 + 边缘发光 + 光柱加宽三色
+// ============================================================
+
+test('发光包络：三处发光共用同一个梯形，只是起落快慢不同', () => {
+    // 端点必须收敛到 0：不收敛就是「凭空亮起 / 突然熄灭」
+    for (const [name, fn] of [['光柱', shineOpacityAt], ['本体', heroGlowAt], ['边缘', barGlowAt]] as const) {
+        assert.equal(fn(-1), 0, `${name}：没有刷光时必须全灭`);
+        assert.equal(fn(0), 0, `${name}：起手那一帧不许跳亮`);
+        assert.equal(fn(1), 0, `${name}：收手那一帧必须归零`);
+        assert.equal(fn(0.5), 1, `${name}：中段必须是满亮`);
+        assert.equal(fn(2), 0, `${name}：越界要收敛`);
+    }
+    // 起手快慢：边缘光最快、本体其次、光柱最慢（0.1 处本体已经亮过七成，光柱才一半）
+    assert.ok(barGlowAt(0.05) > heroGlowAt(0.05), '边缘光要比本体起得快');
+    assert.ok(heroGlowAt(0.05) > shineOpacityAt(0.05), '本体要比光柱起得快');
+    // 收尾：本体/边缘是「缓落」，尾段比光柱暗（光柱是最后 18% 才猛掉，本体从 55% 就开始慢慢收）
+    assert.ok(heroGlowAt(0.9) > 0 && heroGlowAt(0.9) < shineOpacityAt(0.9), '尾段本体是余辉，不是跟着光柱一起硬掉');
+    assert.ok(barGlowAt(0.95) > heroGlowAt(0.95), '边缘光拖得最久');
+
+    // 单调：进段升、出段降，中间不许回头
+    let previous = -1;
+    for (let p = 0; p <= 1.0001; p += 0.02) {
+        const peak = Math.max(shineOpacityAt(p), heroGlowAt(p), barGlowAt(p));
+        assert.ok(peak >= 0 && peak <= 1, `包络越界：p=${p} → ${peak}`);
+        if (p <= 0.5) {
+            assert.ok(heroGlowAt(p) >= previous - 1e-9, `本体进段必须单调：p=${p}`);
+            previous = heroGlowAt(p);
+        }
+    }
+    // 退化入参（淡入淡出占比 0）不许算出 NaN
+    assert.ok(Number.isFinite(shineEnvelopeAt(0.5, 0, 0)));
+    assert.equal(shineEnvelopeAt(0.5, 0, 0), 1);
+});
+
+test('进度条光柱：三层同轴、逐层收窄，色相由绿黄收到白热', () => {
+    // 「光柱宽度增加」：改前是单层 120 宽，最外层必须明显更宽
+    assert.ok(PROGRESS_BEAM_LAYERS.length >= 2, '要做出渐变至少两层');
+    assert.ok(PROGRESS_BEAM_LAYERS[0].width >= 180,
+        `最外层只有 ${PROGRESS_BEAM_LAYERS[0].width} 宽，读起来还是「一条细白线」`);
+    // 最外层必须是径向柔光：`shine.png` 竖直方向没有渐变，撑高只会得到硬边矩形
+    assert.equal(PROGRESS_BEAM_LAYERS[0].frame, 'glow', '最外层要用径向柔光，光柱上下两端才是软的');
+
+    for (let i = 1; i < PROGRESS_BEAM_LAYERS.length; i++) {
+        const outer = PROGRESS_BEAM_LAYERS[i - 1];
+        const inner = PROGRESS_BEAM_LAYERS[i];
+        assert.ok(inner.width < outer.width, `第 ${i} 层没有比外层窄，「渐变」就退化成一块实心`);
+        const outerHeight = outer.height === 'area' ? Number.POSITIVE_INFINITY : outer.height;
+        const innerHeight = inner.height === 'area' ? Number.POSITIVE_INFINITY : inner.height;
+        assert.ok(innerHeight < outerHeight, `第 ${i} 层没有比外层矮`);
+        assert.ok(inner.alpha >= outer.alpha - 1e-9, `第 ${i} 层要比外层更实`);
+    }
+
+    // 色相：外绿黄 → 内白。`min-max` 差值 = 彩度，彩度必须逐层下降
+    const saturation = (rgb: readonly [number, number, number]): number =>
+        Math.max(...rgb) - Math.min(...rgb);
+    const outermost = PROGRESS_BEAM_LAYERS[0].rgb;
+    assert.ok(outermost[1] > outermost[0] && outermost[0] > outermost[2],
+        `最外层应是绿黄（g > r > b），实际 ${outermost.join('/')}`);
+    assert.ok(outermost[1] - outermost[2] >= 60, `最外层不够「绿黄」：${outermost.join('/')}`);
+    const innermost = PROGRESS_BEAM_LAYERS[PROGRESS_BEAM_LAYERS.length - 1].rgb;
+    assert.ok(saturation(innermost) <= 16, `最内层应是白热（三通道接近），实际 ${innermost.join('/')}`);
+    assert.ok(Math.min(...innermost) >= 230, `最内层不够白：${innermost.join('/')}`);
+    for (let i = 1; i < PROGRESS_BEAM_LAYERS.length; i++) {
+        assert.ok(saturation(PROGRESS_BEAM_LAYERS[i].rgb) < saturation(PROGRESS_BEAM_LAYERS[i - 1].rgb),
+            `第 ${i} 层彩度没有继续收窄，横截面读不出渐变`);
+    }
+    for (const layer of PROGRESS_BEAM_LAYERS) {
+        assert.ok(layer.alpha > 0 && layer.alpha <= 1, `层不透明度越界：${layer.alpha}`);
+    }
+});
+
+test('属性框光柱：同样三层同轴，但走中性白（框底按品质换色，绿黄会撞）', () => {
+    // 2026-11-25 用户：「属性条对要有对应属性样式的刷光效果，和进度刷光同步播放」。
+    const saturation = (rgb: readonly [number, number, number]): number =>
+        Math.max(...rgb) - Math.min(...rgb);
+    assert.ok(SLOT_BEAM_LAYERS.length >= 2, '单层白带压在框上读不出「这道光是为这个框打的」');
+    assert.equal(SLOT_BEAM_LAYERS[0].frame, 'glow', '最外层同样要径向柔光，否则上下两端是硬边');
+    for (let i = 1; i < SLOT_BEAM_LAYERS.length; i++) {
+        assert.ok(SLOT_BEAM_LAYERS[i].width < SLOT_BEAM_LAYERS[i - 1].width, `第 ${i} 层没有比外层窄`);
+        assert.ok(SLOT_BEAM_LAYERS[i].alpha > SLOT_BEAM_LAYERS[i - 1].alpha, `第 ${i} 层没有比外层更实`);
+    }
+    // 🔴 关键：**中性白**。属性框底图按品质换色（金 / 蓝 / 紫 / 绿），彩度一高就会和金蓝紫框撞色。
+    for (const layer of SLOT_BEAM_LAYERS) {
+        assert.ok(saturation(layer.rgb) <= 16,
+            `属性框光柱必须是中性白，实际 ${layer.rgb.join('/')}（彩度 ${saturation(layer.rgb)}）`);
+        assert.ok(Math.min(...layer.rgb) >= 230, `属性框光柱不够白：${layer.rgb.join('/')}`);
+    }
+    // 主带贴框高（271×65 的属性框），换 prefab 尺寸不用回头改数字
+    assert.equal(SLOT_BEAM_LAYERS[1].height, 'area', '主带高度要跟着框走，别钉死数字');
+    // 最宽那层要明显比改前的 96 宽（那版一闪就没了），但别宽到盖住隔壁那个框
+    assert.ok(SLOT_BEAM_LAYERS[0].width >= 120 && SLOT_BEAM_LAYERS[0].width <= 200,
+        `外晕 ${SLOT_BEAM_LAYERS[0].width} 宽：太窄读不出光，太宽会糊到隔壁属性框`);
+});
+
+test('光柱按分层建节点：三层挂在同一个父节点上，位移只写父节点、亮度逐层写', () => {
+    assert.match(pageSource, /for \(const spec of specs\) \{/, '必须按分层表逐层建 Sprite');
+    assert.match(pageSource, /const layerHeight = spec\.height === 'area' \? height : spec\.height;/,
+        "'area' 要落到目标区高度上");
+    assert.match(pageSource, /layers\.push\(\{ sprite, opacity: layerOpacity, spec \}\);/);
+    // 三层同轴：层节点都在父节点原点，位置只由父节点写 ⇒ 不可能各扫各的
+    assert.match(pageSource, /layerNode\.setPosition\(0, 0, 0\);/);
+    assert.match(pageSource, /const x = streak\.centerX - streak\.travel \/ 2 \+ streak\.travel \* swept;/);
+    // 行程按最宽那层算：窄层要跟着宽层一起进出框
+    assert.match(pageSource, /const streakWidth = specs\.reduce\(\(widest, spec\) => Math\.max\(widest, spec\.width\), 0\);/);
+    // 层的相对亮度写在 sprite 颜色上，包络再乘到每层自己的 UIOpacity 上
+    assert.match(pageSource, /sprite\.color = new Color\(spec\.rgb\[0\], spec\.rgb\[1\], spec\.rgb\[2\], Math\.round\(255 \* spec\.alpha\)\);/);
+    assert.match(pageSource, /private applyShineAlpha\(streak: IShineStreak, byte: number\): void \{/);
+    assert.match(pageSource, /if \(layer\.opacity\.isValid && layer\.opacity\.opacity !== byte\) layer\.opacity\.opacity = byte;/,
+        '同一拍的亮度要写到每一层：三层的相对亮度靠 sprite 颜色区分，包络必须一致');
+});
+
+test('角色本体发光：剪影副本挂在立绘上、与本体锁相、放大一点点', () => {
+    const preview = previewSource;
+    // shader 只采样 alpha、输出顶点色 ⇒ 顶点色 = 纯色剪影（与巡逻宝箱 `ChestWhite` 同一套路）
+    assert.match(pageSource, /const GLOW_COPY_SHADER_PATH = 'shaders\/unit-outline-copy';/);
+    assert.ok(existsSync('assets/resources/shaders/unit-outline-copy.effect'),
+        'shader 文件不在，本体发光会静默降级成「只有光晕」');
+    assert.match(preview, /skeleton\.customMaterial = material;/);
+    assert.match(preview, /skeleton\.premultipliedAlpha = true;/,
+        'shader 按预乘口径输出（同 `ZCUnitView.attachOutlineCopy`），别依赖 prefab 上的勾选');
+    // 建好那一刻的对齐：动画段抄本体（不写死 idle）、播放头抄本体、时基抄本体
+    assert.match(preview, /const name = main\?\.animation\?\.name \|\| UNIT_IDLE_ANIMATION;/,
+        '起播的动画段要抄本体，写死 idle 会在本体已切段时错动画');
+    assert.match(preview, /const entry = skeleton\.setAnimation\(0, name, main \? !!main\.loop : true\);/);
+    assert.match(preview, /const main = this\.visualSkeleton\?\.getCurrent\(0\) \?\? null;/);
+    assert.match(preview, /if \(entry\) entry\.trackTime = main\.trackTime;/);
+    assert.match(preview, /skeleton\.timeScale = this\.visualSkeleton!\.timeScale;/);
+    // 放大一点点：同形状大一圈 ⇒ 那一圈就是外缘辉光
+    assert.match(preview, /const GLOW_COPY_SCALE = 1\.0[0-9]+;/);
+    assert.match(preview, /glow\.setScale\(scale\.x \* GLOW_COPY_SCALE/);
+    // 骨架原点在脚底 ⇒ 绕原点放大等于「头顶白一坨、脚下不动」；要挪成绕中部才是四周等宽
+    assert.match(preview, /const halfHeight = this\.sourceHeight \* Math\.abs\(scale\.y\) \* 0\.5;/);
+    assert.match(preview, /const lift = Number\.isFinite\(halfHeight\) \? halfHeight \* \(GLOW_COPY_SCALE - 1\) : 0;/);
+    assert.match(preview, /glow\.setPosition\(visual\.position\.x, visual\.position\.y - lift, visual\.position\.z\);/);
+    // 颜色是白中带绿黄（用户：「颜色依旧使用与进度相似的白色或绿黄色」）
+    assert.match(pageSource, /const HERO_GLOW_TINT = new Color\(236, 255, 206, 255\);/);
+    // 骨架顶点色是乘算的（只能压暗），所以本体这一层必须是「另起一层纯色剪影」
+    assert.match(pageSource, /this\.heroPreview\?\.attachGlow\(material, HERO_GLOW_TINT\)/);
+    // 没有骨骼时用静态立绘兜底（同一张图 + 同一份材质）
+    assert.match(pageSource, /this\.ensureHeroSpriteGlow\(material\)/);
+});
+
+test('剪影要跟着动作走：副本不许自己起播，每帧把本体的播放头抄过来', () => {
+    const glowSource = readFileSync('assets/script/app/card/CardGlowSync.ts', 'utf8');
+    assert.equal([...previewSource.matchAll(/@ccclass\(/g)].length, 1, '预览脚本只注册一个 Cocos 组件');
+    assert.equal([...glowSource.matchAll(/@ccclass\(/g)].length, 1, '同步脚本只注册一个 Cocos 组件');
+    // 根因：副本是 active=false 建的，prefab 自带的 `CardUnitPreviewPlayer.start()` 被推迟到
+    // 「点亮」那一帧才跑 ⇒ setAnimation 从 0 重播、把刚抄好的 trackTime 归零（白斑飘在脸右侧）。
+    assert.match(previewSource, /const autoPlay = spineNode\.getComponent\(CardUnitPreviewPlayer\);/);
+    assert.match(previewSource, /if \(autoPlay\) autoPlay\.destroy\(\);/,
+        '副本的动画只由同步器管，不许有第二个起播者');
+    // 每帧跟随：挂在副本自己的 spine 节点上，不依赖页面 update（页面可能在演出里提前 return）
+    assert.match(glowSource, /@ccclass\('CardGlowSync'\)/);
+    assert.match(glowSource, /class CardGlowSync extends Component \{/);
+    assert.match(glowSource, /protected lateUpdate\(\): void \{/);
+    assert.match(previewSource, /skeleton\.addComponent\(CardGlowSync\)\.bind\(this\.visualSkeleton\);/);
+    // 时基、动画段、播放头三样都要跟
+    assert.match(glowSource, /if \(self\.timeScale !== main\.timeScale\) self\.timeScale = main\.timeScale;/);
+    assert.match(glowSource, /if \(\(selfEntry\.animation\?\.name \?\? ''\) !== wantName\) \{/,
+        '本体换段了就得整段重来，只补时间会停在旧动作上');
+    assert.match(glowSource, /if \(Math\.abs\(selfEntry\.trackTime - mainEntry\.trackTime\) > GLOW_MAX_DRIFT\) \{/);
+    assert.match(glowSource, /selfEntry\.trackTime = mainEntry\.trackTime;/);
+    // 阈值是「常驻不写、漂了才纠」：trackTime 赋值要重算骨骼，每帧硬写反而会抖
+    const drift = glowSource.match(/const GLOW_MAX_DRIFT = (.+);/);
+    assert.ok(drift, '缺漂移阈值');
+    assert.equal(drift[1].trim(), '1 / 30', '阈值取一帧：常态同一拍不写，真漂了才纠');
+});
+
+
+test('进度条边缘发光：柔光压在底条下面，比底条大一圈', () => {
+    // 底条 442×32 ⇒ 光层 480×64：露在轮廓外那一圈才是「边缘在发光」
+    assert.match(pageSource, /const BAR_GLOW_SIZE = \{ width: 480, height: 64 \} as const;/);
+    assert.match(pageSource, /parent\.insertChild\(node, 0\);/, '边缘光必须插在底条之前（在它下面）');
+    assert.match(pageSource, /const BAR_GLOW_X = -3;/,
+        '底条在容器里不是正中（442 装在 450 里），光层要跟着它');
+    assert.match(pageSource, /sprite\.color = new Color\(BAR_GLOW_TINT\.r, BAR_GLOW_TINT\.g, BAR_GLOW_TINT\.b, 255\);/);
+    // 光晕在立绘**前一格**：托住角色，又不盖住等级/属性/头部
+    assert.match(pageSource, /host\.insertChild\(node, Math\.min\(heroNode\.getSiblingIndex\(\), host\.children\.length\)\);/);
+    assert.match(pageSource, /const HERO_HALO_SCALE = 1\.25;/);
+});
+
+test('三处发光都吃同一份刷光进度，收工归零、换作用域销毁', () => {
+    assert.match(pageSource, /this\.applyHeroGlow\(heroGlowAt\(shine\)\);/);
+    assert.match(pageSource, /this\.applyBarGlow\(barGlowAt\(shine\)\);/);
+    assert.doesNotMatch(pageSource, /shineProgressAt\([^)]*\)[\s\S]{0,400}shineProgressAt\(/,
+        '发光层不许自己再算一份刷光时间（第二套时间轴 = 不同步）');
+    // 收工：两处亮度都要归零，否则下次打开带着上一次的余辉
+    assert.match(pageSource, /this\.applyHeroGlow\(0\);\s*this\.applyBarGlow\(0\);/);
+    // 作用域重建：边缘光 / 光晕 / 剪影副本 / 材质全部销毁
+    assert.match(pageSource, /if \(this\.barGlow && this\.barGlow\.isValid\) this\.barGlow\.destroy\(\);/);
+    assert.match(pageSource, /if \(this\.heroHalo && this\.heroHalo\.isValid\) this\.heroHalo\.destroy\(\);/);
+    assert.match(pageSource, /this\.heroPreview\?\.clearGlow\(\);/);
+    assert.match(pageSource, /this\.glowMaterial = null;/);
+    // 柔光帧与剪影 shader 都在 main-pages / resources 里登记过（漏了就是「不显示 + 零报错」）
+    assert.ok(existsSync('assets/bundles/main-pages/image/showReward/sr_glow.png'));
+    assert.match(pageSource, /const GLOW_FRAME_PATH = 'image\/showReward\/sr_glow\/spriteFrame';/);
+    assert.equal(bundleForPath('image/showReward/sr_glow'), MAIN_PAGES_BUNDLE);
+    assert.ok(BUNDLE_DIRECTORIES[MAIN_PAGES_BUNDLE].includes('image/showReward'));
 });

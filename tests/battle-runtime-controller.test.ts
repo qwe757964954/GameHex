@@ -8,7 +8,7 @@ import { ZC_BATTLE_EVENTS } from '../assets/script/app/zcds/application/ZCBattle
 import { ZCGameUiEvent } from '../assets/script/app/zcds/view/ZCGameHudEvents';
 import type { IZCChapterBattleOutcome } from '../assets/script/app/battle/BattleResultService';
 import type { IZCBattlePopup } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
-import type { IZCDamageStatsPlayer, IZCDamageStatsPopup } from '../assets/script/app/zcds/application/ZCBattleRuntimeContract';
+import type { IZCDamageStatsPopup, IZCDamageStatsSeats, IZCDamageStatsUnit } from '../assets/script/app/zcds/application/ZCBattleRuntimeContract';
 import { GAME_AUDIO } from '../assets/script/app/ResConst';
 import { battleDrawSoundOf } from '../assets/script/app/zcds/application/ZCBattleRuntimeController';
 import { getPlayerDeck } from '../assets/script/app/zcds/model/ZCCombatCatalog';
@@ -85,7 +85,7 @@ test('固定与自选出生点开局按阵营打印卡牌最终属性，后续�
             if (selecting) {
                 assert.equal(cardLogs().length, 0);
                 EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
-                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 }, h.view);
+                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 });
                 h.finishShowcase();
             }
             const model = h.runtime.currentModel;
@@ -107,7 +107,7 @@ test('固定与自选出生点开局按阵营打印卡牌最终属性，后续�
                 const building = deck.find((item) => !item.unitId);
                 if (building) assert.equal(rows.find((row) => row.cardId === building.id).maxHp, null);
             }
-            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 }, h.view);
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 });
             EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
             h.finishShowcase();
             assert.equal(cardLogs().length, model.owners.length);
@@ -148,37 +148,46 @@ test('GM 加金币经事件修改当前模型并即时渲染，选点阶段拒�
 
 test('伤害面板按实际席位逐人显示，打开时追平并按静态节奏实时刷新，关闭后停止', async () => {
     for (const count of [2, 3, 4]) {
-        const opened: (readonly IZCDamageStatsPlayer[])[] = [];
-        const updates: (readonly IZCDamageStatsPlayer[])[] = [];
+        const opened: (readonly IZCDamageStatsUnit[])[] = [];
+        const openedSeats: (IZCDamageStatsSeats | undefined)[] = [];
+        const updates: (readonly IZCDamageStatsUnit[])[] = [];
         let isOpen = true, opens = 0;
-        const popup: IZCDamageStatsPopup = { get isOpen() { return isOpen; }, refresh: players => updates.push(players), close() { isOpen = false; } };
-        const h = runtimeFixture({}, false, undefined, { openDamage: async players => { opens++; opened.push(players); return popup; } });
+        const popup: IZCDamageStatsPopup = { get isOpen() { return isOpen; }, refresh: units => updates.push(units), close() { isOpen = false; } };
+        const h = runtimeFixture({}, false, undefined, { openDamage: async (units, seats) => { opens++; opened.push(units); openedSeats.push(seats); return popup; } });
         try {
             const owners = ['player', 'enemy', 'enemy2', 'enemy3'].slice(0, count);
-            const stats = { player: { dealt: 10, taken: 3 }, enemy: { dealt: 20, taken: 5 }, enemy2: { dealt: 30, taken: 7 }, enemy3: { dealt: 40, taken: 9 } };
+            const deckCard = h.entry.matchConfig.playerDeck.find(item => item.unitId);
+            const cards = owners.map((owner, i) => ({
+                owner,
+                cardId: i === 0 && deckCard ? deckCard.id : '68001',
+                unitId: i === 0 && deckCard ? deckCard.unitId! : '68001',
+                damage: (i + 1) * 10,
+                damageTaken: (i + 1) * 2 + 1,
+            }));
             Object.assign(h.entry, { seatProfiles: owners.map((owner, i) => [owner, { name: `玩家${i}`, headKey: `${i + 1}` }]) });
             const model = h.runtime.currentModel;
             Object.defineProperty(model, 'owners', { get: () => owners });
-            Object.defineProperty(model, 'damageStats', { get: () => stats });
+            Object.defineProperty(model, 'damageCards', { get: () => cards });
             model.tick = () => {};
             EventMgr.instance.emit(ZCGameUiEvent.OpenDamageStats);
             EventMgr.instance.emit(ZCGameUiEvent.OpenDamageStats);
-            stats.enemy.dealt = 25;
+            cards[1].damage = 25;
             await flush();
             assert.equal(opens, 1, '打开中的连点不重复加载弹窗');
-            assert.deepEqual(opened[0].map(player => player.owner), owners);
-            assert.deepEqual(opened[0].map(player => player.damage), [10, 20, 30, 40].slice(0, count));
+            assert.deepEqual(opened[0].slice(0, count).map(unit => unit.owner), owners);
+            assert.deepEqual(opened[0].slice(0, count).map(unit => unit.damage), [10, 20, 30, 40].slice(0, count));
+            assert.deepEqual(openedSeats[0]?.owners, owners);
+            assert.equal(opened[0][0].rarity, deckCard?.rarity ?? 'green', '头像底框的品级取席位卡池那张卡');
             assert.equal(updates[updates.length - 1][1].damage, 25, '加载期间发生的伤害在打开后追平');
-            assert.equal(updates[updates.length - 1][1].name, '玩家1');
-            assert.equal(updates[updates.length - 1][1].headKey, '2');
+            assert.equal(updates[updates.length - 1][1].name, '豌豆游侠');
             const before = updates.length;
-            stats.enemy.dealt = 100;
-            for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.05 }, h.view);
+            cards[1].damage = 100;
+            for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.05 });
             assert.equal(updates.length, before + 1);
-            assert.deepEqual(updates[updates.length - 1].map(player => player.owner), owners, '伤害改变不重排行');
+            assert.deepEqual(updates[updates.length - 1].slice(0, count).map(unit => unit.owner), owners, '席位行序不变（排序在弹窗里做）');
             assert.equal(updates[updates.length - 1][1].damage, 100);
             isOpen = false;
-            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.15 }, h.view);
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.15 });
             assert.equal(updates.length, before + 1);
             isOpen = true;
             EventMgr.instance.emit(ZCGameUiEvent.OpenDamageStats);
@@ -186,7 +195,7 @@ test('伤害面板按实际席位逐人显示，打开时追平并按静态节�
             assert.equal(opens, 2);
             h.dispose();
             const final = updates.length;
-            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 }, h.view);
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 });
             assert.equal(updates.length, final);
             assert.equal(isOpen, false);
         } finally { h.dispose(); }
@@ -318,7 +327,7 @@ test('settlement waits before report, closes before navigation and restores on c
     controller.dispose();
 });
 
-test('runtime consumes only its own frame, drains events once and keeps static cadence', () => {
+test('runtime consumes frame, drains events once and keeps static cadence', () => {
     const h = runtimeFixture();
     try {
         assert.equal(h.session.currentPhase, 'playing');
@@ -328,14 +337,13 @@ test('runtime consumes only its own frame, drains events once and keeps static c
         const drain = model.drainPresentationEvents.bind(model);
         model.drainPresentationEvents = () => { drained++; return drain(); };
         h.calls.length = 0;
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 }, {});
-        for (let i = 0; i < 10; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.05 }, h.view);
+        for (let i = 0; i < 10; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.05 });
         assert.equal(ticks, 10); assert.equal(drained, 10);
         assert.equal(h.calls.filter(call => call === 'dynamic').length, 10);
         assert.equal(h.calls.filter(call => call === 'static').length, 3);
         h.dispose();
         assert.equal(h.session.currentPhase, 'leaving');
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 }, h.view);
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 });
         assert.equal(ticks, 10);
     } finally { h.dispose(); }
 });
@@ -348,11 +356,11 @@ test('terminal tick waits for presentation before settlement; retreat reports on
             h.runtime.currentModel.useArtifact = () => { artifacts++; return { ok: true, message: 'ok' }; };
             if (!retreat) {
                 h.forceStatus('victory'); h.holdSweep(true);
-                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 }, h.view);
+                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 });
                 assert.equal(h.requests.length, 0); assert.equal(ticks, 1);
                 assert.equal(h.session.currentPhase, 'settlement-presentation');
                 h.holdSweep(false);
-                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 }, h.view);
+                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 });
             } else EventMgr.instance.emit(ZCGameUiEvent.Retreat);
             EventMgr.instance.emit(ZCGameUiEvent.Retreat);
             // 投降是「两次确认」的异步流程；这里等它落定再断言阶段与冻结效果。
@@ -360,7 +368,7 @@ test('terminal tick waits for presentation before settlement; retreat reports on
             assert.equal(h.session.currentPhase, 'settlement');
             const frozenTicks = ticks;
             EventMgr.instance.emit(ZCGameUiEvent.UseArtifact);
-            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 }, h.view);
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 });
             await flush();
             assert.equal(h.requests.length, 1); assert.equal(h.requests[0].localVictory, !retreat);
             assert.equal(artifacts, 0); assert.equal(ticks, frozenTicks);
@@ -393,7 +401,7 @@ test('spawn selection has no battle model, resolves once, then renders before re
         assert.equal(h.session.currentPhase, 'spawn-selection');
         assert.equal(h.runtime.currentModel, null);
         EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 }, h.view);
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 });
         h.finishShowcase();
         assert.equal(h.session.currentPhase, 'playing');
         assert.ok(h.runtime.currentModel);
@@ -459,7 +467,7 @@ test('exiting selection cancels its showcase timer and ignores a late timer call
     const h = runtimeFixture({}, true, undefined, {
         schedule: next => { callback = next; return () => { cancellations++; }; },
     });
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 }, h.view);
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 });
     h.dispose(); callback();
     assert.equal(cancellations, 1);
     assert.equal(h.runtime.currentModel, null);

@@ -514,10 +514,10 @@ test('异步宝箱奖励经宿主事件接开箱页，不再落普通奖励窗',
     const page = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
     const composition = readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8');
     assert.doesNotMatch(repository, /FW\.ShowReward/);
-    assert.match(page, /EventMgr\.instance\.emit\(CHEST_EVENTS\.REWARDS, \{ goods \}, this\)/);
+    assert.match(page, /EventMgr\.instance\.emit\(CHEST_EVENTS\.REWARDS, \{ goods \}\)/);
     assert.match(composition, /this\.listen\(CHEST_EVENTS\.REWARDS, this\.onTreasureRewards\)/);
     const handler = composition.slice(composition.indexOf('    private onTreasureRewards('), composition.indexOf('    private onChestRevealed('));
-    assert.match(handler, /source\.node !== this\.root/);
+    assert.match(handler, /!this\.hasMainPage \|\| !event\.goods\.length/);
     assert.match(handler, /TerritoryChestOpenPage\.open\(\{ userData: \{ goods: event\.goods \} \}\)/);
     assert.match(handler, /if \(this\.isDisposed\) popup\?\.close\(\)/);
 });

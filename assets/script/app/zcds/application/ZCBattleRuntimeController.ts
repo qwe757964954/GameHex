@@ -3,11 +3,11 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 import { GAME_AUDIO } from '../../ResConst';
 import { ZC_BATTLE_TYPE_CHAPTER } from '../../battle/BattleStartModel';
 import { buildDamageStatistics } from '../../battle/BattleStatisticsModel';
-import type { ZCCardRarity } from '../model/ZCCombatCatalog';
+import { findCatalogCard, type ZCCardRarity, type ZCDeckCard } from '../model/ZCCombatCatalog';
 import { ZCGameModel } from '../model/ZCGameModel';
 import { ZCOwner } from '../model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig } from '../model/ZCMatchConfig';
-import { buildRankSeats, RANK_FALLBACK_NAMES } from '../model/ZCRankBoard';
+import { buildRankSeats } from '../model/ZCRankBoard';
 import { createSeededRandom } from '../model/ZCSeededRandom';
 import { buildSettlementMvp, type IZCSettlementMvp, type IZCSettlementMvpCard } from '../model/ZCSettlementMvp';
 import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../model/ZCSpawnSelection';
@@ -16,7 +16,7 @@ import { ZCDC_LOG_DAMAGE_FLOAT } from '../ZCDCLogSwitch';
 import { ZCBattleAudio } from './ZCBattleAudio';
 import type { IZCBattlePhase } from './ZCBattleController';
 import { ZC_BATTLE_EVENTS, type IZCBattleFrame } from './ZCBattleEvents';
-import type { IZCBattleConfirmOptions, IZCBattleRuntimeServices, IZCBattleView, IZCDamageStatsPlayer, IZCDamageStatsPopup } from './ZCBattleRuntimeContract';
+import type { IZCBattleConfirmOptions, IZCBattleRuntimeServices, IZCBattleView, IZCDamageStatsPopup, IZCDamageStatsSeats, IZCDamageStatsUnit } from './ZCBattleRuntimeContract';
 import { ZCBattleSettlementController, type IZCBattlePopup } from './ZCBattleSettlementController';
 import type { IZCGameEntry } from './ZCGameEntry';
 
@@ -66,6 +66,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
     private retreating = false;
     private damagePopup: IZCDamageStatsPopup | null = null;
     private damageOpening = false;
+    private guideOpening = false;
     private readonly pendingUnitArt = new Set<string>();
     private readonly loadedUnitArt = new Set<string>();
     /** 特效美术按需补载：在飞的（path → Promise）与已到货的（路径集合）。*/
@@ -116,8 +117,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
         this.listen(ZCGameUiEvent.SpawnConfirm, this.onSpawnConfirm);
         this.listen(ZCGameUiEvent.SpawnToggleHints, this.onSpawnToggleHints);
     }
-    private onFrame({ dt }: IZCBattleFrame, source: object): void {
-        if (source !== this.view) return;
+    private onFrame({ dt }: IZCBattleFrame): void {
         if (this.selection) {
             this.selection.tick(dt);
             this.renderSpawn();
@@ -335,11 +335,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
         if (!model || !entry || this.phase.isSettled) return;
         if (!retreated && model.snapshot.status === 'playing') return;
         if (!this.phase.openSettlement()) return;
-        if (this.damagePopup) {
-            this.damagePopup.close();
-            this.damagePopup = null;
-        }
-        this.popups.delete('damage');
+        this.clearDamagePopup();
         const stats = model.damageStats, unitIds = new Map(entry.seatUnitIds ?? []);
         // ≥3 人局的结算要先过排行榜（需求 11-4）。席位与档案和 HUD 那颗「排行榜」按钮同源，
         // `finished=true` ⇒ 不再出现「比赛中…」态（结算时每方地块数都已是定局）。
@@ -358,32 +354,54 @@ export class ZCBattleRuntimeController extends ControllerBase {
             // MVP 卡片：本局**赢家阵营里输出最高的卡**（骨骼模型 + 卡名 + 输出/承伤占比），
             // 「查看完整队伍」仍用这份冻结的席位统计。
             mvp: this.settlementMvp(),
-            players: this.damagePlayers(),
+            units: this.damageUnits(), seats: this.damageSeats(),
         });
     }
     private async onOpenGuide(): Promise<void> {
         const entry = this.entry;
-        if (!entry) return;
+        if (!entry || !this.model || this.phase.isSettled || this.guideOpening) return;
+        this.guideOpening = true;
         try {
             const content = await entry.resources.loadGuide();
-            if (this.isDisposed) return;
+            if (this.isDisposed || this.phase.isSettled) return;
             await this.trackPopup('guide', this.services.popups.openGuide(content));
-        } catch (error) { if (!this.isDisposed) this.services.failed(error); }
+        } catch (error) {
+            if (!this.isDisposed) this.services.failed(error);
+        } finally {
+            this.guideOpening = false;
+        }
     }
+    /**
+     * 打开实时伤害统计面板。
+     *
+     * 7 重生命周期与防重入门闩：
+     * 1. 战局未就绪 / 选点中 / 已结算：直接忽略；
+     * 2. 加载在途中 (damageOpening) / 弹窗已展示 (isDamageOpen)：防连点与防叠窗；
+     * 3. 异步加载完成后：若控制器已销毁或已进入结算，立刻 close 迟到弹窗，防止幽灵弹窗残留；
+     * 4. 绑定成功后：立刻全量刷新一次数据（追平加载间隙产生的伤害）；
+     * 5. 局内由 onFrame 按 0.15s 节流持续推流 refresh。
+     */
     private async onOpenDamage(): Promise<void> {
         const isDamageOpen = Boolean(this.damagePopup && this.damagePopup.isOpen);
-        if (!this.model || !this.entry || this.phase.isSettled || this.damageOpening || isDamageOpen) return;
+        if (!this.model || !this.entry || this.phase.isSettled || this.damageOpening || isDamageOpen) {
+            return;
+        }
         this.damageOpening = true;
         try {
-            const popup = await this.services.popups.openDamage(this.damagePlayers());
+            const popup = await this.services.popups.openDamage(this.damageUnits(), this.damageSeats());
             if (!popup) return;
-            if (this.isDisposed || this.phase.isSettled) { popup.close(); return; }
+            if (this.isDisposed || this.phase.isSettled) {
+                popup.close();
+                return;
+            }
             if (!popup.isOpen) return;
-            this.damagePopup = popup;
-            this.popups.set('damage', popup);
+            this.bindDamagePopup(popup);
             this.refreshDamageStats();
-        } catch (error) { if (!this.isDisposed) this.services.failed(error); }
-        finally { this.damageOpening = false; }
+        } catch (error) {
+            if (!this.isDisposed) this.services.failed(error);
+        } finally {
+            this.damageOpening = false;
+        }
     }
     /**
      * 本局结算 MVP：赢家阵营里 `damageCards` 输出最高的那张卡。
@@ -411,22 +429,97 @@ export class ZCBattleRuntimeController extends ControllerBase {
         });
         return buildSettlementMvp(cards, model.winner);
     }
-    private damagePlayers(): readonly IZCDamageStatsPlayer[] {
-        const profiles = new Map(this.entry.seatProfiles), stats = this.model.damageStats;
-        return this.model.owners.map(owner => ({
-            owner, name: profiles.get(owner)?.name || RANK_FALLBACK_NAMES[owner],
-            headKey: profiles.get(owner)?.headKey ?? '',
-            damage: stats[owner].dealt, damageTaken: stats[owner].taken,
-        }));
+    /**
+     * 本局逐单位（卡）战斗数据：`damageCards` + 阵容里还没出伤害的卡 → 可展示行。
+     *
+     * `damageCards` 只合并同一张卡的多只兵，不同席位各占一行；头像取该席位实际卡池的 `headIcon`，
+     * 本地目录兜底（塔防波次怪 / 中立怪可能不在席位卡池里）。
+     *
+     * 11-24 需求：进局时 `damageCards` 是空的（要等第一波伤害才凭空长出来），统计面板一打开
+     * 我方一栏全空。所以这里把**各席位卡组里还没出现的卡按 0 补进来**，并带上 `deckOrder`
+     * —— 弹窗据此先按阵容序排、拿到数据后再按数值降序（口径在 `compareDamageStatsRows`）。
+     * 补进来的行 `unitId` 留空：它还没上场，没有服务端单元 id。
+     */
+    private damageUnits(): readonly IZCDamageStatsUnit[] {
+        const model = this.model, entry = this.entry;
+        if (!model || !entry) return [];
+        const config = entry.matchConfig;
+        const decks = new Map<ZCOwner, readonly ZCDeckCard[]>();
+        const deckOf = (owner: ZCOwner): readonly ZCDeckCard[] => {
+            let deck = decks.get(owner);
+            if (!deck) {
+                deck = config.ownerDecks?.[owner]
+                    ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
+                decks.set(owner, deck);
+            }
+            return deck;
+        };
+        const rows: IZCDamageStatsUnit[] = [];
+        //  同一张卡在 `damageCards` 里已经有一行（可能 0 输出，只要挨过打就有），
+        //  补阵容时按 `owner:cardId` 去重，别出现两行同一张卡。
+        const counted = new Set<string>();
+        for (const card of model.damageCards) {
+            const deck = deckOf(card.owner);
+            const deckCard = deck.find(entryCard => entryCard.id === card.cardId) ?? findCatalogCard(card.cardId);
+            const definition = model.effectiveDefinitionForUnit(card.owner, card.unitId);
+            counted.add(`${card.owner}:${card.cardId}`);
+            rows.push({
+                owner: card.owner, unitId: card.unitId, cardId: card.cardId,
+                name: definition.name || deckCard?.name || card.cardId,
+                iconKey: deckCard?.headIcon ?? '',
+                // 底框按品级换色；目录外的兵（波次怪 / 中立怪）查不到卡就按绿（普通）兜底。
+                rarity: deckCard?.rarity ?? 'green',
+                damage: card.damage, damageTaken: card.damageTaken,
+                deckOrder: deck.findIndex(entryCard => entryCard.id === card.cardId),
+            });
+        }
+        for (const owner of model.owners) {
+            deckOf(owner).forEach((deckCard, index) => {
+                if (counted.has(`${owner}:${deckCard.id}`)) return;
+                rows.push({
+                    owner, unitId: '', cardId: deckCard.id,
+                    name: deckCard.name || deckCard.id,
+                    iconKey: deckCard.headIcon ?? '',
+                    rarity: deckCard.rarity,
+                    damage: 0, damageTaken: 0, deckOrder: index,
+                });
+            });
+        }
+        return rows;
+    }
+    /**
+     * 统计弹窗的席位上下文（敌方头像栏 + 默认选中）。
+     *
+     * 与排行榜 / HUD 同一份 `entry.seatProfiles`；本局席位序以 `model.owners` 为准。
+     * 老入口（本地局没有 `battle.units`）拿不到档案也要给出席位 —— 头像退回默认图，
+     * 但「有几个敌方、默认选谁」仍然对。
+     */
+    private damageSeats(): IZCDamageStatsSeats {
+        const model = this.model, entry = this.entry;
+        if (!model || !entry) return { owners: [], profiles: new Map() };
+        return { owners: model.owners, profiles: new Map(entry.seatProfiles) };
+    }
+    private bindDamagePopup(popup: IZCDamageStatsPopup): void {
+        this.damagePopup = popup;
+        this.popups.set('damage', popup);
+    }
+    private detachDamagePopup(): void {
+        this.damagePopup = null;
+        this.popups.delete('damage');
+    }
+    private clearDamagePopup(): void {
+        if (!this.damagePopup) return;
+        const popup = this.damagePopup;
+        this.detachDamagePopup();
+        popup.close();
     }
     private refreshDamageStats(): void {
         if (!this.damagePopup) return;
         if (!this.damagePopup.isOpen) {
-            this.damagePopup = null;
-            this.popups.delete('damage');
+            this.detachDamagePopup();
             return;
         }
-        this.damagePopup.refresh(this.damagePlayers());
+        this.damagePopup.refresh(this.damageUnits());
     }
     private onOpenRank(): void {
         const model = this.model, entry = this.entry;
@@ -434,7 +527,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
         const profiles = new Map(entry.seatProfiles);
         void this.trackPopup('rank', this.services.popups.openRank(buildRankSeats(model.owners, owner => model.territoryCountOf(owner), profiles, model.snapshot.status !== 'playing'), profiles));
     }
-    private async trackPopup(kind: 'guide' | 'damage' | 'rank', pending: Promise<IZCBattlePopup | null>): Promise<void> {
+    private async trackPopup(kind: 'guide' | 'rank', pending: Promise<IZCBattlePopup | null>): Promise<void> {
         try {
             const popup = await pending;
             if (!popup) return;

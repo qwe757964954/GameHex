@@ -139,7 +139,7 @@ test('守城首领条延迟创建时使用本局预加载的 Prefab', () => {
     assert.deepEqual(barVisible, [true, false], '只有 BOSS 波点亮血条组');
 });
 
-test('view emits frames and destruction with itself as source, without owning business results', () => {
+test('view emits frames and destruction without passing view instance as source', () => {
     const events: Array<{ event: string; payload: unknown; source?: object }> = [];
     const ZCGame = loadGame(() => ({}), (event, payload, source) => events.push({ event, payload, source }));
     const game = new ZCGame();
@@ -148,7 +148,7 @@ test('view emits frames and destruction with itself as source, without owning bu
     game.update(0.1);
     game.onDestroy();
     assert.deepEqual(events.map(value => value.event), [ZC_BATTLE_EVENTS.FRAME, ZC_BATTLE_EVENTS.RUNTIME_DESTROYED]);
-    assert.equal(events[0].source, game);
+    assert.equal(events[0].source, undefined);
     assert.equal((events[0].payload as { dt: number }).dt, 0.1);
-    assert.equal(events[1].source, game);
+    assert.equal(events[1].source, undefined);
 });

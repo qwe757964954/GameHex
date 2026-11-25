@@ -170,12 +170,7 @@ export class LeagueDiscountPage extends PopupBase {
         return leagueRepository;
     }
 
-    /**
-     * 拉活动列表 + 详情 → 读一次砍价缓存 → 预取图 → 铺界面（见类头第 1 条）。
-     *
-     * `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-     * ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
-     */
+    /** 拉活动列表 + 详情 → 读一次砍价缓存 → 预取图 → 铺界面（见类头第 1 条）。 */
     private async reload(): Promise<void> {
         const revision = ++this.revision;
         const act = await this.repository.requestActList(LeagueACT_TYPE.DISCOUNT, this);
@@ -189,9 +184,6 @@ export class LeagueDiscountPage extends PopupBase {
 
         const rows = snapshot.rows.slice();
         const art = await this.loadArtFrames(snapshot);
-        if (!this.alive || revision !== this.revision) return;
-
-        await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
         this.snapshot = snapshot;
@@ -384,7 +376,7 @@ export class LeagueDiscountPage extends PopupBase {
     /** 发一次砍价（`buy=false`）或购买（`buy=true`）。 */
     private async sendBargain(buy: boolean): Promise<void> {
         if (!this.beginWrite()) return;
-        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'bargain', buy } } satisfies ILeagueRewardIntent, this);
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'bargain', buy } } satisfies ILeagueRewardIntent);
     }
 
     /** 「金币」—— 从 `roleProperty` 表取 `resId=10` 那行的 `name`，取不到退回空串。 */
@@ -420,8 +412,7 @@ export class LeagueDiscountPage extends PopupBase {
         return true;
     }
 
-    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion, source: object): Promise<void> => {
-        if (source !== this) return;
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
         try {
             await this.afterWrite(event.status);
         } finally {

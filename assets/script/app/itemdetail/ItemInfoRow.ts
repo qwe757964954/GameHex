@@ -5,7 +5,7 @@ const { ccclass, property } = _decorator;
 /**
  * 「道具信息」弹窗「获取途径」列表里的一行（414×57，蓝湖「道具信息」稿）。
  *
- * 与 `ItemDetailRow` 同角色（行底 + 文案 + 右箭头），差别是行底用 `iteminfo/brn_hqtj`、
+ * 与已下线的 `ItemDetailRow` 同角色（行底 + 文案 + 右箭头），差别是行底用 `iteminfo/brn_hqtj`、
  * 箭头是静态烘在 prefab 上的橙色单箭头；占位行（「暂无获取途径」）要把箭头藏掉，
  * 不可点的行不该长着可跳转的样子。
  *

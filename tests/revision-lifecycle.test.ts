@@ -16,7 +16,6 @@ function loadPageClass(): new () => any {
     class PopupBase {
         isPopupOpen = true;
         node: { isValid: boolean } | null = null;
-        nextPopupFrame(): Promise<boolean> { return Promise.resolve(true); }
     }
     const code = ts.transpileModule(readFileSync(PAGE_TS, 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },

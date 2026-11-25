@@ -99,7 +99,7 @@ export class CardSkillPage extends PopupBase {
         Toast.show(kind === 'offline' ? CARD_LINEUP_TEXTS.skillUpgradeOffline : CARD_LINEUP_TEXTS.skillUpgradeFailed);
     }
     private readonly onUpgradeClick = (): void => {
-        EventMgr.instance.emit(CardPopupEvent.SkillIntent, undefined, this);
+        EventMgr.instance.emit(CardPopupEvent.SkillIntent);
     };
 
     onDestroy(): void {

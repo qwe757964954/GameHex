@@ -70,8 +70,7 @@ export class LeagueJoinController extends ControllerBase {
         void this.reload();
     }
 
-    private readonly onIntent = (event: ILeagueJoinIntent, source: object): void => {
-        if (source !== this.options.owner) return;
+    private readonly onIntent = (event: ILeagueJoinIntent): void => {
         switch (event.kind) {
             case 'input':
                 this.searchKey = event.text;

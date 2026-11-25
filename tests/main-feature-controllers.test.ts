@@ -59,12 +59,12 @@ test('role default loading does not override a bag chosen while loading; cancell
         },
     });
     controller.start(); const loading = controller.refresh();
-    EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 2 }, owner);
+    EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 2 });
     gate.resolve(12); await loading;
     assert.deepEqual(shown, [2]); assert.deepEqual(rendered, [12]);
     const late = controller.refresh(); controller.cancel(); await late;
     assert.deepEqual(rendered, [12]);
-    controller.dispose(); EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 }, owner);
+    controller.dispose(); EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 });
     assert.deepEqual(shown, [2]);
 });
 
@@ -94,7 +94,7 @@ test('hero snapshot publishes before authority and only latest refresh survives;
     const snapshot = lineupData(false);
     const authority = lineupData(true);
     const observer = {};
-    EventMgr.instance.on(CardLineupUiEvent.Render, (event, source) => { if (source === owner) seen.push(event.data); }, observer);
+    EventMgr.instance.on(CardLineupUiEvent.Render, event => { seen.push(event.data); }, observer);
     const controller = new CardLineupController(createControllerContext(), {
         owner,
         autoLoadDecks: true,
@@ -132,7 +132,7 @@ test('hero upgrade immediately updates reopening level while authoritative refre
     });
     controller.start();
     EventMgr.instance.emit(CardLineupEvent.HeroUpgraded, { heroId: 101, level: 4 });
-    EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'upgrade', card: { id: '101' } }, owner);
+    EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'upgrade', card: { id: '101' } });
     assert.deepEqual(levels, [4]);
     controller.dispose();
 });
@@ -143,7 +143,7 @@ test('冷配置就绪后先发布完整快照；迟到快照不能覆盖权威�
         const snapshot = lineupData(false), authority = lineupData(true);
         const owner = {}, observer = {}, seen: CardLineupData[] = [];
         let ready = false;
-        EventMgr.instance.on(CardLineupUiEvent.Render, (event, source) => { if (source === owner) seen.push(event.data); }, observer);
+        EventMgr.instance.on(CardLineupUiEvent.Render, event => { seen.push(event.data); }, observer);
         const controller = new CardLineupController(createControllerContext(), {
             owner, autoLoadDecks: true, fallbackLevel: 1,
             repository: {

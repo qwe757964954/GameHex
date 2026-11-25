@@ -164,12 +164,7 @@ export class LeagueTaskPage extends PopupBase {
         return [this.box1, this.box2, this.box3];
     }
 
-    /**
-     * 读一次任务（缓存 + 表），再把本趟要用到的图全取好，最后铺行 / 铺宝箱。
-     *
-     * `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-     * ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
-     */
+    /** 读一次任务（缓存 + 表），再把本趟要用到的图全取好，最后铺行 / 铺宝箱。 */
     private async reload(): Promise<void> {
         const revision = ++this.revision;
         const snapshot = await this.repository.loadTask();
@@ -180,9 +175,6 @@ export class LeagueTaskPage extends PopupBase {
         if (!this.alive || revision !== this.revision) return;
 
         const boxFrames = await this.loadBoxFrames();
-        if (!this.alive || revision !== this.revision) return;
-
-        await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
         this.snapshot = snapshot;
@@ -308,7 +300,7 @@ export class LeagueTaskPage extends PopupBase {
     /** 点「领取」—— 老端 `btn_get.onClick` 只有一句 `RequestTaskReward(ref.resId)`。 */
     private async claim(view: ILeagueTaskRowView): Promise<void> {
         if (!this.beginWrite()) return;
-        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'task', resId: view.resId } } satisfies ILeagueRewardIntent, this);
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'task', resId: view.resId } } satisfies ILeagueRewardIntent);
     }
 
     /**
@@ -354,7 +346,7 @@ export class LeagueTaskPage extends PopupBase {
     private async onBoxClick(view: ILeagueTaskBoxView): Promise<void> {
         if (view.state === 'canReward') {
             if (!this.beginWrite()) return;
-            EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'progress', subType: LeagueUnionTaskType.leagueTask } } satisfies ILeagueRewardIntent, this);
+            EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'progress', subType: LeagueUnionTaskType.leagueTask } } satisfies ILeagueRewardIntent);
             return;
         }
         if (view.state === 'locked') this.showReward(view);
@@ -395,8 +387,7 @@ export class LeagueTaskPage extends PopupBase {
         return true;
     }
 
-    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion, source: object): Promise<void> => {
-        if (source !== this) return;
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
         try {
             await this.afterWrite(event.status);
         } finally {

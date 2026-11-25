@@ -196,9 +196,6 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         const art = await this.loadArtFrames(snapshot);
         if (!this.alive || revision !== this.revision) return;
 
-        await this.nextPopupFrame();
-        if (!this.alive || revision !== this.revision) return;
-
         this.snapshot = snapshot;
         this.art = art;
         this.present();
@@ -331,7 +328,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         if (!snapshot) return;
         if (!this.ensureOpen()) return;
         if (!this.beginWrite()) return;
-        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'sweep' } } satisfies ILeagueRewardIntent, this);
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'sweep' } } satisfies ILeagueRewardIntent);
     }
 
     /**
@@ -366,8 +363,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         return true;
     }
 
-    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion, source: object): Promise<void> => {
-        if (source !== this) return;
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
         try {
             await this.afterWrite(event.status);
         } finally {

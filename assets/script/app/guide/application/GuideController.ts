@@ -229,9 +229,9 @@ export class GuideController extends ControllerBase {
 
     private readonly onForceSkip = (): void => { this.skipAll(); };
 
-    private readonly onAdvance = (payload: IGuideAdvancePayload, source: object): void => {
+    private readonly onAdvance = (payload: IGuideAdvancePayload): void => {
         const view = this.options.view;
-        if (!view || source !== view.owner || payload.stepId !== this.currentStepId) return;
+        if (!view || payload.stepId !== this.currentStepId) return;
         this.notify('click');
     };
 

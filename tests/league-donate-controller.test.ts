@@ -78,8 +78,8 @@ function fixture() {
         requests: { removeCaller: caller => cancelled.push(caller) },
     });
     controller.start();
-    const emit = (kind: 'free' | 'coin', target: object = owner) =>
-        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind } as ILeagueDonateIntent, target);
+    const emit = (kind: 'free' | 'coin') =>
+        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind } as ILeagueDonateIntent);
     return {
         owner, model, controller, states, tips, rewards, cancelled, confirms,
         loadCalls, donateCalls, adPlays, emit,
@@ -126,17 +126,11 @@ test('首屏由 Controller 主动推（组合会话晚于 onOpen），快照回�
     } finally { h.controller.dispose(); }
 });
 
-test('意图按 owner 隔离：陌生页面的 free / coin 不播广告、不弹确认、不发包', async () => {
+test('捐献意图路由：coin 只弹确认不上锁，free 直接开始播广告', async () => {
     const h = fixture();
     try {
         h.loadCalls[0].resolve(snapshot()); await flush();
-        const stranger = {};
-        h.emit('free', stranger);
-        h.emit('coin', stranger);
-        assert.equal(h.adPlays.length, 0);
-        assert.equal(h.confirms.length, 0);
-        assert.equal(h.donateCalls.length, 0);
-        // 本 owner 的意图生效；coin 只弹确认不上锁，free 才开始播广告。
+        // coin 只弹确认不上锁，free 才开始播广告。
         h.emit('coin');
         assert.equal(h.confirms.length, 1);
         h.emit('free');

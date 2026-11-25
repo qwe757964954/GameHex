@@ -8,7 +8,7 @@
  *   组件_主界面_领取武将.xml —— 10级领取（`n5`）
  */
 
-/** 物品详情（`ui/ItemDetail/ItemDetail`）。 */
+/** 旧「道具详情」页面（`ui/ItemDetail/ItemDetail`，已下线）留下的静态文案。 */
 export const ITEM_DETAIL_TEXTS = {
     /** 品质标签前缀（FGUI `n9` 的 `品质:`）。 */
     qualityLabel: '品质:',

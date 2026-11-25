@@ -51270,7 +51270,7 @@ for (let i = 0; i < message.attrs.length; ++i)
 $root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.encode(message.attrs[i], writer.uint32(  74).fork(), q + 1).ldelim();
 if (message.modifyList != null && message.modifyList.length)
 for (let i = 0; i < message.modifyList.length; ++i)
-writer.uint32(  80).uint32(message.modifyList[i]);
+writer.uint32(  80).uint64(message.modifyList[i]);
 return writer;
 };
 CmdBattleUnitInfo.decode = function decode(reader, length, error, long) {
@@ -51334,9 +51334,9 @@ message.modifyList = [];
 if ((tag & 7) === 2) {
 let end2 = reader.uint32() + reader.pos;
 while (reader.pos < end2)
-message.modifyList.push(reader.uint32());
+message.modifyList.push(reader.uint64());
 } else
-message.modifyList.push(reader.uint32());
+message.modifyList.push(reader.uint64());
 break;
 }
 default:
@@ -51950,6 +51950,64 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpUnitHomeIndex";
 };
 return CmdPvpUnitHomeIndex;
 })();
+cmd.CmdPvpResourceMonsterAttrInfo = (function() {
+function CmdPvpResourceMonsterAttrInfo(properties) {
+this.monsterAttrs = [];
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdPvpResourceMonsterAttrInfo.prototype.monsterAttrs = $util.emptyArray;
+CmdPvpResourceMonsterAttrInfo.create = function create(properties) {
+return new CmdPvpResourceMonsterAttrInfo(properties);
+};
+CmdPvpResourceMonsterAttrInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+if (message.monsterAttrs != null && message.monsterAttrs.length)
+for (let i = 0; i < message.monsterAttrs.length; ++i)
+$root.com.xkhy.tafang.cmd.CmdPvpAttrInfo.encode(message.monsterAttrs[i], writer.uint32(  10).fork(), q + 1).ldelim();
+return writer;
+};
+CmdPvpResourceMonsterAttrInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+if (!(message.monsterAttrs && message.monsterAttrs.length))
+message.monsterAttrs = [];
+message.monsterAttrs.push($root.com.xkhy.tafang.cmd.CmdPvpAttrInfo.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+return message;
+};
+CmdPvpResourceMonsterAttrInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpResourceMonsterAttrInfo";
+};
+return CmdPvpResourceMonsterAttrInfo;
+})();
 cmd.CmdPvpResourcePointInfo = (function() {
 function CmdPvpResourcePointInfo(properties) {
 if (properties)
@@ -51961,6 +52019,7 @@ CmdPvpResourcePointInfo.prototype.row = 0;
 CmdPvpResourcePointInfo.prototype.column = 0;
 CmdPvpResourcePointInfo.prototype.groupId = 0;
 CmdPvpResourcePointInfo.prototype.resourceId = 0;
+CmdPvpResourcePointInfo.prototype.dataBytes = $util.newBuffer([]);
 CmdPvpResourcePointInfo.create = function create(properties) {
 return new CmdPvpResourcePointInfo(properties);
 };
@@ -51975,6 +52034,8 @@ writer.uint32(  8).uint32(message.row);
 writer.uint32(  16).uint32(message.column);
 writer.uint32(  24).uint32(message.groupId);
 writer.uint32(  32).uint32(message.resourceId);
+if (message.dataBytes != null && Object.hasOwnProperty.call(message, "dataBytes"))
+writer.uint32(  42).bytes(message.dataBytes);
 return writer;
 };
 CmdPvpResourcePointInfo.decode = function decode(reader, length, error, long) {
@@ -52004,6 +52065,10 @@ break;
 }
 case 4: {
 message.resourceId = reader.uint32();
+break;
+}
+case 5: {
+message.dataBytes = reader.bytes();
 break;
 }
 default:

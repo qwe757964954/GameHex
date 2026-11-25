@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { RoleController, type IRoleGemDialog } from '../assets/script/app/role/RoleController';
+import { RoleController, type IRoleGemDialog, type IRoleGrowthOperations } from '../assets/script/app/role/RoleController';
 import { RoleEvent, type IRoleIntent } from '../assets/script/app/role/RoleEvents';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { createControllerContext } from './helpers/controller-context';
 import { buildGemSockets, getGemChange } from '../assets/script/app/role/RoleTable';
-import type { IRoleGemEntry, RoleGemChange } from '../assets/script/app/role/RoleTypes';
+import type { IRoleEquipGrowth, IRoleGemEntry, IRoleGrowthProtocol, RoleGemChange } from '../assets/script/app/role/RoleTypes';
 
 const helmetId = 401111;
 const otherId = 401112;
@@ -46,7 +46,7 @@ test('gem requests retain the base equipment ID and only send order for replacem
 
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 
-function roleGemFixture() {
+function roleGemFixture(growth?: IRoleGrowthOperations) {
     const owner = {};
     const source = {};
     const dialogs: IRoleGemDialog[] = [];
@@ -69,6 +69,7 @@ function roleGemFixture() {
     } satisfies IRoleGemEntry;
     const controller = new RoleController(createControllerContext(), {
         owner,
+        growth,
         repository: { load: async () => ++loads },
         failed: error => errors.push(error),
         view: {
@@ -112,8 +113,8 @@ function roleGemFixture() {
     return {
         controller, dialogs, changes, renders, shown, errors, choices, writes, rewardsShown, socket,
         counts: () => ({ previewCalls, composeCalls, cancels }),
-        emit: (event: IRoleIntent, caller = event.kind === 'compose' ? owner : source) => {
-            EventMgr.instance.emit(RoleEvent.Intent, event, caller);
+        emit: (event: IRoleIntent) => {
+            EventMgr.instance.emit(RoleEvent.Intent, event);
         },
     };
 }
@@ -123,8 +124,6 @@ test('selecting a socket then confirming a bag gem sends one write and refreshes
     try {
         f.emit({ kind: 'socket', partId: 1, order: 4 });
         await tick();
-        f.emit({ kind: 'gem', id: gemId }, {});
-        assert.equal(f.dialogs.length, 0);
         f.emit({ kind: 'gem', id: gemId });
         f.emit({ kind: 'gem', id: gemId });
         assert.equal(f.dialogs.length, 1);
@@ -180,6 +179,122 @@ test('compose previews server materials, waits for confirmation, then shows rewa
         await tick();
         assert.equal(f.counts().composeCalls, 1);
         assert.equal(f.rewardsShown.length, 1);
+        assert.deepEqual(f.renders, [1]);
+        assert.deepEqual(f.errors, []);
+    } finally {
+        f.controller.dispose();
+    }
+});
+
+const equipment = {
+    id: '9007199254740997', baseId: helmetId, name: '头盔', level: 2, rank: 1,
+    worn: true, attack: 12, hpPercent: 10, effects: ['攻击 +3'], gemEffects: ['惊雷咒伤害+19%'],
+    washValues: [3], levelCost: ['金币 × 10'], qualityCost: '精铁 × 6', washCost: '精铁 × 10',
+} satisfies IRoleEquipGrowth;
+
+function growthFixture(overrides: Partial<IRoleGrowthOperations> = {}) {
+    const requests: Array<{ proto: keyof IRoleGrowthProtocol; payload: object }> = [];
+    const growth: IRoleGrowthOperations = {
+        equip: async (_id, part) => ({ ...equipment, worn: part !== null }),
+        washAttributes: async () => ['生命 +3'],
+        gem: async () => ({ lock: 2, refineCost: 6, pendingAttribute: '攻击 +20' }),
+        filters: async () => [],
+        plans: async () => [],
+        request: async (proto, payload, receive) => {
+            requests.push({ proto, payload });
+            if (proto === 'CmdEquipWashReqMsg' && receive) {
+                (receive as (response: CmdEquipWashRspMsg) => void)({ ret: true, equipId: helmetId, tlLibs: [2] });
+            }
+            return 'ok';
+        },
+        ...overrides,
+    };
+    return { ...roleGemFixture(growth), requests };
+}
+
+test('装备穿戴发送完整实例 ID，强化发送基础装备 ID', async () => {
+    const f = growthFixture();
+    try {
+        f.emit({ kind: 'equip', id: equipment.id });
+        await tick();
+        assert.equal(f.dialogs[0].sureText, '穿戴');
+        f.choices[0]('confirm');
+        await tick();
+        f.emit({ kind: 'equipPart', partId: 1 });
+        await tick();
+        f.choices[1]('confirm');
+        await tick();
+        assert.match(f.dialogs[2].content, /金币 × 10/);
+        f.choices[2]('confirm');
+        await tick();
+        assert.deepEqual(f.requests, [
+            { proto: 'CmdEquipReplaceReqMsg', payload: { uniqueId: equipment.id } },
+            { proto: 'CmdEquipUpLevelReqMsg', payload: { id: helmetId, type: 0 } },
+        ]);
+        assert.deepEqual(f.renders, [1, 2]);
+        assert.deepEqual(f.errors, []);
+    } finally {
+        f.controller.dispose();
+    }
+});
+
+test('装备洗练预览后，保留原属性发送 change=false', async () => {
+    const f = growthFixture();
+    try {
+        f.emit({ kind: 'equipPart', partId: 1 });
+        await tick();
+        f.choices[0]('alternate');
+        await tick();
+        f.choices[1]('alternate');
+        await tick();
+        assert.deepEqual(f.requests, []);
+        f.choices[2]('confirm');
+        await tick();
+        assert.match(f.dialogs[3].content, /生命 \+3/);
+        f.choices[3]('alternate');
+        await tick();
+        assert.deepEqual(f.requests, [
+            { proto: 'CmdEquipWashReqMsg', payload: { equipId: helmetId } },
+            { proto: 'CmdEquipWashConformReqMsg', payload: { equipId: helmetId, change: false } },
+        ]);
+        assert.deepEqual(f.errors, []);
+    } finally {
+        f.controller.dispose();
+    }
+});
+
+test('已镶嵌宝石解锁需要确认全部卸下，取消时不发送', async () => {
+    const f = growthFixture();
+    try {
+        f.emit({ kind: 'gem', id: gemId });
+        await tick();
+        f.choices[0]('confirm');
+        await tick();
+        f.choices[1]('confirm');
+        await tick();
+        assert.match(f.dialogs[2].content, /所有装备方案卸下/);
+        f.choices[2](null);
+        await tick();
+        assert.deepEqual(f.requests, []);
+        assert.deepEqual(f.errors, []);
+    } finally {
+        f.controller.dispose();
+    }
+});
+
+test('宝石有待处理洗练结果时，确认新属性只发保存协议', async () => {
+    const f = growthFixture();
+    try {
+        f.emit({ kind: 'gem', id: gemId });
+        await tick();
+        f.choices[0]('confirm');
+        await tick();
+        f.choices[1]('alternate');
+        await tick();
+        assert.match(f.dialogs[2].content, /新属性：攻击 \+20/);
+        f.choices[2]('confirm');
+        await tick();
+        assert.deepEqual(f.requests, [{ proto: 'CmdGemRefineSaveReqMsg', payload: { id: gemId, type: 2 } }]);
         assert.deepEqual(f.renders, [1]);
         assert.deepEqual(f.errors, []);
     } finally {

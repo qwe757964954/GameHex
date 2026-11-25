@@ -5,7 +5,7 @@ import type { IZCChapterBattleOutcome } from '../../battle/BattleResultService';
 import type { IRankSeat, RankSeatProfiles } from '../model/ZCRankBoard';
 import type { IZCSettlementMvp } from '../model/ZCSettlementMvp';
 import { ZCGameUiEvent } from '../view/ZCGameHudEvents';
-import type { IZCDamageStatsPlayer, IZCDamageStatsPopup } from './ZCBattleRuntimeContract';
+import type { IZCDamageStatsPopup, IZCDamageStatsSeats, IZCDamageStatsUnit } from './ZCBattleRuntimeContract';
 import type { IZCSettlementOptions, IZCSettlementReward } from '../ui/ZCSettlementPage';
 
 export interface IZCBattlePopup {
@@ -40,13 +40,20 @@ export interface IZCBattleSettlementRequest {
     */
     readonly rank: IZCBattleSettlementRank | null;
     /**
-     * 本局各席位统计（`model.damageStats` + 席位档案）。
+     * 本局逐单位（卡）战斗统计，用于「查看完整队伍」的战斗统计弹窗。
      *
-     * MVP 卡片与「查看完整队伍」共用这一份：结算后模型不再推进，运行期在 `start` 时冻结转交，
-     * 结算期不再回头读模型（`phase.isSettled` 之后运行期的入口一律 return）。
-     * 缺省 ⇒ 不出 MVP 卡（老调用方 / 单席局）。
+     * 结算后模型不再推进，运行期在 `start` 时冻结转交，结算期不再回头读模型
+     * （`phase.isSettled` 之后运行期的入口一律 return）。
+     * 缺省 ⇒ 不出来源数据（老调用方 / 空统计）。
     */
-    readonly players?: readonly IZCDamageStatsPlayer[];
+    readonly units?: readonly IZCDamageStatsUnit[];
+    /**
+     * 席位上下文（敌方头像栏 + 默认选中），与 {@link units} 一起冻结在 `start`。
+     *
+     * 结算期不再回读模型，所以头像 / 名字必须在 `start` 时随请求一起交过来；缺省 ⇒
+     * 「查看完整队伍」的统计面板不画头像栏、敌方列按老口径合并。
+     */
+    readonly seats?: IZCDamageStatsSeats;
     /**
      * 本局 MVP 卡片（赢家阵营输出最高的卡：骨骼模型 + 卡名 + 等级 + 输出/承伤占比）。
      *
@@ -75,7 +82,7 @@ export interface IZCBattleSettlementServices {
          * 与运行期的 `popups.openDamage` 同一个实现（`BATTLE_POPUPS`），只是入口换成结算控制器 ——
          * 结算期运行入口已被 `phase.isSettled` 拦掉。
         */
-        openDamage(players: readonly IZCDamageStatsPlayer[]): Promise<IZCDamageStatsPopup | null>;
+        openDamage(units: readonly IZCDamageStatsUnit[], seats?: IZCDamageStatsSeats): Promise<IZCDamageStatsPopup | null>;
     };
     readonly flow: {
         watchSwitch(callback: (entered: boolean) => void): () => void;
@@ -95,8 +102,10 @@ export class ZCBattleSettlementController extends ControllerBase {
     private rankPopup: IZCBattlePopup | null = null;
     /** 「查看完整队伍」打开的统计弹窗（结算页后面，关掉结算页时一并收掉）。*/
     private teamPopup: IZCDamageStatsPopup | null = null;
-    /** 本局席位统计的冻结副本（请求在 `start` 时给一次，之后不回读模型）。*/
-    private players: readonly IZCDamageStatsPlayer[] = [];
+    /** 本局逐单位统计的冻结副本（请求在 `start` 时给一次，之后不回读模型）。*/
+    private units: readonly IZCDamageStatsUnit[] = [];
+    /** 席位上下文（敌方头像栏），与 {@link units} 同一时点冻结。*/
+    private seats: IZCDamageStatsSeats | undefined;
     /**
      * 关停信号：`present` 里在等排行榜关掉，玩家可能直接退局 ⇒ dispose 时必须让这个 await 落定，
      * 否则整条结算流程悬着，谁也不会再推进（表现为「撤退后再也弹不出结算」）。
@@ -113,7 +122,8 @@ export class ZCBattleSettlementController extends ControllerBase {
     start(request: IZCBattleSettlementRequest): void {
         if (this.started || this.isDisposed) return;
         this.started = true;
-        this.players = request.players ?? [];
+        this.units = request.units ?? [];
+        this.seats = request.seats;
         // 等待必须早于上报，避免同步广播丢失。
         const result = request.battleType === null ? null : this.services.results.waitResult(request.battleType, this);
         void this.services.results.finish(request, this).catch(error => { if (!this.isDisposed) this.services.failed(error); });
@@ -192,14 +202,14 @@ export class ZCBattleSettlementController extends ControllerBase {
         EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, undefined, this.host.owner);
     }
     /**
-     * 「查看完整队伍」：用本局冻结的席位统计弹伤害面板。
+     * 「查看完整队伍」：用本局冻结的单位统计数据弹战斗统计面板。
      *
      * 页面只在 `options` 就绪后才存在，所以「还没结算就收到事件」不可能点得出来；
      * 连点两下用 `teamPopup.isOpen` 挡住（结算页不关，弹窗会叠在它上面）。
     */
     private onViewTeam(): void {
         if (!this.options || this.teamPopup?.isOpen) return;
-        void this.services.popup.openDamage(this.players)
+        void this.services.popup.openDamage(this.units, this.seats)
             .then(popup => {
                 if (!popup) return;
                 if (this.isDisposed) { popup.close(); return; }
@@ -219,7 +229,7 @@ export class ZCBattleSettlementController extends ControllerBase {
         this.rankPopup = null;
         this.teamPopup = null;
         this.options = null;
-        this.players = [];
+        this.units = [];
         // 先解除「等排行榜关闭」的等待，再关弹窗：两条路都要落定，缺一个 present 就悬着。
         this.resolveDisposed();
         try { stopSwitch?.(); }

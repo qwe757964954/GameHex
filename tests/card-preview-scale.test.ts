@@ -117,13 +117,22 @@ function loadPreviewClass(): {
         instantiate: (prefab: any) => prefab.make(FakeNode),
     };
 
+    const compilerOptions = {
+        module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
+    };
+    const glowExports: Record<string, unknown> = {};
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/card/CardGlowSync.ts', 'utf8'), {
+        compilerOptions,
+    }).outputText, { exports: glowExports, require: () => cc });
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/card/CardUnitPreview.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+        compilerOptions,
     }).outputText, {
         exports: moduleExports,
-        require: (id: string) => id === 'cc'
-            ? cc
-            : { cardPreviewFactor },
+        require: (id: string) => {
+            if (id === 'cc') return cc;
+            if (id === './CardGlowSync') return glowExports;
+            return { cardPreviewFactor };
+        },
         console: { log() {}, warn() {} },
     });
     return {

@@ -226,9 +226,6 @@ export class LeagueNorthRankPage extends PopupBase {
         const art = await this.loadArtFrames(snapshot);
         if (!this.alive || revision !== this.revision || tab !== this.tab) return;
 
-        await this.nextPopupFrame();
-        if (!this.alive || revision !== this.revision || tab !== this.tab) return;
-
         this.art = art;
 
         // `!ok` ⇒ 保留上一趟的列表（见类头「有意增补」），只提示
@@ -273,7 +270,7 @@ export class LeagueNorthRankPage extends PopupBase {
         hero.render(this.myRow, this.tab, this.art, false);
     }
 
-    /** 刷新虚拟列表（首次已在 `onOpen` 里等过一帧，槽位已建好）。 */
+    /** 刷新虚拟列表（`VirtualScrollView` 会在 `start()` 就绪后自动铺表）。 */
     private refreshList(): void {
         this.rankList.refreshList(this.rows);
         this.rankList.scrollToTop(false);

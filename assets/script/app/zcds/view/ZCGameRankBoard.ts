@@ -73,10 +73,10 @@ export class ZCGameRankBoard extends PopupBase {
         this.frames = content.frames;
         if (content.bg) this.setSprite('Panel/Bg', content.bg);
         if (content.title) this.setSprite('Panel/Title', content.title);
+    }
 
-        if (!await this.nextPopupFrame()) return;
-        if (!this.isValid || scope.disposed) return;
-        this.list.setTotalCount(seats.length);
+    protected onViewReady(): void {
+        this.list.setTotalCount(this.seats.length);
         this.list.scrollToTop(false);
     }
 

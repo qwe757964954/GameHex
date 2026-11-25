@@ -19,7 +19,7 @@ function fixture() {
     const calls: { method: string; args: unknown[]; resolve: (result: ILeagueRewardResult) => void; reject: (error: Error) => void }[] = [];
     const shown: CmdGoods[][] = [];
     const cancelled: object[] = [];
-    const completions: Array<ILeagueRewardCompletion & { source: object }> = [];
+    const completions: ILeagueRewardCompletion[] = [];
     const repository = Object.fromEntries(['buyStoreGoods', 'requestBargain', 'requestTaskReward', 'requestTaskProgressReward', 'requestSweep']
         .map(method => [method, (...args: unknown[]) => new Promise<ILeagueRewardResult>((resolve, reject) => calls.push({ method, args, resolve, reject }))])) as unknown as ILeagueRepository;
     const controller = new LeagueRewardController(createControllerContext(), {
@@ -27,15 +27,15 @@ function fixture() {
         requests: { removeCaller: caller => cancelled.push(caller) },
     });
     const observer = {};
-    EventMgr.instance.on(LeagueRewardEvent.Completed, (event: ILeagueRewardCompletion, source: object) => completions.push({ ...event, source }), observer);
+    EventMgr.instance.on(LeagueRewardEvent.Completed, (event: ILeagueRewardCompletion) => completions.push({ ...event }), observer);
     controller.start();
     return { owner, controller, calls, shown, cancelled, completions,
-        emit: (action: LeagueRewardAction, target: object = owner) => EventMgr.instance.emit(LeagueRewardEvent.Intent, { action }, target),
+        emit: (action: LeagueRewardAction) => EventMgr.instance.emit(LeagueRewardEvent.Intent, { action }),
         dispose: () => { controller.dispose(); EventMgr.instance.offTarget(observer); },
     };
 }
 
-test('奖励意图按会话归属发包，保留每种请求参数，非空成功奖励只展示一次', async () => {
+test('奖励意图按会话发包，保留每种请求参数，非空成功奖励只展示一次', async () => {
     const h = fixture();
     try {
         const actions: LeagueRewardAction[] = [
@@ -44,8 +44,6 @@ test('奖励意图按会话归属发包，保留每种请求参数，非空成�
         ];
         const methods = ['buyStoreGoods', 'requestBargain', 'requestBargain', 'requestTaskReward', 'requestTaskProgressReward', 'requestSweep'];
         for (const [index, action] of actions.entries()) {
-            h.emit(action, {});
-            assert.equal(h.calls.length, index);
             h.emit(action);
             h.emit(action);
             assert.equal(h.calls.length, index + 1, '在飞时不重复发包');
@@ -57,7 +55,6 @@ test('奖励意图按会话归属发包，保留每种请求参数，非空成�
             call.resolve({ status: 'ok', rewards });
             await flush();
             assert.equal(h.completions.length, index + 1);
-            assert.equal(h.completions[index].source, h.owner);
             assert.equal(h.completions[index].status, 'ok');
         }
         assert.equal(h.shown.length, 5, '砍价空奖励不弹窗');

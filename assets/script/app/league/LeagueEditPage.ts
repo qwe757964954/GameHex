@@ -41,11 +41,11 @@ export class LeagueEditPage extends PopupBase {
     }
 
     onSureClick(): void {
-        EventMgr.instance.emit(LeagueEditEvent.Intent, { kind: 'submit', content: this.inputField.string }, this);
+        EventMgr.instance.emit(LeagueEditEvent.Intent, { kind: 'submit', content: this.inputField.string });
     }
 
     private onContentChanged(): void {
-        EventMgr.instance.emit(LeagueEditEvent.Intent, { kind: 'change', content: this.inputField.string }, this);
+        EventMgr.instance.emit(LeagueEditEvent.Intent, { kind: 'change', content: this.inputField.string });
     }
 
     onCancelClick(): void { this.closeByButton(); }

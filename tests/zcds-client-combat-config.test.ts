@@ -442,6 +442,29 @@ test('自选主城配置可在显式预备模式下完成客户端构筑', () =>
     assert.equal(Object.isFrozen(result.config), true);
 });
 
+test('阵营宝石 ID 查表后独立叠加，缺失与未适配词条不丢英雄构筑', (t) => {
+    const warnings = t.mock.method(console, 'warn', () => {});
+    const source = prepare(4);
+    const start = battle([68001, 68002], [68001]);
+    const plain = compileZCMatchRuntime(buildZCClientCombatConfig(source, start, 'self').config);
+    const remote = { ...start, units: start.units.map((unit) => unit.roleId === 'self'
+        ? { ...unit, modifyIds: [36800122, 99999999, 36800460, 36800122] }
+        : unit) };
+    const result = buildZCClientCombatConfig(source, remote, 'self');
+    const runtime = compileZCMatchRuntime(result.config);
+
+    assert.deepEqual(result.skipped, []);
+    for (const unitId of ['68001', '68002']) {
+        assert.equal(runtime.effectiveDefinitions.player.get(unitId)?.attack,
+            Number(plain.effectiveDefinitions.player.get(unitId)?.attack) + 20);
+    }
+    assert.equal(runtime.effectiveDefinitions.enemy.get('68001')?.attack,
+        plain.effectiveDefinitions.enemy.get('68001')?.attack);
+    const warningsText = JSON.stringify(warnings.mock.calls.map((call) => call.arguments));
+    assert.match(warningsText, /99999999/);
+    assert.match(warningsText, /36800460/);
+});
+
 test('服务端英雄属性覆盖本地成长后参与战斗，建筑血量与阵营隔离且构筑幂等', () => {
     const source = prepare(4);
     const original = JSON.stringify(source);
@@ -450,6 +473,7 @@ test('服务端英雄属性覆盖本地成长后参与战斗，建筑血量与�
     const remote = { ...start, units: start.units.map((unit) => ({
         ...unit,
         heroes: [{ heroId: 68001, level: 10 }],
+        modifyIds: unit.roleId === 'self' ? [36800122] : [],
         heroAttrs: parseBattleHeroAttrs(unit.roleId === 'self' ? [
             { heroId: 68001, attrs: [
                 { attrId: 'attack', value: '123' }, { attrId: 'maxHp', value: '789' },

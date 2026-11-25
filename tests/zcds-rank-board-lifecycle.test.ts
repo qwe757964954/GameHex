@@ -46,7 +46,7 @@ function fixture() {
             writes.push(path);
             return { getComponent: () => ({ spriteFrame: null }) };
         } };
-        nextPopupFrame() { return Promise.resolve(true); }
+        nextPopupFrame() { return Promise.resolve(!this.resourceScope.disposed && this.isValid); }
         onDestroy() { this.resourceScope.dispose(); this.isValid = false; this.node.isValid = false; }
     }
     const HeadArt = {

@@ -101,14 +101,10 @@ export class LeagueCreatePage extends PopupBase {
         this.nameInput.string = '';
         this.applyStaticTexts();
 
-        await this.loadBannerFrames();
-        if (!this.alive) return;
-
         const revision = ++this.revision;
-        // 列表槽位在 `VirtualScrollView.start()` 里建，而 `onOpen` 早于它
-        // ⇒ 必须让出一帧再 `refreshList`，否则落在「槽位还没建」的空档（表现为列表空白）。
-        await this.nextPopupFrame();
+        await this.loadBannerFrames();
         if (!this.alive || revision !== this.revision) return;
+
         this.present();
     }
 
@@ -125,18 +121,18 @@ export class LeagueCreatePage extends PopupBase {
     private emitName(): void {
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
             kind: 'name', name: this.nameInput.string ?? '',
-        }, this);
+        });
     }
 
     private emitBanner(index: number): void {
         if (this.bannerIndices[index] === undefined) return;
-        EventMgr.instance.emit(LeagueCreateEvent.Intent, { kind: 'banner', index }, this);
+        EventMgr.instance.emit(LeagueCreateEvent.Intent, { kind: 'banner', index });
     }
 
     private emitQuickJoin(): void {
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
             kind: 'quickJoin', quickJoin: !this.quickJoinCheck.active,
-        }, this);
+        });
     }
 
     private emitSubmit(): void {
@@ -144,7 +140,7 @@ export class LeagueCreatePage extends PopupBase {
             kind: 'submit',
             name: this.nameInput.string ?? '',
             quickJoin: this.quickJoinSelected,
-        }, this);
+        });
     }
 
     // 渲染（控制器推来的状态一律绝对赋值）

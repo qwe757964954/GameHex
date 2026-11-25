@@ -10357,7 +10357,7 @@
                         },
                         "modifyList": {
                           "rule": "repeated",
-                          "type": "uint32",
+                          "type": "uint64",
                           "id": 10
                         }
                       }
@@ -10506,6 +10506,15 @@
                         }
                       }
                     },
+                    "CmdPvpResourceMonsterAttrInfo": {
+                      "fields": {
+                        "monsterAttrs": {
+                          "rule": "repeated",
+                          "type": "CmdPvpAttrInfo",
+                          "id": 1
+                        }
+                      }
+                    },
                     "CmdPvpResourcePointInfo": {
                       "fields": {
                         "row": {
@@ -10527,6 +10536,10 @@
                           "rule": "required",
                           "type": "uint32",
                           "id": 4
+                        },
+                        "dataBytes": {
+                          "type": "bytes",
+                          "id": 5
                         }
                       }
                     },

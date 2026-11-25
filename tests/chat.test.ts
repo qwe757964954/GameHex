@@ -1222,7 +1222,7 @@ test('D8 页面必须有 `revision` + `alive` 守卫（老页面在途回来的�
     assert.ok(PAGE_CODE.includes('this.revision += 1'), '必须有 revision 守卫');
     assert.ok(PAGE_CODE.includes('private get alive'), '必须有 alive 守卫');
     assert.ok(/revision !== this\.revision/.test(PAGE_CODE), '在途结果回来要核对 revision');
-    assert.ok(PAGE_CODE.includes('nextPopupFrame()'), 'VirtualScrollView 的 start 更晚 ⇒ 铺列表前要等一帧');
+    assert.ok(!PAGE_CODE.includes('nextPopupFrame()'), 'VirtualScrollView 已支持 start 前入队，不再手动等 nextPopupFrame');
 });
 
 test('D9 ⚠️ 美术走 `ChatArt` 唯一入口（裸图名 / 手拼路径漏 `/spriteFrame` 都是**静默留白**）', () => {

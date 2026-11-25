@@ -103,7 +103,6 @@ export class MailDetailPage extends PopupBase {
 
     protected async onOpen(userData?: any): Promise<void> {
         this.mailId = toIdString(userData?.id);
-        await this.nextPopupFrame();
         if (!this.mailId) {
             console.warn('[Mail] 详情弹窗没拿到邮件 id');
             this.close();
@@ -131,7 +130,7 @@ export class MailDetailPage extends PopupBase {
         await this.loadRewardArt(detail, snapshot.items, snapshot.resources);
         if (!this.isValid) return;
 
-        await this.present(detail);
+        this.present(detail);
     }
 
     /**
@@ -162,7 +161,7 @@ export class MailDetailPage extends PopupBase {
         this.rewardFrames = out;
     }
 
-    private async present(detail: IMailDetail): Promise<void> {
+    private present(detail: IMailDetail): void {
         this.titleLabel.string = detail.title;
         this.contentLabel.string = plainMailContent(detail.content);
 
@@ -170,10 +169,7 @@ export class MailDetailPage extends PopupBase {
         const hasReward = count > 0;
         this.applyContentHeight(hasReward);
 
-        // `RewardBox` 出厂 `active = false`（原稿是 `controller 奖励领取` 的一页），
-        // 所以里面的虚拟列表 `onLoad/start` 要等**第一次被激活**才跑；
-        // 而 `VirtualScrollView` 的视口尺寸与槽位数组全在 `start()` 里建 ⇒ 必须先开箱、
-        // 等一帧、再 `refreshList()`，否则列表一片空白（**不报错**）。同 `MailPage` 铁律 ②。
+        // `RewardBox` 出厂 `active = false`，激活后 `VirtualScrollView` 会在首次 `start()` 时自动消耗待铺条数。
         this.rewardBox.active = hasReward;
         if (!hasReward) return;
 
@@ -183,8 +179,6 @@ export class MailDetailPage extends PopupBase {
             console.warn(`[Mail] 奖励 ${count} 项，超过 FGUI 预摆的 ${MAIL_REWARD_SLOT_COUNT} 格（横向可拖，不截断）`);
         }
 
-        await this.nextPopupFrame();
-        if (!this.isValid) return;
         this.rewardList.refreshList(count);
 
         this.takeLabel.string = detailButtonText(detail.take, MAIL_BTN_TAKE, MAIL_BTN_DELETE);

@@ -25,6 +25,14 @@ export const ZC_SETTLEMENT_STYLE = {
         artHeightRatio: 1.09,
         /** 量不到包围盒时的 canvas 兜底；正常路径用 idle 首帧包围盒。*/
         canvasFallbackRatio: 0.97,
+        /**
+         * 立绘头顶在 `MvpBlock` 坐标系里的上限（设计稿角色高 231、脚点 -140 ⇒ 头顶 91）：
+         * 超出就等比收敛，别让头盔 / 举刀顶进上方「战斗胜利」飘带。
+         *
+         * 它只约束**立绘**。徽标 / Lv / 名字的坐标一律归 prefab，代码不写（见
+         * `ZCSettlementMvpActor` 类头注：曾按头顶自适应挪徽标，prefab 改版后实机就对不上）。
+         */
+        maxHeadTopInBlock: 91,
     } as const,
 
     /** 文字颜色（prefab 里是 cc.Color，这里是设计稿十六进制）。*/
@@ -54,24 +62,6 @@ export const ZC_SETTLEMENT_STYLE = {
         itemSize: 96,
     } as const,
 
-    /** MVP 徽标与立绘的自适应布局 token。*/
-    mvpBadge: {
-        /** 徽标默认中心 X（蓝湖设计稿基准值，Lv.名字 左侧）。*/
-        defaultX: -46.5,
-        /** 徽标默认中心 Y（蓝湖设计稿基准值）。*/
-        defaultY: 132.5,
-        /** 徽标与角色可见头顶之间的安全呼吸间距（设计稿懂王头顶 91，91 + 21.5 + 20 = 132.5）。*/
-        gapY: 21.5,
-        /** 徽标高 40，半高 20。*/
-        halfHeight: 20,
-        /** 徽标中心最低 Y（避免偏矮角色徽标下沉过多）。*/
-        minCenterY: 125,
-        /** 徽标中心最高 Y（严禁超出蓝湖设计稿 132.5，确保与上方战斗胜利飘带留出安全留白）。*/
-        maxCenterY: 132.5,
-        /** 角色头顶/最高点在 MvpBlock 坐标系中的最大允许高度（对齐设计稿角色高 231，-140 + 231 = 91）。*/
-        maxHeadTopInBlock: 91,
-    } as const,
-
     /** 段位行 / 奖励区之间的垂直节奏（运行时只在「段位行收起」时用来补位）。*/
     layout: {
         /** 段位行与奖励框之间的设计间距。*/
@@ -90,19 +80,8 @@ export type ZCSettlementStyle = typeof ZC_SETTLEMENT_STYLE;
 export function calcMvpEffectiveArtHeight(
     desiredHeight: number,
     footInBlock: number,
-    maxHeadTopInBlock: number = ZC_SETTLEMENT_STYLE.mvpBadge.maxHeadTopInBlock,
+    maxHeadTopInBlock: number = ZC_SETTLEMENT_STYLE.mvpArt.maxHeadTopInBlock,
 ): number {
     const maxAllowed = Math.max(0, maxHeadTopInBlock - footInBlock);
     return Math.min(desiredHeight, maxAllowed);
-}
-
-/**
- * 根据角色在 MvpBlock 坐标系中的真实头顶高度，计算 MVP 徽标自适应落位 Y。
- * 无模型 / 坐标无效时返回蓝湖设计稿默认值 132.5。
- */
-export function calcMvpAdaptiveBadgeY(headTopInBlock: number): number {
-    const token = ZC_SETTLEMENT_STYLE.mvpBadge;
-    if (!Number.isFinite(headTopInBlock)) return token.defaultY;
-    const desired = headTopInBlock + token.gapY + token.halfHeight;
-    return Math.max(token.minCenterY, Math.min(token.maxCenterY, desired));
 }

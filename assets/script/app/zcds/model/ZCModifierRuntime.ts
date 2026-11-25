@@ -358,20 +358,27 @@ function compileTypedModifiers(
     targetUnitId: string,
     sourceKind: ZCModifierSourceKind,
     catalogs: ZCModifierCatalogs,
-    textOnly = false,
+    mode: 'strict' | 'text' | 'campGem' = 'strict',
 ): { modifiers: ZCTypedModifier[]; textModifiers: ZCTextAttackModifier[]; unsupported: string[] } {
     const result: ZCTypedModifier[] = [];
     const textModifiers: ZCTextAttackModifier[] = [];
     const unsupported = new Set<string>();
+    const campGem = mode === 'campGem';
     for (const modifierId of modifierIds) {
         const record = catalogs.modifiers.get(modifierId);
         if (!record) throw new Error(`[ZCModifierRuntime] 找不到修改器 ${modifierId}`);
+        const reportUnsupported = (key: string) => {
+            unsupported.add(campGem ? `${modifierId}:${key}` : key);
+        };
         for (const operation of record.modify) {
-            if (operation.type !== '修改属性' && operation.type !== '替换属性') continue;
+            if (operation.type !== '修改属性' && operation.type !== '替换属性') {
+                if (campGem) reportUnsupported(operation.type);
+                continue;
+            }
             if (!operation.data || typeof operation.data !== 'object' || Array.isArray(operation.data)) continue;
             for (const [legacyKey, rawValue] of Object.entries(operation.data as Record<string, unknown>)) {
                 const textMapping = catalogs.adapters.textAttrMap.get(legacyKey);
-                if (textMapping?.enabled) {
+                if (!campGem && textMapping?.enabled) {
                     const override = findZCTextModifierOverride(
                         catalogs.adapters, modifierId, legacyKey, targetUnitId, sourceKind,
                     );
@@ -387,10 +394,10 @@ function compileTypedModifiers(
                     });
                     continue;
                 }
-                if (textOnly) continue;
+                if (mode === 'text') continue;
                 const mapping = catalogs.adapters.attrMap.get(legacyKey);
-                if (!mapping || !mapping.enabled) {
-                    unsupported.add(legacyKey);
+                if (!mapping?.enabled || (campGem && mapping.domain !== 'unit')) {
+                    reportUnsupported(legacyKey);
                     continue;
                 }
                 let normalizedRawValue: number;
@@ -400,11 +407,11 @@ function compileTypedModifiers(
                     const matched = /([135])星$/.exec(rawValue);
                     normalizedRawValue = matched?.[1] === '5' ? 50 : matched?.[1] === '3' ? 40 : matched?.[1] === '1' ? 30 : NaN;
                     if (!Number.isFinite(normalizedRawValue)) {
-                        unsupported.add(legacyKey);
+                        reportUnsupported(legacyKey);
                         continue;
                     }
                 } else {
-                    unsupported.add(legacyKey);
+                    reportUnsupported(legacyKey);
                     continue;
                 }
                 if (mapping.domain === 'skill' && !catalogs.adapters.skillBindings.some((binding) => (
@@ -413,6 +420,10 @@ function compileTypedModifiers(
                     throw new Error(`[ZCModifierRuntime] 技能属性缺少技能映射：${targetUnitId}:${legacyKey}`);
                 }
                 const override = findZCModifierOverride(catalogs.adapters, modifierId, legacyKey, targetUnitId, sourceKind);
+                if (campGem && override?.enabled && override.domain !== 'unit') {
+                    reportUnsupported(legacyKey);
+                    continue;
+                }
                 let value = override?.enabled ? override.value : normalizedRawValue * mapping.scale;
                 const min = mapping.min;
                 const max = mapping.max;
@@ -508,6 +519,48 @@ function compileIdsLoadout(
         unsupportedAttributes: typed.unsupported,
         configHash: catalogs.adapters.configHash,
     };
+}
+
+/** 阵营宝石仅消费已启用的单位属性。其余词条留待明确目标和运行时语义。 */
+export function compileZCCampGemLoadouts(
+    modifierIds: readonly number[],
+    targetUnitIds: ReadonlySet<string>,
+    units: readonly ZCUnitDefinition[],
+    catalogs: ZCModifierCatalogs,
+): readonly ZCCompiledModifierLoadout[] {
+    const missing = new Set<number>();
+    const knownIds = modifierIds.filter((id) => {
+        if (catalogs.modifiers.has(id)) return true;
+        missing.add(id);
+        return false;
+    });
+    const unsupported = new Set<string>();
+    const loadouts: ZCCompiledModifierLoadout[] = [];
+    for (const unit of units) {
+        if (!targetUnitIds.has(unit.unitId)) continue;
+        const typed = compileTypedModifiers(knownIds, unit.unitId, 'gem', catalogs, 'campGem');
+        for (const key of typed.unsupported) unsupported.add(key);
+        if (!typed.modifiers.length) continue;
+        const appliedIds = new Set(typed.modifiers.map((item) => item.sourceId));
+        loadouts.push({
+            sourceKey: `gem:${unit.unitId}`,
+            sourceKind: 'gem',
+            targetUnitId: unit.unitId,
+            appliedModifierIds: knownIds.filter((id) => appliedIds.has(id)),
+            rawAttributes: {},
+            statPatch: typedToLegacyPatch(typed.modifiers),
+            typedModifiers: typed.modifiers,
+            skillPlans: [],
+            breakdown: applyZCTypedUnitModifiers(unit, typed.modifiers).breakdown,
+            effects: [],
+            unsupportedAttributes: typed.unsupported,
+            configHash: catalogs.adapters.configHash,
+        });
+    }
+    if (missing.size || unsupported.size) {
+        console.warn('[ZCModifierRuntime] 阵营宝石存在缺失 ID 或未适配词条', [...missing], [...unsupported]);
+    }
+    return loadouts;
 }
 
 /** 把客户端的武将/星级选择编译成本局冻结配置。*/
@@ -740,7 +793,7 @@ function compileSkillPlanLoadout(
         return [...main, ...mix];
     });
     const textModifiers = legacyModifierIds.length
-        ? compileTypedModifiers(legacyModifierIds, unitId, 'skill', catalogs, true).textModifiers
+        ? compileTypedModifiers(legacyModifierIds, unitId, 'skill', catalogs, 'text').textModifiers
         : [];
     return {
         sourceKey: `skillPlan:${unitId}:${heroLevel}`,

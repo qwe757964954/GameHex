@@ -10,6 +10,7 @@ import { ZCOwner } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { assetPath } from './helpers/asset-paths';
+import * as DamageStats from '../assets/script/app/zcds/model/ZCDamageStats';
 
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 function load(file: string, dependencies: Record<string, unknown>) {
@@ -33,47 +34,52 @@ function popupStub(closed: number[] = []) {
     return { close: (reason: number) => closed.push(reason) };
 }
 
-test('结算按钮显示、空白关闭被拦截，返回只调用一次，复用时恢复统计预览', () => {
-    class Base {
-        enabledInHierarchy = true; isPopupOpen = true;
-        close() { this.onClose(); } onClose() {} closeByButton() {}
-    }
-    const events: string[] = [];
+test('战斗统计弹窗初始化绑定双页签与双虚拟列表，切页签重算列并回顶，关闭清空条数', async () => {
     const { GameRunAway } = load('assets/script/app/zcds/ui/GameRunAway.ts', {
-        cc: { _decorator: decorator, Button: { EventType: { CLICK: 'click' } }, Label: class {}, Node: class {}, UITransform: class {}, SpriteFrame: class {} },
-        '../../../framework/ui/PopupBase': { PopupBase: Base },
-        '../../../framework/ui/PopupDef': { PopupCloseReason: { CloseButton: 2 } },
-        // 返回按钮只派发 `ZCGameUiEvent.ReturnToMain`（视图不碰流程，回主界面由控制器决定）。
-        '../../../framework/event/EventMgr': { EventMgr: { instance: { emit: (event: string) => events.push(event) } } },
+        cc: { _decorator: decorator, Button: { EventType: { CLICK: 'click' } }, Sprite: class {}, SpriteFrame: class {} },
+        '../../../framework/ui/PopupBase': { PopupBase: class { canCloseOnBlank() { return true; } } },
+        '../../../vscrollview/VScrollView': { VirtualScrollView: class {} },
+        '../model/ZCDamageStats': DamageStats,
         '../view/ZCGameHudEvents': { ZCGameUiEvent },
-        './RunAwayPlayerItem': { RunAwayPlayerItem: class {} },
-        '../../HeadArt': {}, '../../common/SpriteFrameCache': {},
+        './RunAwayUnitItem': { RunAwayUnitItem: class {} },
+        './RunAwayQualityArt': { RUNAWAY_QUALITY_FRAME_NAMES: { gold: 'common_img_pzk_01', purple: 'common_img_pzk_02', green: 'common_img_pzk_03', blue: 'common_img_pzk_04' }, RUNAWAY_QUALITY_FRAME_ROOT: 'image/frame' },
+        '../../HeadArt': {},
+        '../../common/SpriteFrameCache': { createIconLoader: () => async () => null },
     });
+    const list = () => ({ renderItemFn: null as any, total: 0, scrolls: 0, setTotalCount(n: number) { this.total = n; }, scrollToTop() { this.scrolls++; } });
+    const clicks = new Map<string, Function>();
+    const button = (name: string) => ({ node: { on: (event: string, fn: Function) => clicks.set(name, fn) } });
     const popup = new GameRunAway();
-    const listeners: Array<{ fn: Function; target: unknown }> = [];
-    popup.returnButton = { node: { active: false, parent: { active: false }, on: (_event: string, fn: Function, target: unknown) => listeners.push({ fn, target }) }, interactable: true };
-    popup.titleLabel = { string: '' };
-    popup.panelTransform = { width: 650, setContentSize() {} };
-    popup.backgroundTransform = { width: 646, setContentSize() {} };
-    popup.header = { setPosition() {} };
-    popup.footerLabel = { node: { setPosition() {} } };
-    popup.returnButton.node.setPosition = () => {};
-    // 按钮监听在 `onInit` 里绑（`PopupBase` 首次打开前调一次），夹具不走完整打开流程 ⇒ 手动调。
+    (popup as any).isValid = true;
+    (popup as any).resourceScope = { disposed: false };
+    const onFrame = { spriteFrame: 'on' }, offFrame = { spriteFrame: 'off' };
+    popup.damageTab = button('damage'); popup.takenTab = button('taken');
+    popup.damageTabBg = { spriteFrame: onFrame }; popup.takenTabBg = { spriteFrame: offFrame };
+    popup.ownList = list(); popup.enemyList = list();
     popup.onInit();
-    // `showReturn` 才是「有没有返回按钮」的开关（原先靠有没有 `summary` 推断，那个字段已随
-    // 两行数据（`mine`/`enemy`）改版一起下线）。
-    popup.onOpen({ title: '胜利', showReturn: true });
-    assert.equal(popup.titleLabel.string, '胜利');
-    // 按钮的显示/隐藏由它的占位区 `ReturnArea` 承担（按钮本身常驻挂载，只切 interactable）。
-    assert.equal((popup as any).returnArea.active, true);
-    assert.equal(popup.canCloseOnBlank(), false, '返回模式不许点空白关');
-    const listener = listeners[0]; listener.fn.call(listener.target); listener.fn.call(listener.target);
-    assert.deepEqual(events, [ZCGameUiEvent.ReturnToMain], '连点两下只派发一次（第二次 showReturn 已落）');
-    assert.equal(popup.returnButton.interactable, false);
-    popup.onOpen();
-    assert.equal(popup.titleLabel.string, '伤害统计'); assert.equal((popup as any).returnArea.active, false);
-    assert.equal(popup.canCloseOnBlank(), true);
-    assert.equal(listeners.length, 1, '复用不重复绑定');
+    assert.equal(popup.damageTabBg.spriteFrame, onFrame, '默认伤害页签亮底');
+    assert.equal(popup.takenTabBg.spriteFrame, offFrame);
+    assert.equal(typeof popup.ownList.renderItemFn, 'function');
+    assert.equal(typeof popup.enemyList.renderItemFn, 'function');
+    const units = [
+        { owner: ZCOwner.Player, unitId: 'a', cardId: 'a', name: '我方输出', iconKey: '', rarity: 'purple' as const, damage: 300, damageTaken: 10 },
+        { owner: ZCOwner.Player, unitId: 'b', cardId: 'b', name: '我方坦克', iconKey: '', rarity: 'green' as const, damage: 0, damageTaken: 900 },
+        { owner: ZCOwner.Enemy, unitId: 'c', cardId: 'c', name: '敌方输出', iconKey: '', rarity: 'gold' as const, damage: 200, damageTaken: 100 },
+    ];
+    await popup.onOpen({ units });
+    assert.equal(popup.ownList.total, 1, '伤害页签过滤 0 输出单位');
+    assert.equal(popup.enemyList.total, 1);
+    clicks.get('taken')!.call(popup);
+    assert.equal(popup.takenTabBg.spriteFrame, onFrame, '点承伤页签后亮底转移');
+    assert.equal(popup.damageTabBg.spriteFrame, offFrame);
+    assert.equal(popup.ownList.total, 2);
+    assert.equal(popup.enemyList.total, 1);
+    assert.equal(popup.ownList.scrolls, 2, '打开回顶一次、切页签回顶一次');
+    assert.equal(popup.enemyList.scrolls, 2);
+    assert.equal(popup.canCloseOnBlank(), true, '统计弹窗点空白可关');
+    popup.onClose();
+    assert.equal(popup.ownList.total, 0);
+    assert.equal(popup.enemyList.total, 0);
 });
 
 test('神器结果弹吐司，模型与意图在运行控制器内处理', () => {
@@ -88,37 +94,111 @@ test('神器结果弹吐司，模型与意图在运行控制器内处理', () =>
     } finally { h.dispose(); }
 });
 
-test('统计面板按人数显示行、自己那行加标记，切回双人收起多余行', () => {
+test('战斗统计按单位渲染左右虚拟列表：数据刷新原位更新，切页签重算条数与可见行', async () => {
     const { GameRunAway } = load('assets/script/app/zcds/ui/GameRunAway.ts', {
-        cc: { _decorator: decorator, Button: {}, Label: class {}, Node: class {}, UITransform: class {} },
+        cc: { _decorator: decorator, Button: { EventType: { CLICK: 'click' } }, Sprite: class {}, SpriteFrame: class {} },
         '../../../framework/ui/PopupBase': { PopupBase: class {} },
-        '../../../framework/ui/PopupDef': {}, '../../../framework/event/EventMgr': {},
-        '../view/ZCGameHudEvents': {}, './RunAwayPlayerItem': { RunAwayPlayerItem: class {} },
-        '../../HeadArt': {}, '../../common/SpriteFrameCache': {},
+        '../../../vscrollview/VScrollView': { VirtualScrollView: class {} },
+        '../model/ZCDamageStats': DamageStats,
+        '../view/ZCGameHudEvents': { ZCGameUiEvent },
+        './RunAwayUnitItem': { RunAwayUnitItem: class {} },
+        './RunAwayQualityArt': { RUNAWAY_QUALITY_FRAME_NAMES: { gold: 'common_img_pzk_01', purple: 'common_img_pzk_02', green: 'common_img_pzk_03', blue: 'common_img_pzk_04' }, RUNAWAY_QUALITY_FRAME_ROOT: 'image/frame' },
+        '../../HeadArt': {},
+        '../../common/SpriteFrameCache': { createIconLoader: () => async (name: string) => ({ name }) },
     });
-    const panel = new GameRunAway();
-    const node = () => ({ active: true, y: 0, setPosition(_x: number, y: number) { this.y = y; } });
-    panel.panelTransform = { width: 650, height: 0, setContentSize(_w: number, h: number) { this.height = h; } };
-    panel.backgroundTransform = { width: 646, setContentSize() {} };
-    panel.header = node(); panel.footerLabel = { node: node() }; panel.returnButton = { node: node() };
-    const values: any[] = [];
-    panel.items = Array.from({ length: 4 }, (_, i) => ({ node: node(), refresh: (value: unknown) => { values[i] = value; } }));
-    const players = [ZCOwner.Player, ZCOwner.Enemy, ZCOwner.Enemy2, ZCOwner.Enemy3].map((owner, i) => ({ owner, name: `${i}`, headKey: '', damage: (i + 1) * 100, damageTaken: 400 - i * 100 }));
-    panel.refresh(players);
-    assert.ok(panel.items.every((item: any) => item.node.active));
-    assert.ok(values.every(value => value.maxDamage === 400 && value.maxDamageTaken === 400));
-    assert.deepEqual(values.map(value => value.owner), players.map(player => player.owner));
-    // 行距/面板高度由 GameRunAway.prefab 的 Layout 负责（2026-11-16 起不再由代码 setPosition）。
-    panel.refresh(players.slice(0, 2));
-    assert.deepEqual(Array.from(panel.items, (item: any) => item.node.active), [true, true, false, false]);
-    assert.equal(values[0].maxDamage, 200);
+    const list = () => ({ renderItemFn: null as any, total: -1, scrolls: 0, setTotalCount(n: number) { this.total = n; }, scrollToTop() { this.scrolls++; } });
+    const button = () => ({ node: { on() {} } });
+    const popup = new GameRunAway();
+    (popup as any).isValid = true;
+    (popup as any).resourceScope = { disposed: false };
+    popup.damageTab = button(); popup.takenTab = button();
+    popup.damageTabBg = { spriteFrame: { name: 'on' } }; popup.takenTabBg = { spriteFrame: { name: 'off' } };
+    popup.ownList = list(); popup.enemyList = list();
+    popup.onInit();
+    const units = [
+        { owner: ZCOwner.Player, unitId: 'p1', cardId: 'p1', name: '豌豆游侠', iconKey: '', rarity: 'gold' as const, damage: 600, damageTaken: 100 },
+        { owner: ZCOwner.Player, unitId: 'p2', cardId: 'p2', name: '巨力坚果', iconKey: '', rarity: 'blue' as const, damage: 300, damageTaken: 800 },
+        { owner: ZCOwner.Enemy, unitId: 'e1', cardId: 'e1', name: '火焰树妖', iconKey: '', rarity: 'purple' as const, damage: 200, damageTaken: 50 },
+    ];
+    await popup.onOpen({ units });
+    assert.equal(popup.ownList.total, 2);
+    assert.equal(popup.enemyList.total, 1);
+    const calls: any[] = [];
+    const bases: any[] = [];
+    const row = {
+        render: (value: number, total: number, _frame: unknown, base: unknown) => { calls.push({ value, total }); bases.push(base); },
+        clear: () => calls.push('clear'),
+    };
+    const node = { getComponent: () => row };
+    popup.ownList.renderItemFn(node, 0);
+    assert.deepEqual(calls.at(-1), { value: 600, total: 900 }, '分母 = 我方全队合计（600 + 300），不是列内最大值');
+    assert.deepEqual(bases.at(-1), { name: 'common_img_pzk_01' }, '金品级底框复用品级卡框原图 pzk_01');
+    popup.ownList.renderItemFn(node, 1);
+    assert.deepEqual(calls.at(-1), { value: 300, total: 900 }, '同一列共用同一个分母');
+    assert.deepEqual(bases.at(-1), { name: 'common_img_pzk_04' }, '蓝品级底框走 pzk_04');
+    popup.enemyList.renderItemFn(node, 0);
+    assert.deepEqual(calls.at(-1), { value: 200, total: 200 }, '敌方分母 = 该席位合计（只有一席时等于它自己）');
+    assert.deepEqual(bases.at(-1), { name: 'common_img_pzk_02' }, '紫品级底框走 pzk_02');
+    units[0].damage = 900;
+    popup.refresh(units);
+    assert.equal(popup.ownList.total, 2, '数据刷新不增删行');
+    assert.equal(popup.ownList.scrolls, 1, '数据刷新不回顶');
+    popup.ownList.renderItemFn(node, 0);
+    assert.deepEqual(calls.at(-1), { value: 900, total: 1200 }, '原位更新：分母跟着合计一起变（900 + 300）');
+    popup.ownList.renderItemFn(node, 9);
+    assert.equal(calls.at(-1), 'clear', '越界槽位清空复用组件');
+});
+test('敌方列跟随头像栏选中：默认席位序最小的敌方，切换后按该席位重算并回顶', async () => {
+    const { GameRunAway } = load('assets/script/app/zcds/ui/GameRunAway.ts', {
+        cc: { _decorator: decorator, Button: { EventType: { CLICK: 'click' } }, Sprite: class {}, SpriteFrame: class {} },
+        '../../../framework/ui/PopupBase': { PopupBase: class {} },
+        '../../../vscrollview/VScrollView': { VirtualScrollView: class {} },
+        '../model/ZCDamageStats': DamageStats,
+        '../view/ZCGameHudEvents': { ZCGameUiEvent },
+        './RunAwayUnitItem': { RunAwayUnitItem: class {} },
+        './RunAwayQualityArt': { RUNAWAY_QUALITY_FRAME_NAMES: { gold: 'common_img_pzk_01', purple: 'common_img_pzk_02', green: 'common_img_pzk_03', blue: 'common_img_pzk_04' }, RUNAWAY_QUALITY_FRAME_ROOT: 'image/frame' },
+        '../../HeadArt': {},
+        '../../common/SpriteFrameCache': { createIconLoader: () => async () => null },
+    });
+    const list = () => ({ renderItemFn: null as any, total: -1, scrolls: 0, setTotalCount(n: number) { this.total = n; }, scrollToTop() { this.scrolls++; } });
+    const button = () => ({ node: { on() {} } });
+    const popup = new GameRunAway();
+    (popup as any).isValid = true;
+    (popup as any).resourceScope = { disposed: false };
+    popup.damageTab = button(); popup.takenTab = button();
+    popup.damageTabBg = { spriteFrame: null }; popup.takenTabBg = { spriteFrame: null };
+    popup.ownList = list(); popup.enemyList = list();
+    popup.onInit();
+    const row = (owner: string, cardId: string, damage: number) => ({
+        owner: owner as never, unitId: cardId, cardId, name: cardId, iconKey: '',
+        rarity: 'green' as const, damage, damageTaken: 0, deckOrder: 0,
+    });
+    const units = [
+        row('player', 'p1', 10),
+        row('enemy', 'e1', 300),
+        row('enemy2', 'e2a', 900),
+        row('enemy2', 'e2b', 100),
+    ];
+    const seats = { owners: ['player', 'enemy', 'enemy2'] as never, profiles: new Map() };
+    await popup.onOpen({ units, seats });
+    assert.equal(popup.enemyList.total, 1, '默认只显示席位序最小的那一方（enemy），不把两方合并');
+    assert.equal(popup.enemyList.scrolls, 1, '打开时回顶一次');
+    (popup as any).selectEnemy('enemy2');
+    assert.equal(popup.enemyList.total, 2, '切到 enemy2 后按它重算');
+    assert.equal(popup.enemyList.scrolls, 2, '换敌方 = 换一批行，回顶');
+    (popup as any).selectEnemy('enemy2');
+    assert.equal(popup.enemyList.scrolls, 2, '重复点同一方不重算');
+    popup.refresh(units);
+    assert.equal(popup.enemyList.total, 2, '实时刷新保留当前选中，不退回默认');
+    assert.equal(popup.enemyList.scrolls, 2, '刷新不回顶');
+    popup.onClose();
 });
 test('胜负和平局自动结算一次，返回使用组合层导航端口', async () => {
     for (const status of ['victory', 'defeat', 'draw'] as const) {
         const h = runtimeFixture();
         try {
             h.forceStatus(status);
-            for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 }, h.view);
+            for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 });
             await flushRuntime();
             assert.equal(h.requests.length, 1);
             assert.equal((h.pages[0] as { victory: boolean }).victory, status === 'victory');
@@ -167,11 +247,11 @@ test('结算页「查看完整队伍」用冻结的席位统计弹面板，重�
     const h = runtimeFixture();
     try {
         h.forceStatus('victory');
-        for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 }, h.view);
+        for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 });
         await flushRuntime();
         // 结算请求带上本局统计（MVP 卡与「查看完整队伍」共用这一份）
         const request = h.requests[0];
-        assert.ok(request.players, '结算请求必须带 players');
+        assert.ok(request.units, '结算请求必须带 units');
         // 这一局没有伤害（夹具不打仗）⇒ 不出 MVP 卡，页面整组收起
         assert.equal(request.mvp, null);
         assert.equal((h.pages[0] as { mvp: unknown }).mvp, null);
@@ -185,22 +265,120 @@ test('结算页「查看完整队伍」用冻结的席位统计弹面板，重�
     } finally { h.dispose(); }
 });
 
-test('结算 Prefab 按钮与说明绑定完整，复用现有按钮贴图且位于面板内', () => {
+test('战斗统计 Prefab 绑定完整：双虚拟列表、两页签与面板内边界按设计稿落位', () => {
     const prefab = JSON.parse(readFileSync('assets/bundles/battle/ui/game/GameRunAway.prefab', 'utf8'));
     for (const object of prefab) {
         JSON.stringify(object, (key, value) => { if (key === '__id__') assert.ok(value >= 0 && value < prefab.length); return value; });
     }
-    const script = prefab.find((x: any) => x.returnButton && x.titleLabel);
-    const button = prefab[script.returnButton.__id__]; assert.equal(button.__type__, 'cc.Button');
-    const node = prefab[button.node.__id__]; assert.equal(node._active, false);
-    const sprite = node._components.map((ref: any) => prefab[ref.__id__]).find((x: any) => x.__type__ === 'cc.Sprite');
-    const meta = JSON.parse(readFileSync(assetPath('image/common/anniu_01.png.meta'), 'utf8'));
-    assert.equal(sprite._spriteFrame.__uuid__, meta.subMetas.f9941.uuid);
-    const transform = node._components.map((ref: any) => prefab[ref.__id__]).find((x: any) => x.__type__ === 'cc.UITransform');
-    const panel = prefab[node._parent.__id__];
-    const panelTransform = panel._components.map((ref: any) => prefab[ref.__id__]).find((x: any) => x.__type__ === 'cc.UITransform');
-    assert.ok(Math.abs(node._lpos.y) + transform._contentSize.height / 2 < panelTransform._contentSize.height / 2);
-    // 原先断言的是 `summaryLabel`（一行说明文字）—— 两行数据（`mine`/`enemy`）改版后那个属性
-    // 已从 `GameRunAway` 下线，现在必填的文本引用只剩标题 `titleLabel`。
-    assert.equal(prefab[script.titleLabel.__id__].__type__, 'cc.Label');
+    const script = prefab.find((x: any) => x.ownList && x.enemyList);
+    assert.ok(script, 'GameRunAway 必须绑定左右两个虚拟列表');
+    const listOf = (ref: any) => prefab[ref.__id__];
+    const nodeOf = (comp: any) => prefab[comp.node.__id__];
+    const compOf = (node: any, type: string) => node._components
+        .map((ref: any) => prefab[ref.__id__]).find((x: any) => x.__type__ === type);
+    const compOfIn = (data: any[], node: any, type: string) => node._components
+        .map((ref: any) => data[ref.__id__]).find((x: any) => x.__type__ === type);
+    const ownList = listOf(script.ownList), enemyList = listOf(script.enemyList);
+    for (const [list, name] of [[ownList, 'OwnList'], [enemyList, 'EnemyList']] as const) {
+        assert.equal(list.__type__, '544earF5qRLB4JTuTnSr11+', `${name} 必须挂 VirtualScrollView`);
+        assert.equal(list.useVirtualList, true);
+        assert.equal(list.direction, 0);
+        assert.equal(list.itemCreationMode, 1);
+        assert.equal(list.spacing, 6);
+        assert.equal(list.headerSpacing, 8);
+        assert.equal(list.totalCount, 0);
+        assert.equal(list.interactive, true, `${name} 必须接管触摸才能上下滑`);
+        const itemMeta = JSON.parse(readFileSync(assetPath('ui/game/RunAwayUnitItem.prefab.meta'), 'utf8'));
+        assert.equal(list.itemPrefab.__uuid__, itemMeta.uuid, `${name} 必须复用 RunAwayUnitItem 预制体`);
+        const node = nodeOf(list);
+        assert.equal(node._name, name);
+        const contentRef = node._children.find((ref: any) => prefab[ref.__id__]._name === 'content');
+        assert.ok(contentRef, `${name} 必须有 content 容器，否则 VirtualScrollView.start() 会直接返回`);
+        assert.equal(list.content.__id__, contentRef.__id__, `${name} 的 content 必须绑定到虚拟列表`);
+        const contentTransform = compOf(prefab[contentRef.__id__], 'cc.UITransform');
+        assert.equal(contentTransform._anchorPoint.y, 1);
+        assert.equal(contentTransform._contentSize.width, 242);
+        const transform = compOf(node, 'cc.UITransform');
+        assert.equal(transform._contentSize.width, 242);
+        assert.equal(transform._contentSize.height, 435);
+        assert.equal(transform._anchorPoint.y, 1);
+        assert.ok(node._lpos.y <= 542 / 2, `${name} 顶部不能越过面板`);
+        assert.ok(node._lpos.y - transform._contentSize.height >= -542 / 2, `${name} 底部不能越过面板`);
+        assert.ok(node._lpos.x - 121 >= -542 / 2 && node._lpos.x + 121 <= 542 / 2, `${name} 左右不能越过面板`);
+    }
+    assert.equal(nodeOf(ownList)._lpos.x, -136);
+    assert.equal(nodeOf(enemyList)._lpos.x, 128);
+
+    // 敌方席位头像栏：脚本必须绑上容器；容器锚点在右沿，右沿与敌方列右沿对齐
+    // （只有 1 个敌方时贴最右），且落在「敌方」标头与列表之间的标题带里。
+    const seatsNode = prefab.find((x: any) => x.__type__ === 'cc.Node' && x._name === 'EnemySeats');
+    assert.ok(seatsNode, 'GameRunAway 必须有 EnemySeats 容器');
+    assert.ok(script.enemySeats, 'GameRunAway 脚本必须绑定 EnemySeats');
+    assert.equal(prefab[script.enemySeats.__id__], seatsNode);
+    const seatsTransform = compOf(seatsNode, 'cc.UITransform');
+    assert.equal(seatsTransform._contentSize.width, 151, '「敌方」标头右侧到敌方列右沿的净宽');
+    assert.equal(seatsTransform._contentSize.height, 44);
+    assert.equal(seatsTransform._anchorPoint.x, 1, '右锚点：子节点从原点向左排，天然右对齐');
+    assert.equal(seatsNode._lpos.x, nodeOf(enemyList)._lpos.x + 242 / 2, '右沿 = 敌方列右沿');
+    assert.equal(seatsNode._lpos.y, 189, '与「我方 / 敌方」标头同一条基线');
+    assert.ok(seatsNode._lpos.y + 44 / 2 <= 238.5 - 41 / 2, '不能顶到两个页签');
+    const enemyHeader = prefab.find((x: any) => x.__type__ === 'cc.Node' && x._name === 'EnemyHeader');
+    const headerLabel = compOf(enemyHeader, 'cc.Label');
+    assert.equal(headerLabel._string, '敌方');
+    assert.ok(enemyHeader._lpos.x + compOf(enemyHeader, 'cc.UITransform')._contentSize.width
+        <= seatsNode._lpos.x - seatsTransform._contentSize.width, '头像栏不能压到「敌方」二字');
+
+    const tabOn = JSON.parse(readFileSync(assetPath('image/gameui/damage_stats_tab_on.png.meta'), 'utf8'));
+    const tabOff = JSON.parse(readFileSync(assetPath('image/gameui/damage_stats_tab_off.png.meta'), 'utf8'));
+    const damageBg = listOf(script.damageTabBg), takenBg = listOf(script.takenTabBg);
+    assert.equal(damageBg._spriteFrame.__uuid__, tabOn.subMetas.f9941.uuid, '默认选中伤害页签（亮底）');
+    assert.equal(takenBg._spriteFrame.__uuid__, tabOff.subMetas.f9941.uuid);
+    for (const [ref, text] of [[script.damageTab, '伤害统计'], [script.takenTab, '承伤统计']] as const) {
+        const button = listOf(ref);
+        assert.equal(button.__type__, 'cc.Button');
+        const node = nodeOf(button);
+        const label = node._children.map((child: any) => compOf(prefab[child.__id__], 'cc.Label')).find(Boolean);
+        assert.equal(label._string, text);
+        assert.equal(label._fontSize, 20);
+    }
+
+    const titleNode = prefab.find((x: any) => x.__type__ === 'cc.Node' && x._name === 'Title');
+    const title = compOf(titleNode, 'cc.Label');
+    assert.equal(title._string, '战斗统计');
+    assert.equal(title._fontSize, 24);
+
+    const item = JSON.parse(readFileSync('assets/bundles/battle/ui/game/RunAwayUnitItem.prefab', 'utf8'));
+    for (const object of item) {
+        JSON.stringify(object, (key, value) => { if (key === '__id__') assert.ok(value >= 0 && value < item.length); return value; });
+    }
+    const itemScript = item.find((x: any) => x.base && x.avatar && x.valueLabel && x.fill);
+    assert.ok(itemScript, '列表项必须绑定底框 / 头像 / 数值 / 进度条');
+    const itemRoot = item[1];
+    const itemTransform = compOfIn(item, itemRoot, 'cc.UITransform');
+    assert.equal(itemTransform._contentSize.width, 242);
+    assert.equal(itemTransform._contentSize.height, 69);
+    const avatar = item[itemScript.avatar.__id__];
+    const frameMeta = JSON.parse(readFileSync(assetPath('image/frame/common_img_pzk_02.png.meta'), 'utf8'));
+    const avatarNodeId = item[avatar.node.__id__]._parent.__id__;
+    const avatarNode = item[avatarNodeId];
+    assert.equal(avatar._spriteFrame, null);
+    // 头像位 = 69×69 的 Mask 容器：整张 pzk（103×126）挂在子节点 Base 上，上对齐后被裁成方形底。
+    const avatarTransform = compOfIn(item, avatarNode, 'cc.UITransform');
+    assert.equal(avatarTransform._contentSize.width, 69);
+    assert.equal(avatarTransform._contentSize.height, 69);
+    const mask = compOfIn(item, avatarNode, 'cc.Mask');
+    assert.ok(mask, 'Avatar 必须是 RECT Mask：没有它整张 pzk 的底部卡名条会漏出来');
+    assert.equal(mask._type, 0);
+    assert.equal(mask._inverted, false);
+    const base = item[itemScript.base.__id__];
+    assert.equal(base.__type__, 'cc.Sprite');
+    const baseNode = item[base.node.__id__];
+    assert.equal(baseNode._parent.__id__, avatarNodeId, 'Base 必须挂在 Mask 容器下才会被裁');
+    const baseTransform = compOfIn(item, baseNode, 'cc.UITransform');
+    assert.equal(baseTransform._contentSize.height, 85, 'Base 比 Mask 高，多出来的部分正好是卡名条');
+    assert.equal(base._spriteFrame.__uuid__, frameMeta.subMetas.f9941.uuid, '底框默认挂紫色品级底（pzk 原图，运行时按品级换同尺寸整图）');
+    const fill = item[itemScript.fill.__id__];
+    assert.equal(fill._type, 3, '进度条填充必须用 FILLED，按比例裁切');
+    assert.equal(fill._fillType, 0);
+    assert.equal(fill._fillRange, 1, '预制体默认满条，运行时 render 再按数据裁切');
 });

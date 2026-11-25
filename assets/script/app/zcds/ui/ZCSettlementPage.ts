@@ -221,7 +221,7 @@ export class ZCSettlementPage extends PopupBase {
 
     /**
      * 查看完整队伍：结算期 `phase.isSettled` 已置位，运行期的 `OpenDamageStats` 入口会直接 return，
-     * 所以这里派一条结算自己的事件，由结算控制器用同一套 `openDamage(players)` 弹统计面板。
+     * 所以这里派一条结算自己的事件，由结算控制器用同一套 `openDamage(units)` 弹战斗统计面板。
     */
     private onViewTeamClicked(): void {
         EventMgr.instance.emit(ZCGameUiEvent.SettlementViewTeam);

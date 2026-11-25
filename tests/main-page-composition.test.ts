@@ -89,13 +89,13 @@ test('hero view receives only presentation resources and ready data after its re
     const f = fixture(), page = new f.CardLineupPage(), binding = f.bind(page);
     let renders = 0;
     const listener = {};
-    EventMgr.instance.on(CardLineupUiEvent.Render, (event, source) => { if (source === page) renders++; }, listener);
+    EventMgr.instance.on(CardLineupUiEvent.Render, () => { renders++; }, listener);
     try {
         assert.ok(page.resources); assert.equal(f.loads, 0);
         phase(page, 'ready'); await tick(); assert.equal(f.loads, 1); assert.equal(renders, 1);
         phase(page, 'destroyed');
         assert.equal(page.resources.scope.disposed, true);
-        EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'refresh' }, page);
+        EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'refresh' });
         await tick(); assert.equal(f.loads, 1);
     } finally { EventMgr.instance.offTarget(listener); binding.dispose(); }
 });

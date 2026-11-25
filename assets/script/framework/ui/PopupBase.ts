@@ -286,6 +286,8 @@ export class PopupBase extends Component {
     private _depth: number = -1;
     /** 是否处于打开状态。 */
     private _opened: boolean = false;
+    /** 本次打开是否已跨过首帧渲染就绪点。 */
+    private _viewReady: boolean = false;
     /** 是否被上层弹窗盖住。 */
     private _covered: boolean = false;
     /** 关闭是否已处理（防止重复 close 触发两次回调）。 */
@@ -351,9 +353,40 @@ export class PopupBase extends Component {
         return this._openContext;
     }
 
-    /** 子类统一使用的取消安全下一帧等待。 */
-    protected nextPopupFrame(): Promise<boolean> {
-        return this._openContext?.nextFrame() ?? Promise.resolve(false);
+    /** 首帧视图是否已就绪（已跨过打开后的首帧且弹窗仍处于打开有效态）。 */
+    protected get isViewReady(): boolean {
+        const context = this._openContext;
+        return this._viewReady &&
+            this._opened &&
+            this.isValid &&
+            !this._resourceScope.disposed &&
+            !!context &&
+            !context.cancelled;
+    }
+
+    /**
+     * 子类统一使用的取消安全下一帧等待。
+     *
+     * 契约保证：
+     * 返回 true 当且仅当跨过该帧后，弹窗仍然处于打开状态、节点未销毁且资源作用域未释放。
+     * 若在等待期间关闭或销毁，安全返回 false，不抛错且不留悬空状态。
+     *
+     * 调用方只需：
+     *   if (!await this.nextPopupFrame()) return;
+     * 之后无需重复堆叠 `if (!this.isValid || scope.disposed)`。
+     */
+    protected async nextPopupFrame(): Promise<boolean> {
+        const context = this._openContext;
+        if (!context || context.cancelled || !this.isValid || this._resourceScope.disposed) {
+            return false;
+        }
+        const advanced = await context.nextFrame();
+        return advanced &&
+            this.isValid &&
+            !this._resourceScope.disposed &&
+            this._openContext === context &&
+            !context.cancelled &&
+            this._opened;
     }
 
     // ============================================================
@@ -370,6 +403,10 @@ export class PopupBase extends Component {
         this: new () => T,
         params: IPopupOpenParams = {},
     ): Promise<T | null> {
+        const ctor = this as unknown as typeof PopupBase;
+        const className = (this as any).name || 'PopupBase';
+        const prefabPath = ctor.prefabPath || '(dynamic)';
+        console.log(`[PopupBase] 打开弹窗: ${className} | prefab: ${prefabPath}`);
         return PopupManager.inst.openAsync(this, params);
     }
 
@@ -383,12 +420,23 @@ export class PopupBase extends Component {
     }
 
     /**
-     * 每次打开时调用。
+     * 每次打开时调用（数据与参数准备阶段）。
      * 可以返回 Promise，PopupManager 会 await 它（弹窗的 openAsync 因此可用来等待数据加载）。
      */
     protected onOpen(_userData?: any, _context?: PopupOpenContext): void | Promise<void> {
         // 子类覆写
     }
+
+    /**
+     * 视图就绪时调用（展示渲染阶段）。
+     *
+     * 架构级生命周期契约：
+     * 1. 由框架保证在经过下一帧渲染（子节点的 start() 与布局初始化已完成）后自动调用；
+     * 2. 调用时框架已严格保证：弹窗处于打开状态、节点有效、作用域未释放且未被关闭取消；
+     * 3. 子类在此方法内可以直接铺列表（setTotalCount / refreshList）、滚动视口或播放入场动效，
+     *    内部无需再写 `await this.nextPopupFrame()` 或 `if (!this.isValid)` 守卫。
+     */
+    protected onViewReady?(_userData?: any, _context?: PopupOpenContext): void | Promise<void>;
 
     /** 关闭前调用（此时节点仍然有效）。不要在这里 destroy 节点，回收由 PopupManager 负责。 */
     protected onClose(_reason: PopupCloseReason): void {
@@ -465,6 +513,8 @@ export class PopupBase extends Component {
 
     /** @internal 由 PopupManager 调用。 */
     public async _internalOpen(serialId: number, params: IPopupOpenParams, layer: PopupLayer): Promise<void> {
+        const prefabPath = (this.constructor as typeof PopupBase).prefabPath || '(dynamic)';
+        console.log(`[PopupBase] 弹窗加载就绪: ${this.className} | layer: ${PopupLayer[layer]} | prefab: ${prefabPath} | serial: ${serialId}`);
         this._openContext?.cancel();
         this._resourceScope.dispose();
         this._resourceScope = new ResourceScope(`popup:${this.className}`);
@@ -475,6 +525,7 @@ export class PopupBase extends Component {
         this._serialId = serialId;
         this._params = params;
         this._opened = true;
+        this._viewReady = false;
         this._covered = false;
         this._closeHandled = false;
         this.popupLayer = layer;
@@ -496,10 +547,20 @@ export class PopupBase extends Component {
         this._bindBlankClose();
 
         const openTask = (async () => {
+            // 与 onOpen 并行起首帧监听：若 onOpen 异步取数期间已跨过首帧，onViewReady 无需再空等一帧
+            const hasViewReady = typeof this.onViewReady === 'function';
+            const firstFrame = hasViewReady ? context.nextFrame() : null;
             try {
                 await this.onOpen(params.userData, context);
+                if (hasViewReady && firstFrame && !context.cancelled && this._openContext === context && this._opened && this.isValid && !this._resourceScope.disposed) {
+                    const ready = await firstFrame;
+                    if (ready && !context.cancelled && this._openContext === context && this._opened && this.isValid && !this._resourceScope.disposed) {
+                        this._viewReady = true;
+                        await this.onViewReady!(params.userData, context);
+                    }
+                }
             } catch (error) {
-                if (!context.cancelled) console.error(`[PopupBase] ${this.className} onOpen 抛错`, error);
+                if (!context.cancelled) console.error(`[PopupBase] ${this.className} onOpen/onViewReady 抛错`, error);
             }
         })();
 
@@ -534,6 +595,7 @@ export class PopupBase extends Component {
         const onClose = this._params?.onClose;
         this._params = null;
         this._opened = false;
+        this._viewReady = false;
         this._covered = false;
         this._depth = -1;
         this._serialId = 0;
@@ -850,6 +912,7 @@ export class PopupBase extends Component {
         // 销毁期访问事件 API 容易空指针。这里只清业务字段。
         this._params = null;
         this._opened = false;
+        this._viewReady = false;
         this._covered = false;
         this._closeHandled = true;
         this._openContext?.cancel();

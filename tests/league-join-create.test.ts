@@ -977,8 +977,8 @@ test('E5 ⚠️ 创建页：勾选框同步 + 名字守卫 + 消耗两态换色 
     assert.ok(!src.includes('isLeagueNameUsable'), '视图不该自己判名字守卫');
     assert.ok(stripComments(readFileSync(CREATE_MODEL_TS, 'utf8')).includes('isLeagueNameUsable'),
         '名字守卫（空 / `***` 都拒）必须落到 LeagueCreateModel');
-    assert.ok(/emit\(LeagueCreateEvent\.Intent, \{ [^}]+\}, this\)/.test(src),
-        '创建页只 emit 带来源的意图');
+    assert.ok(/emit\(LeagueCreateEvent\.Intent, \{ [^}]+\}\)/.test(src),
+        '创建页只 emit 不带来源的意图');
     // 消耗两态：换色走 LeagueArt 的四色常量
     assert.ok(src.includes('LEAGUE_COST_ENOUGH_COLOR') && src.includes('LEAGUE_COST_SHORT_COLOR'),
         '`lab_has` 两态换色');

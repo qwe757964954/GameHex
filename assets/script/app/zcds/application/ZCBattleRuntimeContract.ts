@@ -5,22 +5,17 @@ import type { ZCGameRenderFrame, ZCBattlePresentationEvents } from '../model/ZCG
 import type { ZCMatchConfig } from '../model/ZCMatchConfig';
 import type { ZCSpawnSelection } from '../model/ZCSpawnSelection';
 import type { IZCGameEntry } from './ZCGameEntry';
-import type { IZCGuidePreparedContent } from './ZCGuideLoader';
+import type { IZCGuidePreparedContent } from '../model/ZCGuideConfig';
 import type { buildRankSeats, RankSeatProfiles } from '../model/ZCRankBoard';
 import type { IZCBattlePopup } from './ZCBattleSettlementController';
-import type { ZCOwner } from '../model/ZCMapConfig';
+import type { IZCDamageStatsSeats, IZCDamageStatsUnit } from '../model/ZCDamageStats';
 
-export interface IZCDamageStatsPlayer {
-    readonly owner: ZCOwner;
-    readonly name: string;
-    readonly headKey: string;
-    readonly damage: number;
-    readonly damageTaken: number;
-}
+export type { IZCDamageStatsSeats, IZCDamageStatsUnit } from '../model/ZCDamageStats';
 
 export interface IZCDamageStatsPopup extends IZCBattlePopup {
     readonly isOpen: boolean;
-    refresh(players: readonly IZCDamageStatsPlayer[]): void;
+    /** 战斗内实时刷新：数据按单位（卡）给，弹窗自己按我方 / 敌方分栏。*/
+    refresh(units: readonly IZCDamageStatsUnit[]): void;
 }
 
 /**
@@ -81,7 +76,11 @@ export interface IZCBattleRuntimeServices {
     };
     readonly popups: {
         openGuide(content: IZCGuidePreparedContent): Promise<IZCBattlePopup | null>;
-        openDamage(players: readonly IZCDamageStatsPlayer[]): Promise<IZCDamageStatsPopup | null>;
+        /**
+         * 战斗统计弹窗。`seats` 给敌方头像栏与默认选中（缺省 = 不画头像栏、
+         * 敌方列按「全部敌方合并」的老口径）。
+         */
+        openDamage(units: readonly IZCDamageStatsUnit[], seats?: IZCDamageStatsSeats): Promise<IZCDamageStatsPopup | null>;
         openRank(seats: ReturnType<typeof buildRankSeats>, profiles: RankSeatProfiles): Promise<IZCBattlePopup | null>;
         /**
          * 询问式确认框（`ui/common/CommonTips`）。

@@ -157,10 +157,10 @@ function compositionHarness() {
     };
 }
 
-test('真创建页只派发带来源的意图，render 按状态绝对赋值，不持有回调', () => {
+test('真创建页只派发意图，render 按状态绝对赋值，不持有回调', () => {
     const { LeagueCreatePage } = load<{ LeagueCreatePage: new () => ICreateViewHarness }>(PAGE_TS, pageImports());
     const view = makeView(LeagueCreatePage);
-    const events: Array<{ source: object; kind: string }> = [];
+    const events: Array<{ source: object | undefined; kind: string }> = [];
     const target = {};
     EventMgr.instance.on(LeagueCreateEvent.Intent, (event, source) => events.push({ ...event, source }), target);
     try {
@@ -172,7 +172,7 @@ test('真创建页只派发带来源的意图，render 按状态绝对赋值，�
         view.bannerList.onItemClickFn?.call(null, null, 3);
         view.costButton.emit('click');
         assert.deepEqual(events.map(event => event.kind), ['name', 'quickJoin', 'banner', 'submit']);
-        assert.ok(events.every(event => event.source === view));
+        assert.ok(events.every(event => event.source === undefined));
 
         view.render({ name: '新值', selectIndex: 5, quickJoin: false, cost: null, submitting: true });
         assert.equal(view.nameInput.string, '新值');
@@ -198,7 +198,7 @@ test('factory 只认创建页；一次打开一个控制器，关闭取消 calle
 
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
             kind: 'submit', name: '旧名', quickJoin: true,
-        }, view);
+        });
         assert.equal(h.costCalls.length, 2);
         h.costCalls[1].resolve(h.makeCost(true)); await flush();
         assert.equal(h.createCalls.length, 1);
@@ -217,7 +217,7 @@ test('factory 只认创建页；一次打开一个控制器，关闭取消 calle
 
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
             kind: 'submit', name: '新名', quickJoin: false,
-        }, view);
+        });
         h.costCalls[3].resolve(h.makeCost(true)); await flush();
         assert.equal(h.createCalls.length, 2);
         assert.equal(h.createCalls[1].name, '新名');

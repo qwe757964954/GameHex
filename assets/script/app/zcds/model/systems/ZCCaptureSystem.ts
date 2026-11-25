@@ -233,7 +233,12 @@ export class ZCCaptureSystem {
             const neighbors = this.map.hexes[queue[head]].neighbors;
             for (let index = 0; index < neighbors.length; index += 1) {
                 const neighborId = neighbors[index];
-                if (supplied.has(neighborId) || state.hexes[neighborId].owner !== owner) continue;
+                if (supplied.has(neighborId)) continue;
+                const neighbor = state.hexes[neighborId];
+                // 只能靠开发触发的中立资源可步行穿过，因此允许补给经过，资源仍由原流程领取。
+                if (neighbor.owner !== owner && (neighbor.owner !== 'neutral' || neighbor.building !== 'none'
+                    || !(neighbor.wallHp <= 0)
+                    || !requiresResourceClaim(neighbor, neutralResourceItemOf(neighbor.neutralResourceId)?.resourceType))) continue;
                 supplied.add(neighborId);
                 queue.push(neighborId);
             }
@@ -250,9 +255,8 @@ export class ZCCaptureSystem {
 
     private canBeCaptured(hex: ZCHexState, isMonsterTerritory: boolean): boolean {
         const type = neutralResourceItemOf(hex.neutralResourceId)?.resourceType;
-        if ((type === ZCNeutralResourceType.Monster && !isMonsterTerritory) || type === ZCNeutralResourceType.Horn) return false;
-        if (type === ZCNeutralResourceType.Extension && !hex.neutralFeature?.claimed) return false;
-        return hex.building === 'none' && hex.wallHp <= 0;
+        return hex.building === 'none' && hex.wallHp <= 0
+            && (type !== ZCNeutralResourceType.Monster || isMonsterTerritory) && !requiresResourceClaim(hex, type);
     }
 
     private reduceProgress(hex: ZCHexState, amount: number): void {
@@ -268,6 +272,11 @@ export class ZCCaptureSystem {
         hex.captureOwner = null;
         hex.captureSeconds = 0;
     }
+}
+
+function requiresResourceClaim(hex: ZCHexState, type: ZCNeutralResourceType | undefined): boolean {
+    return type === ZCNeutralResourceType.Horn
+        || (type === ZCNeutralResourceType.Extension && !hex.neutralFeature?.claimed);
 }
 
 function isActive(unit: ZCUnitState): boolean {

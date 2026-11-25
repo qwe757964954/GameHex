@@ -55,7 +55,7 @@ export const ROLE_NAV_NAMES: Readonly<Record<RoleNavId, string>> = {
  * ⚠️ 名字以 prefab 上烘的为准（规则 118）：`Role.prefab` 里 `NavMilitia` 写的是「天赋」，
  * 而 {@link ROLE_NAV_NAMES} 里那条沿用了 FGUI 的「民兵」—— 两处指的是同一个按钮。
  */
-export const ROLE_NAV_READY: ReadonlySet<RoleNavId> = new Set<RoleNavId>([2]);
+export const ROLE_NAV_READY: ReadonlySet<RoleNavId> = new Set<RoleNavId>([2, 3]);
 
 /** 构建导航条目（按 id 升序）。 */
 export function buildRoleNavs(): readonly IRoleNavEntry[] {
@@ -177,6 +177,26 @@ export function equipPartOf(
         quality: row.quality,
         gemCount: gems.length,
     };
+}
+
+/**
+ * 从 `CmdEquipPage.tlCmdEquip` 取某件装备的等级（按**装备 resId** 匹配）。
+ *
+ * ⚠️ `CmdEquip.equipId` 是装备 resId（真服实测 401111 段）；`CmdEquipItem.baseId`
+ * 是**初始装备部位 1..6**（见 `client_proto` 协议注释），两者不能混用。
+ * 同一 resId 多行时取最小非零（与 {@link buildEquipSlotPlan} 同口径）；查不到 = 0。
+ */
+export function equipLevelOf(rows: readonly unknown[] | null | undefined, resId: number): number {
+    let level = 0;
+    for (const raw of rows ?? []) {
+        const row = raw as Record<string, unknown> | null;
+        if (!row) continue;
+        if (numOf(row.equipId, 0) !== resId) continue;
+        const value = numOf(row.level, 0);
+        if (value <= 0) continue;
+        if (level === 0 || value < level) level = value;
+    }
+    return level;
 }
 
 // ============================================================

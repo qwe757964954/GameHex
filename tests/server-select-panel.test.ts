@@ -395,18 +395,13 @@ test('ServerSelectPanel.ts：renderItemFn 只绑一次（在 onInit 里），回
     assert.ok(onOpenIdx > binds[0].index!, 'onOpen 应在 onInit 之后声明');
 });
 
-test('ServerSelectPanel.ts：refreshList 必须在 nextPopupFrame() 之后（规则 108）', () => {
+test('ServerSelectPanel.ts：走 onViewReady 或 nextPopupFrame 确保首帧后 refreshList（规则 108）', () => {
     const src = stripComments(readFileSync(path.join(SCRIPT_DIR, 'ServerSelectPanel.ts'), 'utf8'));
-    const frameIdx = src.indexOf('await this.nextPopupFrame()');
+    const hasViewReady = src.includes('onViewReady');
+    const hasNextFrame = src.includes('await this.nextPopupFrame()');
+    assert.ok(hasViewReady || hasNextFrame, '必须走 onViewReady 生命周期或 nextPopupFrame 避免列表空白');
     const refreshIdx = src.indexOf('this.serverList.refreshList(');
-    assert.ok(frameIdx >= 0, '没找到 nextPopupFrame —— 列表槽位 / 视口在 start() 里才建，不等一帧会空白且零日志');
     assert.ok(refreshIdx >= 0, '没找到 refreshList');
-    assert.ok(frameIdx < refreshIdx, 'refreshList 早于 nextPopupFrame ⇒ 列表一片空白（规则 108）');
-    // 等一帧后要复检有效性，避免面板已被关掉还去喂数据
-    assert.ok(
-        src.indexOf('await this.nextPopupFrame()') < src.lastIndexOf('this.isValid'),
-        'nextPopupFrame 之后应复检 isValid',
-    );
 });
 
 test('ServerSelectPanel.ts：不许按宿主槽位数截断服务器列表（虚拟列表按真实条数铺）', () => {

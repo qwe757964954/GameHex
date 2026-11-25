@@ -23,7 +23,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 import {
     ITEM_INFO_PANEL_HEIGHT,
@@ -52,6 +52,8 @@ const REWARD_ITEM_PREFAB_META = `${REWARD_ITEM_PREFAB}.meta`;
 const ITEM_INFO_PAGE_SRC = 'assets/script/app/itemdetail/ItemInfoPage.ts';
 const CARD_UPGRADE_PAGE_SRC = 'assets/script/app/card/CardUpgradePage.ts';
 const ART_DIR = 'assets/bundles/main-pages/image/iteminfo';
+/** 图1（旧 ItemDetail）的切图目录；仍被服务器选择等界面复用，但 ItemInfo 不允许再引用。 */
+const ITEM_DETAIL_ART_DIR = 'assets/bundles/main-pages/image/itemdetail';
 
 const UI_2D = 33554432;
 
@@ -231,6 +233,23 @@ test('D2 ItemInfoPage 的 7 个 Inspector 引用全部非空且类型正确', ()
     assert.equal(prefab[(page.rowsRoot as { __id__: number }).__id__].__type__, 'cc.Node');
 });
 
+test('D2b ItemInfo 只保留图2字段，旧 ItemDetail 的缎带/数量/双箭头版面不能回潮', () => {
+    const prefab = readPrefab(ITEM_INFO_PREFAB);
+    const root = nodeByName(prefab, 'ItemInfo');
+    const page = componentsOf(prefab, root).find((comp) => 'rowsRoot' in comp && 'nameLabel' in comp);
+    assert.ok(page);
+
+    for (const legacy of ['titleBg', 'goods', 'qualityText', 'countText', 'descText', 'accessList']) {
+        assert.equal(legacy in page, false, `ItemInfoPage 又挂回了旧 ItemDetail 字段 ${legacy}`);
+    }
+
+    const prefabText = readFileSync(ITEM_INFO_PREFAB, 'utf8');
+    for (const metaName of readdirSync(ITEM_DETAIL_ART_DIR).filter((name) => name.endsWith('.png.meta'))) {
+        const uuid = (JSON.parse(readFileSync(`${ITEM_DETAIL_ART_DIR}/${metaName}`, 'utf8')) as { uuid: string }).uuid;
+        assert.equal(prefabText.includes(uuid), false, `${metaName} 属于图1切图，ItemInfo 不应引用`);
+    }
+});
+
 test('D3 物品格用公共 RewardItem：Goods 只是 100×100 宿主，Prefab 引用指向公共格', () => {
     const prefab = readPrefab(ITEM_INFO_PREFAB);
     const goods = nodeByName(prefab, 'Goods');
@@ -355,7 +374,7 @@ test('E3 页面只派发/只打开弹窗，不自己写文案；入口先判 exp
     assert.match(source, /if \(this\.expItemId <= 0\) return;/, '图标没铺出来时不该拿旧道具开详情');
     assert.match(source, /ItemInfoPage\.open\(/);
     // 经验图标那一趟必须把「当前显示的道具」回填（否则点开的是上一件）
-    assert.match(source, /onPick\?\.\(entry\)/);
+    assert.match(source, /this\.expItemId = exp \? Number\(exp\.itemId\) : 0;/);
 });
 
 test('E4 页面不硬编码展示文案（只允许 Inspector 的 group/tooltip 用中文）', () => {

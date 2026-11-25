@@ -32,6 +32,9 @@
 | 战斗飘字「快进慢出」与收尾漂移 | `ZCFloatTextView` / `floatTextEntrance`、`floatTextFade`、`floatTextDrift` | `tests/zcds-float-text-gold-icon.test.ts`、`tests/zcds-progress.test.ts` |
 | **伤害飘字的纵向方向**（我方造成向上飞 / 挨打向下坠，镜像同距，2026-11-23，见 §6.5） | `ZCFloatTextView.damageTravelSign` / `dealtByPlayer`、`takenFromPlayer` | `tests/zcds-damage-float-text.test.ts` |
 | **头像列可以填直路径**（key 优先、落空按路径拆；打表统一 `icons/cardHead`，2026-11-23，见 §38） | `HeadArtModel.iconArtTargetOfPath` / `createIconArtResolver` / `tools/config/sync_monster_head_icon.py` | `tests/card-head-icon.test.ts` |
+| **战斗统计面板：开局铺满阵容 / 数值降序 / 敌方头像切换**（2026-11-24，见 §41） | `ZCDamageStats.compareDamageStatsRows` / `buildDamageStatsColumns`（第三参 `enemyOwner`）/ `ZCBattleRuntimeController.damageUnits`（补阵容）/ `GameRunAway.prefab` 的 `EnemySeats` | `tests/zcds-damage-stats.test.ts`、`tests/zcds-settlement.test.ts`、`tests/battle-runtime-controller.test.ts` |
+| **结算页 MVP 徽标坐标归 prefab**（自适应「推徽标」会把徽标拽回旧坐标，2026-11-24，见 §42） | `ZCSettlementMvpActor`（只摆立绘，不碰 `MvpBlock` 其它子节点）/ `ZC_SETTLEMENT_STYLE.mvpArt.maxHeadTopInBlock` / `ZCSettlement.prefab` 的 `MvpBlock` | `tests/zcds-settlement-page.test.ts` |
+| **伤害统计的柱子 = 占全队总量的占比**（分母从「列内最大值」改成「该席位全队合计」，2026-11-24，见 §43） | `ZCDamageStats.damageStatsBarRatio(value, total)` / `buildDamageStatsColumns` 的 `totalOwn` / `totalEnemy` / `RunAwayUnitItem.render(value, total, …)` | `tests/zcds-damage-stats.test.ts`、`tests/zcds-settlement.test.ts` |
 | 开局归属扩散波 | `ZCClaimWave` / `buildClaimWavePlan`、`ZCHexView.setClaimWave` | `tests/zcds-territory-claim-wave.test.ts` |
 | 胜利结算三段式扫场（铺场/回正/脉冲） | `ZCVictorySweep` / `zcDeepFactionColor`、`setSweepOwner`、`appendHexPulseOutlineSegments` | `tests/zcds-progress.test.ts`、`tests/zcds-outline-layer.test.ts` |
 | **废墟地块底色按归属方混合灰**（2026-10-29） | `ZCTheme.zcRuinsFactionColor` / `ZCHexView.territoryTint`（`ZCHexView.TERRITORY_FILL_ALPHA`） | `tests/zcds-ruins-tile-color.test.ts` |
@@ -60,7 +63,7 @@
 | **固定宝箱格可激活 ⇒ 价格行之上加一颗宝箱 icon**（`icon_baoxiang` 58×45，宝箱在上、`银币+数字`在下、整块居中；无宝箱时零偏移；未解锁仍只画锁；2026-11-10） | `model/TerritoryConditionBadge.territoryConditionBlockLayout` / `TerritoryStationView.applyConditionChest`、`applyCaptionPlacement`、`readCaptionIconHeight` / `TerritoryMapView.stationRenderOf`（`conditionChestIcon`，只给 `fixedResource`）/ `TerritoryPageAssets.chestIcon` | `tests/territory-condition-chest.test.ts` |
 | **银币宝箱独立打开动画**（`1023` / `coinBox` ⇒ icon `1→1.3→0` 原地 pop；**不复用** `chest_seq_*` 三档开箱；奖励当场结算不挂动画回调；2026-11-10） | `model/TerritorySilverChestOpen.territorySilverChestIconPop` / `model/TerritoryMapConfig.TERRITORY_SILVER_CHEST_REWARD_ID` / `TerritoryModel.handleUnlockThenPass`（`silverChest: true`）/ `MainTerritoryMap.presentRewards` / `TerritoryMapView.playSilverChestOpen` / `TerritoryStationView.playSilverChestIconPop`、`stepSilverChestPop` | `tests/territory-silver-chest-open.test.ts` |
 | **碎片 / 种族经验飞向底部「英雄」按钮 + 碎片进度长满徽标**（钱包 `7/9` 仍飞资源栏；固定格改落点、随机格补飞行、英雄按钮先 Y 后 X 受击抖动；徽标仅本次新达成、从当前比例长到 100%、多英雄按 `sortLineupCards` 串行；2026-11-10） | `model/TerritoryHeroReward`（`isTerritoryHeroRewardResId` / `territoryHeroFlightFx` / `territoryHeroBadgeFrame` / `detectTerritoryHeroBadges`）/ `view/TerritoryHeroFlight` / `TerritoryMapView.setHeroRewardTargetWorld`、`playHeroRewardFlight` / `MainTerritoryMap.wireRewardCatch`、`playCellGains`、`playHeroBadges`、`findHeroTabButton` / `common/TabButton.playHitFeedback` / `main/HeroFragmentBadge` / `bootstrap/main/TerritoryHeroProgressSource`（`MainPageComposition.mountTerritory` 注入） | `tests/territory-hero-reward.test.ts`、`tests/territory-chest-animation.test.ts`、`tests/tab-button.test.ts` |
-| **巡逻宝箱升级摇奖 + 守护怪头像**（点阵让位给「绿=成功率 / 灰=失败」进度条，黄条来回滑、停绿区=成功；总时长 2.2s、落点等回包；守护怪读 `levelInfo.levelMonsterGroup` → `monsterCard.headIcon` 取 3 格头像；2026-11-22，见 §3.53） | `model/TerritoryMonsterBoxRoll`（`monsterBoxRollPose` / `monsterBoxRollTarget`）/ `model/TerritoryCampaignConfig.readTerritoryGuardMonsters` / `model/TerritoryMonsterBoxDetail`（`guards[].headIcon` · `upgradeAttempt`）/ `application/TerritoryModel.noteMonsterBoxAttempt` / `view/TerritoryMonsterBoxPanel`（`startRoll` / `update` / `applyRollPose` / `ensureRollMarker`）/ `MainTerritoryMap.prefillMonsterBoxGuardIcons` / `TerritoryMonsterBoxPanel.prefab`（`UpgradeProgress` · `Percent` · `Bar` · `BarBg`） | `tests/territory-monster-box-roll.test.ts`、`tests/territory-monster-box-guards.test.ts`、`tests/territory-monster-box-detail.test.ts` |
+| **巡逻宝箱升级摇奖 + 守护怪头像**（空星槽里虚影呼吸（周期 0.4→0.833s）+ 宝箱**原地 7Hz 颤动**（水平 ±4 / 垂直 ±2 / 缩放 ±8%）+ 逐渐叠纯白；**成功顿 5 帧再换图**、**失败减速泄劲**；落点等回包、最短演满 1.2s；结果 toast 挂**演完**；守护怪读 `levelInfo.levelMonsterGroup` → `monsterCard.headIcon`；2026-11-24 三轮改版，见 §3.53） | `model/TerritoryMonsterBoxRoll`（`monsterBoxPulseAt` / `monsterBoxShakeXAt` · `YAt` · `ScaleAt` / `monsterBoxRollPose`）/ `model/TerritoryCampaignConfig.readTerritoryGuardMonsters` / `model/TerritoryMonsterBoxDetail`（`guards[].headIcon` · `upgradeAttempt`）/ `application/TerritoryModel`（`noteMonsterBoxAttempt` / `notifyMonsterBoxRollSettled`）/ `view/TerritoryMonsterBoxPanel`（`startRoll` / `update` / `applyRollPose` / `prepareStarGhost` / `ensureChestWhite` / `notifyRollSettled`）/ `TerritoryDetailCoordinator.monsterBoxContentOf`（`whiteMaskMaterial`）/ `MainTerritoryMap.prefillMonsterBoxGuardIcons` | `tests/territory-monster-box-roll.test.ts`、`tests/territory-monster-box-prefab-refs.test.ts`、`tests/territory-monster-box-guards.test.ts`、`tests/territory-monster-box-detail.test.ts` |
 | 🔴 **异步 PVP 战斗结束「掉落宝箱获得」动画**（一枚 `hud_chest` 带**三角形拖尾**沿二次贝塞尔弧线从地图胜利格心飞进 `BottomHud/ChestEntry`；飞入后目标 icon 抖「先 Y 后 X」、最后一颗绿点**落地那一拍**才点亮。🔴 11-23 修：触发只认 `victoryBattleCells`（战斗结算存档的一次性边沿），**不认** `victoryClaimCells` —— 服务端 `passCells` 先落 owned ⇒ `startExplore` 被拒 ⇒ 本地零收地，旧口径恒空导致动画静默消失；格心必须在 `scrollToCell` 之后量。回城是全量重拉队列，没有「本次新增一个」的增量信号；绿点用 `chestDropPending` 闩压住，别让数据先亮。11-23 深夜加固：`play()` 返回 true 才落「已播过」的闩；控制台留 5 条 `[ChestDrop]` 排障锚点（哪行出现 = 卡在哪环，见 §3.54 七）。2026-11-22，见 §3.54） | `main/ChestDropFlight`（`chestDropFlightFrame` / `chestDropTrailQuads` / `chestDropHitScale`）/ `main/ChestDropFlightView` / `MainPage.onChestDropFlight`、`tryStartChestDrop`、`onChestDropLanded`、`renderChests` / `MainTerritoryMap.emitChestDropFlight` / `TerritoryMapView.cellWorldPoint` / `ChestEvents.DROP_FLIGHT` / `TerritoryModel.applyStoredBattleResult`、`victoryBattleCells` | `tests/chest-drop-flight.test.ts`、`tests/chest-drop-flight-trigger.test.ts` |
 | **宝箱详情主按钮加速态**（绿底 `btn_speed_up` + 播放 icon `chest_bolt`；解锁 / 开启仍黄色；**点解锁后整颗按钮同步刷新**，不再只刷倒计时；2026-11-11） | `ChestDetailPanel.applyOpenButton`（唯一写入口）/ `updateCountdown(秒, 计时中, {caption, speedUp})` / `MainPage.chestDetailContentOf`（`openSpeedUp`）、`refreshChestDetailCountdown`、`loadTreasureQueue`（回调改 `refreshTreasureDisplay`）/ `tools/gen_chest_speed_up_button.py`、`tools/patch_chest_detail_speed_up_prefab.py` | `tests/chest-detail-speed-up.test.ts`、`tests/chest-detail-panel.test.ts`、`tests/chest-detail-lifecycle.test.ts` |
 | **预告关卡红色编号气泡 + 异步据点解锁即直开**（预告整关 footprint 只给**虚影承载格**挂一颗红 `frame_02`；气泡按虚影帧抬高，未解锁仍是锁/价格；`asyncPvp` 并入「花银币解锁那一次直开」，已解锁仍弹侦查面板；2026-11-11） | `TerritoryMapView.stationRenderOf`（`isPreviewBattleSite` / `previewBubble` / `levelBubbleAnchorFrame`）/ `TerritoryStationView.renderLevelBubble`、`previewAnchorScale`、`applyLevelBubblePosition` / `TerritoryModel.selectSite`、`isAutoStartSite` / `tools/patch_territory_preview_bubble.py` | `tests/territory-preview-bubble.test.ts`、`tests/territory-presenter.test.ts`、`tests/territory-boss-and-random-building.test.ts`、`tests/territory-chest-bubble.test.ts` |
@@ -5009,44 +5012,102 @@ diff 只有 5 条「基线独有」（新口径用例在旧判据下的预期红
 > 整个动画的总时间为 2.2s）；2. 守护怪要读取 `levelInfo.json` 中的 `levelMonsterGroup` 字段，
 > 展示对应 id 的头像 `headIcon`。」
 
-#### 一、摇奖动画（2.2s，曲线在 `model/TerritoryMonsterBoxRoll`）
+#### 一、摇奖动画（2026-11-24 改版：空星槽虚影 + 宝箱变白）
+
+> 11-22 初版是「绿灰进度条 + 黄竖条在条上来回滑、停在绿区 = 成功，2.2s」，**11-24 整块替换**。
+> 用户原话：「删除旧的进度条升级动画，替换成新动画：空的星星槽位里有星星虚影闪烁 + 放大缩小，
+> 持续 1.2~2.5s，越接近成功时间就越久；星星闪烁伴随宝箱左右晃动的动画，同时宝箱逐渐叠加
+> 纯白色（越来越白），升级成功从白色变成下一等级的宝箱，颜色逐渐过渡回来」。
+> 确认口径（三选一）：**1.2~2.5s = 单次呼吸周期从 1.2s 逐渐拉长到 2.5s**（越接近出结果越慢），
+> 整段时长仍等回包、但最短演满 1.2s；变白走**纯白剪影叠层**；旧进度条**整块删除**。
+> 当天晚些又改了两轮（都只调 `TERRITORY_MONSTER_BOX_ROLL` 常量，曲线形状不变）：
+> ① 傍晚「摇晃节奏和星星缩放的节奏要加强」⇒ 幅度加大；② 夜里「宝箱抖动是**原地**的抖动，
+> 不是明显的左右挪，快速的原地抖动（轻微左右 3px + 明显的缩放 + 轻微的跳动/震动），**星星闪烁
+> 频率再快 3 倍**，大小略大 15%」⇒ 呼吸周期整体 ÷3、振动改成 7Hz 三通道并与呼吸**解耦**、
+> 虚影缩放整体 ×1.15；③ 同一晚再追加「升级成功和失败要有小区分：失败节奏逐渐变缓，成功则在纯白
+> 时顿 3 帧（可按判断延长）再变化」，并要求**两侧都弹通用系统提示** ⇒ 成功加 `pausing` 顿帧、
+> 失败加时间膨胀减速，结果 toast 从回包挪到**演完**（见下面「结果提示」一条）。
+
+曲线仍只在 `model/TerritoryMonsterBoxRoll`（零 `cc`、15 条用例）。
 
 | 段 | 时长 | 说明 |
 | :--- | :--- | :--- |
-| 滚动 | 1.5s | 黄条按 `cycleSeconds = 0.75` 正弦往返（正好 2 个来回，收在左端） |
-| 滑落 | 0.5s | 缓出到落点（成功落绿区 55% 处、失败落灰区正中） |
-| 定格 | 0.2s | 仍让位给进度条，让玩家看清停在哪 |
+| 呼吸 / 颤动 / 变白 | `max(1.2s, 回包时刻)` | 虚影在下一个空槽放大缩小 + 明暗呼吸（周期 0.4 → 0.833s）；宝箱**原地 7Hz 颤动**：水平 `±4` 逻辑 px（屏上 ≈3px）+ 垂直 `±2` 跳动 + 缩放 `1±0.08`；白色叠层 0→1 |
+| **成功**：顿 | 0.08s（≈5 帧） | 最白 + 姿势冻结，**不换图**（`phase = 'pausing'`） |
+| **成功**：换图 + 褪白 | 0.45s | 换下一等级宝箱图、白色 1→0 缓出 |
+| **失败**：减速褪白 | 0.65s | 不换图；相位被时间膨胀拖慢（越走越慢）+ 幅度衰减 ⇒ 节奏逐渐变缓 |
+| 定格 | 0.15s | 收尾（虚影归位、按钮解禁） |
 
-- 🔴 **三件套时间必须相加 = `durationSeconds = 2.2`**：改节奏漏改一项，动画会提前/延后收尾
-  （`tests/territory-monster-box-roll.test.ts` 第一条用例就是这条等式）。
-- 🔴 **绿色占比恒等于成功率**（`fillRange = rate`），全程不变 —— 它代表概率，不是进度；
-  变了下一次点之前玩家会误读成功率。黄条位置才随帧走。
-- 🔴 **落点必须落在对应区**：成功 `rate × 0.55`、失败 `rate + (1-rate) × 0.5`。
-  成功率 0% / 100% 时另一侧没有宽度 ⇒ 退回 `0.5`（`0%` 还报成功属于服务端与配置不一致，
-  宁可在中间露馅，也不要假装落进不存在的区）。
+- 🔴 **呼吸周期只增不减**：`period(t)` 从 `pulseFastSeconds = 0.4` 线性涨到 `pulseSlowSeconds = 0.833`
+  （`pulseRampSeconds = 0.6` 内，整条时间轴 = 初版 1.2 / 2.5 / 1.8 的 ÷3），相位取**积分**
+  `∫dt/period(t)`（闭式解 `ln(1 + k·t/p0)/k`）。直接写 `t / period(t)` 会在周期拐点让星星「跳一下」；
+  周期反向变快会被玩家读成「快出结果了」而骗人（用例逐段比较整周期递增）。
+- 🔴 **等结果期间白度只涨不落**：`whitenSeconds = 1.2` 爬到 1 后保持 —— 回包再慢也是「一直最白」，
+  不许因为等得久又白回去。
+- 🔴 **虚影用点亮的金星图、不新增美术**：节点 `StarGhost` 运行时建在 `LevelStars` 下，位置照抄
+  `StarOff[lv]`（下一个空槽），`UIOpacity` 在 `ghostMinOpacity = 35 ~ ghostMaxOpacity = 170`
+  之间随 `pulse` 呼吸，缩放 `0.805 ~ 1.495`（摆幅 ±30%，整体比初版 `0.7~1.3` 大 15%）。
+  **别用空槽的暗星图**（压在暗星上闪不出来）。
+- 🔴 **宝箱是「原地颤动」不是「左右挪」**（11-24 夜用户口径）：三通道各管一件事 ——
+  `shakeX` 水平 `±4` 逻辑 px（7Hz，`sin(u)`）、`shakeY` 垂直 `±2`（`sin(2u)`，走「8」字轨迹）、
+  `shakeScale` 缩放 `1 ± 0.08`（`sin(u)`，与水平同相）。**位移轻、缩放重**：宝箱约 90px 宽，
+  ±8% 让边缘走 ±7px，远大于水平的 4px —— 这才是「抖动」的力感来源；水平幅度一回到两位数
+  就变成用户明确否掉的「左右挪位」。三条都从 0 / 1 起手（`flutterPhase` 脏输入归零），
+  点下去不会「跳一下」。
+- 🔴 **振动与呼吸解耦**：`shakeHz = 7` 恒定（0.143s 一个来回，60fps 约 8.6 帧/周期），
+  不再由 `monsterBoxPulsePhaseAt` 推 —— 呼吸只剩 1.2~2.5Hz，挂在一起就是「慢慢歪」。
+  频率上限别超过 10Hz：缩放通道会频闪。落定后三者按 `release` 一起收敛（缩放收向 **1** 不是 0）。
+- **「劲」不许回调弱**：用例 `★★宝箱原地快速震动`（起手归零 / 水平 ≤5 / 缩放 ≥±5% / `shakeHz ≥ 5`）、
+  `★★震动手感`（1s 内换向 ≥8 次、缩放带来的边缘位移 > 水平位移）、`★虚影整体放大 15%`
+  （摆幅 ≥0.6、中位 ≈1.15）守住下限。
+- 🔴 **变白 = 纯白剪影叠层**：`ChestWhite` 是 `ChestModel` 的运行时子节点，同 `spriteFrame` +
+  `customMaterial = art.monsterOutlineMaterial`（巡逻怪描边的 `shaders/unit-outline-copy`：
+  **只采样 alpha、输出顶点色** ⇒ 白 tint 就是纯白剪影），`UIOpacity` 跟 `whiten`。
+  **`Sprite.color` 是乘算、拉不到纯白** —— 别再试「把 `chestSprite` 染白」。
+  材质缺省（老章节没加载那份 shader）⇒ 整层不建，只演呼吸与颤动（降级不崩，也不建一张同色复制品）。
+- 🔴 **成功 / 失败要有「小区分」**（11-24 夜用户口径）：
+  **成功 = 顿一下再换** —— 到最白那一帧起 `successFreezeSeconds = 0.08` 内 `phase = 'pausing'`，
+  姿势与白度全部冻结、`revealing` 仍为 `false`（这一拍绝不换图），顿完才换图 + 褪白；
+  **失败 = 慢慢泄劲** —— 没有顿，落定即进 `revealing`，但相位走**时间膨胀**
+  `x → x − x²/(2·failFadeSeconds)`（瞬时速度 ∝ `1 − x/fade`，末速为 0），叠上幅度衰减 ⇒
+  相邻换向间隔递增（实测 0.078 → 0.090 → 0.113 → 0.174s）。收尾时长失败 `0.65s` > 成功 `0.45s`，
+  但别超过成功两倍（会像卡住）。用例 `★★成功后先「顿」`、`★★失败：…没有「顿」那一拍`、
+  `★★失败节奏逐渐变缓`。
+- 🔴 **顿的时长只认 `successFreezeSeconds`**：用户给的是「3 帧」，60fps 下只有 50ms、读不出停顿 ⇒
+  取 5 帧（0.08s）。**改这一个常量就能调顿感**，别在视图里另加 `scheduleOnce`。
+- 🔴 **换图只切一次**：`pose.revealing` 在成功落定那一刻变 true，视图用 `roll.revealed` 闸住；
+  换图后立刻 `syncChestWhite()` 让白层跟新图 —— 否则白层还是上一张，褪白时会「露出旧宝箱」。
+- 🔴 **结果提示挂在「演完」，不挂在回包**：回包 100~300ms 就到，动画要 1.2s + 顿 + 褪白 ⇒
+  回包那一刻弹 toast 等于**剧透**（玩家还没看到换图就知道成了）。分工：面板 `finishRoll()` /
+  `abortRoll()` 发 `monsterBoxRollSettled { cellId }`（只报「这一格演完了」），
+  `TerritoryModel.notifyMonsterBoxRollSettled` 按 `monsterBoxAttempt` 取文案 ——
+  失败 `monsterBoxUpgradeFailed`、成功优先 `monsterBoxUpgraded(lv)`（读快照里该格等级），
+  快照里还没这格时退回 `monsterBoxUpgradeSucceeded`（**不本地 `lv + 1`、不猜**）。
+  错误包（`CmdTips`）已经说过原因时 `silentWriteTip` 那一刻早已复位 ⇒ 用
+  `monsterBoxTipSuppressed` 在 `noteMonsterBoxAttempt` 时把它记下来，演完不再补第二条。
+  用例 `★★ 升级结果提示挂「演完」而不是回包`（意图类型 / Controller 分支 / 面板收尾发 /
+  回包段内不得出现结果 `showTip`）。
 - 🔴 **动画从点击起演、落点等回包**：`startRoll` 在 `handleUpgrade` 里先跑，`applyContent` 收到
-  `upgradeAttempt` 才把结果交给播放态。回包在 1.5s 内到 ⇒ 总时长恒 2.2s（玩家无法靠「演得久」猜结果）；
-  **更晚到 ⇒ 黄条继续按同一周期滚、落点顺延**（停住等网络＝看着卡死，先演再改＝演出相反结论）。
-- **播放期间不接整块重绘**：回包会带来新等级，直接重绘会把进度条拆回点阵。
+  `upgradeAttempt` 才把结果交给播放态。回包早于 1.2s ⇒ 落定在 1.2s（最短演满，玩家无法靠
+  「演得短」猜结果）；更晚到 ⇒ 继续呼吸、落点顺延（停住等网络＝看着卡死，先演再改＝演相反结论）。
+- **播放期间不接整块重绘**：回包会带来新等级，直接重绘会把刚换上的宝箱拆回旧等级。
   内容先落 `pendingContent`，演完 `finishRoll()` 一次性重绘（按钮也在同一拍解禁）。
 - 🔴 **结果只认「序号更大」**：`ITerritoryMonsterBoxAttempt.seq`（Model 每次升级 +1）。
   少了这条，玩家「失败 → 再点」时上一轮 `attempt` 还在内容里，新动画会立刻以旧结果落定
   （观感「点了没演就失败」）。
+- `upgrading`（服务端下发的升级中态、没有本地开演时刻）⇒ 星槽静止、按钮置灰，
+  **不再画静态进度条**；`content.upgradeProgress` 字段保留但面板不读。
 
 #### 二、prefab 改动（`ui/territory/TerritoryMonsterBoxPanel.prefab`）
 
 | 节点 | 改动 | 理由 |
 | :--- | :--- | :--- |
-| `UpgradeProgress` | `(89, 240)` → `(0, 190)` | 原位置压在 ChestModel 上；点阵那一行才是它的替身 |
-| `Percent` | `(0, 30)` → `(170, 190)` | 默认位置撞 ChestModel；条右侧空着，成功率文字放这最省地方（下方 160 会压 `GuardTag`） |
-| `BarBg` | 颜色 `(120,100,80)` → 灰 `(150,150,150)`、`_type` SIMPLE→SLICED | 「底框灰色」+ `cu_9g_bar_01_bg` 本来就是九宫格底槽，SIMPLE 会拉糊 |
-| `Bar` | 颜色 `(245,201,92)` → 绿 `(92,211,79)`、`_fillRange` `0.38`→`1` | 绿 = 成功率填充（`bar_white` 纯白，染色即可） |
+| `UpgradeProgress` 整棵（`BarBg` / `Bar` / `Percent` / `RollMarker` / `Arrow`） | **删除**（23 个序列化对象；`Panel._children` 与面板 4 个字段同步移除，其余 `__id__` 整体重映射） | 11-22 的进度条方案已被 11-24 取代，留着会变成第二套并存的动画 |
+| `ChestModel` / `LevelStars` | 不动 | 白层与虚影都是这两处的**运行时**子节点 |
 
-🔴 **黄条（`RollMarker`）运行时建、不进 prefab**：复用 `Bar` 的贴图染色成
-`TERRITORY_COLORS.gold` —— 不为一根竖条多占一张图，也就不会出现
-「忘了登记分包目录 ⇒ 运行时 SpriteFrame 为空、黄条永不出现」。两点必须写对：
-`new Sprite` 显式 `sizeMode = CUSTOM`（默认 `TRIMMED` 会按 91×18 铺成横杠）、
-节点挂在 `progressRoot` **最后**（渲染序 = 兄弟序，否则被 `Bar` 盖住）。
+🔴 删节点必须**同步删面板字段**（`progressRoot` / `progressBar` / `progressLabel` / `rollMarker`）：
+只删节点会让 `@property` 悬空（Inspector 显示 `Missing`），只删字段会留死节点。
+`tests/territory-monster-box-prefab-refs.test.ts` 两条用例双向钉住（节点没了 / 字段没了 / 两个锚点还在）。
 
 #### 三、守护怪头像（`levelMonsterGroup` → `headIcon`）
 
@@ -5071,20 +5132,51 @@ monsterBox.monsterBoxLevel（这一级打哪关）
 - 缺图不阻断：`headIcon` 为空 / 查不到 ⇒ 保留 prefab 占位图，并把 key 记进
   `monsterBoxGuardIcons` 缓存（含 `null`）停止重试，不把格子藏起来（藏了与「未解锁」同形）。
 
-#### 四、判据
+#### 四、锁定态样式（2026-11-24）
 
-- `tests/territory-monster-box-roll.test.ts`（10 条）：总时长等式 / 落区 / 绿占比恒等 /
-  回包迟到顺延 / 滑落连续与缓出 / 脏输入不越界。
+> 用户原话：「4 级解锁文案写在 icon 下方（同数量 UI 对齐）；锁 icon 居中显示，提前披露出具体的
+> 怪物样式 icon，不用纯色的底」。
+
+| 项 | 旧 | 新 |
+| :--- | :--- | :--- |
+| 卡底 | 锁定换成深棕 `LockBg` 纯色底 | **删掉 `LockBg`**（3 个节点 + 组件字段 + 测试断言），锁定也用米黄 `CardBg` |
+| 头像 | 锁定 `active = false`（只剩纯色底） | **锁定也画**（提前披露是哪只怪） |
+| 锁标 | `y = 26`（压在头顶） | `y = 0`（压在头像正中） |
+| 解锁文案 | `y = -10`（格子内、白字 19px） | `y = -62`（与 `CountLabel` 同一行、同色、同宽 108） |
+
+- 🔴 **头像开节点条件 = `guard.unlocked || guard.icon !== null`**：已解锁恒开是沿用旧行为（图晚到时
+  不会先闪一下空）；未解锁没图就关，免得槽位复用时串上一只怪。
+- 🔴 **解锁文案与数量共用一行、互斥显示**（`unlockText` 为空 = 已解锁 ⇒ 显示数量），所以可以同位置；
+  但**颜色必须是深棕 `(103,70,56)`** —— 旧版白字是给深棕底配的，换到米黄底会看不清。
+- 数据侧不动：`buildTerritoryMonsterBoxDetail` 对未解锁的格**同样给 `headIcon`**（只有 `countText`
+  是空串），`prefillMonsterBoxGuardIcons` 也不按 `unlocked` 过滤 ⇒ 头像会提前取好。
+
+#### 五、判据
+
+- `tests/territory-monster-box-roll.test.ts`（15 条）：呼吸周期只增不减 / 虚影取到两端 /
+  原地颤动三通道（起手归零 / 水平轻微 / 缩放明显 / 频率 ≥5Hz）/ **震动手感**（缩放比位移显眼）/
+  **虚影整体 ×1.15** / 等结果时白度只涨不落 / 落定 = `max(1.2s, 回包)` /
+  **成功后先「顿」**（冻结 + 不换图）/ 成功换图后白度 1→0 缓出 / **失败不换图且没有顿那一拍** /
+  **失败节奏逐渐变缓**（换向间隔递增）/ 迟到顺延 / 接口处不跳 / 脏输入不越界。
+- `tests/territory-monster-box-prefab-refs.test.ts`（6 条）：进度条节点与面板字段都已移除、
+  `ChestModel` 与 4 组 `StarOn/StarOff` 仍在、`LockBg` 已删、锁 `y = 0`、
+  解锁文案与数量同 y 同色。
+- `tests/territory-monster-box.test.ts`（14 条，除仓储/协议外新增 1 条）：**结果提示挂「演完」**——
+  意图类型、Controller 分支、面板 `finishRoll` 先发 `settled` 再清 `roll`、回包段内不得出现结果 `showTip`。
+- `tests/territory-monster-box-guard-slot.test.ts`（4 条，沙箱跑真实组件）：锁定也画头像、
+  解锁后锁收起、锁定没图只收图标、空格整格隐藏。
 - `tests/territory-monster-box-detail.test.ts`（+4 条）：守护怪头像按当前等级那关取、
   组配置缺失时退回静态关、无配置给空串、`upgradeAttempt` 原样透传。
 - `tests/territory-monster-box-guards.test.ts`（4 条，**真表**）：70 个巡逻关卡都有 ≥3 只守护怪、
   每只都能查到 `headIcon`、`headIcon` 能在 `icon.json` 解析且资源文件在盘上、
   `levelMonsterGroup` 脏条目只丢那一条。
-- 回归：`tests/territory-monster-box*.test.ts` 48 绿；
+- 回归（2026-11-24）：`tests/territory-monster-box*.test.ts` **66 绿**（成功顿帧 / 失败减速 / 演完弹 toast 之后；同日编辑器重存 prefab 把一处 `UnlockLabel` 颜色冲回白色，已补回）；
   `territory-presenter-battle` / `territory-level-tip-icons` / `territory-patrol-chests` /
-  `territory-two-step-render` 合跑 61 绿；`npx tsc --noEmit` 6 条全在本轮未改的
-  territory 文件（`TerritoryProjection` / `TerritoryHexStagger` / `TerritoryProgress` /
-  `TerritoryCloudView`），改动文件零报错。
+  `territory-two-step-render` 合跑 60 绿 / 1 红（红的是 `territory-presenter-battle` 的
+  「流程接手时收掉关卡界面」：把本轮加的 `whiteMaskMaterial` 一行临时撤掉后**同样失败**，
+  与本批无关，属工作区既有状态）；`npx tsc --noEmit` 25 条全在本轮未改的文件
+  （`role/*`、`TerritoryProjection`、`TerritoryProgress`、`TerritoryCloudView`、`ZCUnitTargeting`），
+  改动文件零报错。
 
 ### 3.54 异步 PVP 战斗结束：掉落宝箱获得动画（2026-11-22）
 
@@ -5749,6 +5841,18 @@ Creator 的规则是「被多个包引用时，资源存进**优先级高**的�
 - 运行控制器在已有静态刷新节奏（0.15 秒）推送本局模型统计，只刷新已打开窗口；异步加载完成时立即追平最新统计。关闭后停止刷新，结算或退出时关闭窗口，退出/结算后迟到的加载结果立即释放。
 - 头像经弹窗资源作用域与既有 `HeadArt` / `createIconLoader` 加载，关闭后迟到结果不得回填。视图不读取全局模型、不推进战斗规则、不新增统计网络请求。
 - 验证：`tests/battle-runtime-controller.test.ts`、`tests/battle-composition-services.test.ts`、`tests/zcds-settlement.test.ts`、`tests/zcds-progress.test.ts`；交互和归属守卫 `tests/view-intent-events.test.ts`、`tests/callback-owner.test.ts`。真实引擎探针需覆盖四行绑定、双人收缩、数值/比例更新与点空白关闭。
+
+#### 2026-11-24 头像底框按品级（对齐效果图）
+
+- 行内头像位不再是「淡紫空心环 + 透明底」：`Avatar` 节点改成 **69×69 的 `cc.Mask`（RECT）容器**，
+  容器里挂子节点 `Base`（69×85 的 Sprite，上对齐、`y=-8`）承载整张品级卡框，`Portrait` 头像叠在其上；
+  `RunAwayUnitItem.base` 绑 `Base` 的 Sprite，运行时按 `unit.rarity` 整张换图（映射在 `ui/RunAwayQualityArt.ts`）。
+- 底图**直接复用卡框原图 `image/frame/common_img_pzk_0N`（103×126），不再另出裁切派生图**：
+  Mask 只有 69 高，可见区正好截掉底部灰「卡名条」，方形底、底部暗边、四角描边都保留原图效果。
+  映射与 `cardUiArtRarity.frame` 同源：金 01 / 紫 02 / 绿 03 / 蓝 04；换图只换 pzk 原名，尺寸一致不用改节点。
+  同一份 pzk 弹窗统计行与卡牌卡框两处通用，避免同名图多份维护。
+- 品级取席位卡池的 `ZCDeckCard.rarity`（`ZCBattleRuntimeController.damageUnits`），查不到卡（波次怪 / 中立怪）按绿兜底。
+- 判据：`tests/zcds-settlement.test.ts`（prefab 的 Mask 结构 + `Base` 高度 + 默认底框 uuid + 按品级取图）、`tests/zcds-progress.test.ts`（复用清空底框、底框必须在 Mask 下）、`tests/zcds-damage-stats.test.ts`（模型 `rarity` 字段）。
 
 ## 13. 技能释放与独立目标选择（2026-11-18）
 
@@ -9421,3 +9525,172 @@ for (let index = 0; index < count; index += 1) {
   `pvpTile.setCountLimit`×3。11-23 11:31 那轮是绿的，之后 `remoteRef/pvpTile.json`（11-24 10:41）
   等被外部进程改过。**没顺手对齐**：这五组都是别人先在 remoteRef 侧定的值，单方向覆盖有
   抹掉对方调整的风险，需原作者确认哪边为准。诊断脚本 `tmp/dump_drift_44.js`（按字段分组打印）。
+
+## 41. 战斗统计面板：开局铺满阵容 / 数值降序 / 敌方头像切换（2026-11-24）
+
+用户三条原话（配两张现场截图：开局面板两列全空；打起来后敌方一列把两方数据混在一起）：
+
+1. 进局默认展示玩家阵容内的所有卡牌、按阵容排序作初始顺序，战斗开始拿到实际数据后再按数值降序；
+2. 敌方默认选中 1 个 id 小的敌方，点头像切换成别的敌方；
+3. 敌方玩家头像右对齐（只有 1 个就在最右侧）。
+
+### 41.1 一条排序口径覆盖两个阶段（不要加「阶段开关」）
+
+`ZCDamageStats.compareDamageStatsRows(metric)`：**当前页签数值降序 → 阵容序升序 → 席位序 → 卡 id**。
+
+- 开局所有行都是 0 ⇒ 第一关键字恒等，自然落到阵容序 = 需求 1 的前半段；
+- 一旦有人打出伤害，高数值自动浮上来 = 后半段；
+- 同数值必须再由阵容序收敛，否则虚拟列表每帧重排、行会闪。
+
+行的「阵容序」来自 `IZCDamageStatsUnit.deckOrder`（该席位卡组里的下标，`-1` / 缺省 = 不在卡组）。
+不在卡组的行（波次怪 / 中立怪）排序键给 `Number.MAX_SAFE_INTEGER`，排在所有阵容卡之后 ——
+**别**直接用 `deckOrder` 相减，`-1` 会跑到最前面。
+
+### 41.2 开局为什么是空的：数据源只认「打过伤害的卡」
+
+`ZCGameModel.damageCards` 是 `creditCardDamage` / `creditCardTaken` 现攒的（键 `owner:cardId`），
+没人出手就一行都没有 ⇒ 老版本一进局面板两列全空。`ZCBattleRuntimeController.damageUnits()`
+现在做两件事：先按 `damageCards` 出行（带 `deckOrder = deck.findIndex(id)`），再把**各席位卡组里
+还没出现过的卡按 0 补进来**（`counted` 集合按 `owner:cardId` 去重，`unitId` 留空 = 还没上场）。
+唯一出口仍在控制器，弹窗不碰模型（预览 / 结算 / 实时统计共用同一份）。
+
+收行口径同步放宽：`buildDamageStatsColumns` 只对**阵容外**的行继续按页签过滤 0 值；
+阵容内的卡一律保留（0 伤害也占一行，否则「开局铺满」这条需求无从体现）。
+
+### 41.3 敌方只显示选中的那一方
+
+`buildDamageStatsColumns(units, metric, enemyOwner = null)`：第三个参数非空时只收该席位的敌方行；
+`null` = 全部非玩家席位合并（无席位上下文的旧调用方）。
+
+- `enemyOwnersOf(units, owners)` 给头像栏的席位与顺序（席位序：`enemy` → `enemy2` → `enemy3`，
+  不含玩家）；`owners`（= `ZCGameModel.owners`）是权威来源 —— 某方还没打出伤害也要能切过去；
+- `defaultEnemyOwner()` = 席位序最小的敌方（需求原话「id 小的敌方」指的是**席位序**，不是服务端 `unitId`）；
+- 换敌方 / 切页签才 `scrollToTop`，实时刷新不回顶（`resetScroll` 只在这两处为 `true`）。
+
+### 41.4 头像栏的几何：塞进「我方 / 敌方」标题带，不动两条列表
+
+先试过「把两条列表整体下移 56px 腾一条带」，但那会让左列平白空出一块，且 `zcds-settlement`
+的 prefab 判据（列表高 435 / 顶 168）要跟着改 —— 收益不抵。最终落法是**用标题带里敌方列的右侧余量**：
+
+| 元素 | 几何（`Panel` 局部坐标） |
+| :--- | :--- |
+| `EnemyHeader`（「敌方」二字） | x 18、宽 80 ⇒ 占 18~98 |
+| `EnemySeats`（头像栏容器） | **(249, 189)**、151×44、`anchorPoint = (1, 0.5)` |
+| 敌方列 | x 128、宽 242 ⇒ 右沿 249；列表顶 168 |
+| 页签 `DamageTab` / `TakenTab` | y 238.5、高 41 ⇒ 底沿 218 |
+
+- **右锚点**是关键：容器原点就是右沿，子头像一律负 x（`-40/2 - (n-1-i)*48`），
+  一个敌方时它正好贴 249 —— 需求 3 的「只有 1 个就在最右侧」是几何自带的，不是特判；
+- 头像 40×40、间距 8：三颗 136 ≤ 151 净宽，不压「敌方」二字（标头 18~98 + 栏位 98~249 首尾相接）；
+- 选中标记是**套在头像身上**的白框（`Graphics` 线宽 2px，骑在 40×40 的边线上、外溢 1px）：标题带上下只剩 1~9px，
+  放不下「头像 + 下划线」那种两段式标记（下划线会掉进列表 / 顶到页签）；
+- 未选中的头像压暗成 `(120,122,128)`，选中 = 原色 + 白框。
+
+头像图走 `HeadArt.loadHeadFrame(profile.headKey)`（= 「角色 id → head 表 → 图标名 → 资源」，
+与 HUD 左侧四行同一口径）。**别**拼 `icons/head/<id>`：那是 `Bundle resources doesn't contain …`
+的老坑（见 §3.53）。
+
+### 41.5 契约：`openDamage` 多带一个 `seats`
+
+| 位置 | 变化 |
+| :--- | :--- |
+| `IZCDamageStatsSeats` | 新增（`ZCDamageStats.ts`）：`owners` + `profiles`（= `RankSeatProfiles`） |
+| `IZCBattleRuntimeServices.popups.openDamage` / `IZCBattleSettlementServices.popup.openDamage` | `(units, seats?)` |
+| `IZCBattleSettlementRequest` | 新增可选 `seats` —— 结算期不再回读模型，头像 / 名字必须随 `units` 一起冻结 |
+| `BATTLE_POPUPS.openDamage` | 透传 `userData: { units, seats }` |
+| `GameRunAwayOptions` | 新增可选 `seats` |
+
+`seats` 缺省时：不建头像栏、敌方列退回「全部敌方合并」的老口径（本地局 / 老调用方不炸）。
+
+### 41.6 判据
+
+| 文件 | 钉住的东西 |
+| :--- | :--- |
+| `tests/zcds-damage-stats.test.ts` | 开局 0 值也铺满且按阵容序；有数据后数值降序、同值按阵容序；敌方列只收选中方；`enemyOwnersOf` 按席位序、默认选最小；`null` 时合并回落 |
+| `tests/zcds-settlement.test.ts` | 默认只显示 id 小的敌方（1 行）；`selectEnemy('enemy2')` 后 2 行并回顶；重复点不重算；`refresh` 保留选中且不回顶；`EnemySeats` 几何（右锚点 / 右沿 249 / y 189 / 151×44 / 不压标头与页签） |
+| `tests/battle-runtime-controller.test.ts` | `damageUnits()` 既有行序不变，其后补进 0 值阵容卡且带 `deckOrder` |
+
+### 41.7 遗留
+
+- 补进来的阵容卡按 0 显示，`formatDamageStatsValue(0)` 就是 `0`；若要「未上场显示 `—`」得再改
+  `RunAwayUnitItem.render` 的入参口径（当前 `render(value, max, frame, baseFrame)` 只有值没有状态）。
+- 实时 `refresh` 只换数据、不补载新出现的头像图：波次怪这类「开局不在 `units` 里」的单位
+  仍可能没有头像（与改前一致）。
+- 头像栏的选中态没有音效、没有切页动画；需求没提，未加。
+
+## 42. 结算页 MVP 徽标 / Lv / 名字的坐标归 prefab（2026-11-24）
+
+### 42.1 现场
+
+实机结算页里 `MVP` 徽标飘在角色头顶（还对不齐），`Lv.x` 与卡名却贴在 prefab 的位置 —— 三者不成一行；
+而 prefab 里徽标早在「与 Lv/名字 同一行、贴 `MvpBlock` 左沿」的 `(-254, 85)`。
+
+### 42.2 根因
+
+`ZCSettlementMvpActor.applyBadgePosition()` 在骨骼模型挂上之后，用
+`ZC_SETTLEMENT_STYLE.mvpBadge.defaultX` + `calcMvpAdaptiveBadgeY(角色可见头顶)` **改写** `MvpIcon`
+的位置（`-46.5` / 夹在 `125~132.5`）。那套「徽标悬浮在头顶上方」的自适应是旧稿（蓝湖 `-46.5 / 132.5`）
+的口径：prefab 改成同一行之后，代码把徽标拽回旧坐标，`clear()` 时还会把它复位到旧的默认值
+⇒ 实机永远和预制体差一截，且拖 prefab 没有任何效果。
+
+### 42.3 口径（改了就不许回退）
+
+- 🔴 **坐标唯一真源 = prefab**：`MvpBlock` 下 `MvpIcon` / `MvpLevel` / `MvpName` 及其它文案的位置只在
+  prefab 里写。`ZCSettlementMvpActor` 只负责**立绘** —— 挂模型、按包围盒归一，`setScale` /
+  `setPosition` 只作用于它自己 `instantiate` 出来的那个模型节点，不许碰 `MvpBlock` 的其它子节点。
+- 立绘头顶上限仍保留（`ZC_SETTLEMENT_STYLE.mvpArt.maxHeadTopInBlock = 91`），只用来压立绘高度，
+  不再兼职推徽标。
+- 「徽标与文案同一行」是版面契约：`MvpIcon`（120×40）中心与两个 38 高的 Label 中心差 ≤2，
+  `x` 严格递增，且徽标右沿不压 `Lv` 左沿。
+
+### 42.4 改动清单
+
+| 文件 | 改动 |
+| :--- | :--- |
+| `view/ZCSettlementMvpActor.ts` | 删 `applyBadgePosition` / `resetBadgePosition` / `badgeNode` / `headTopInBlock`；`show()` / `clear()` 不再动徽标 |
+| `model/ZCSettlementStyle.ts` | 删 `mvpBadge` 整组 token 与 `calcMvpAdaptiveBadgeY`；`maxHeadTopInBlock` 并入 `mvpArt` |
+| `tests/zcds-settlement-page.test.ts` | `DESIGN` 按 11-24 实机定案订正（徽标 `-254/85`、Lv `70/83`、名字 `175/83`）；自适应用例换成「坐标只认 prefab」守卫 |
+
+### 42.5 判据
+
+`npx tsx --test tests/zcds-settlement-page.test.ts`（23 绿）：prefab 几何按 `DESIGN`、徽标与文案同行、
+`ZCSettlementMvpActor` 源码里不许出现 `MvpIcon`、`ZCSettlementStyle` 不许再出现
+`calcMvpAdaptiveBadgeY` / `mvpBadge`。
+
+### 42.6 遗留
+
+`DESIGN` 表原本是「手抄蓝湖、别由 prefab 反推」，这次按用户 11-24 的实机定案（坐标是用户自己在 prefab
+里拖的）订正，等于把 prefab 现状当成了新基准；蓝湖稿后续再出改版时仍以新稿覆盖它。
+
+## 43. 伤害统计的柱状条 = 占全队总量的占比（2026-11-24）
+
+### 43.1 口径
+
+柱子回答的是「**这一行占本队总量多少**」，不是「离第一名多远」。
+
+- 分母 = 该**列**的合计：我方列 = 我方全队（`totalOwn`）；敌方列 = **当前选中那一方**的全队
+  （`totalEnemy`，切头像时跟着换，不含其它敌方席位）。
+- 两个页签同一套：伤害统计分母 = 全队总伤害，承伤统计分母 = 全队总承伤。
+- 分母为 0（开局全 0、单人局）⇒ 条全空；脏数据（value > total）裁到 1，不许画出界。
+- 非零但占比 < 2% 时抬到 `ZC_DAMAGE_STATS_MIN_BAR_RATIO`，保证「有伤害但看起来是空条」不出现
+  —— 代价是极小份额会略放大，这是可见性优先的既有取舍。
+
+### 43.2 实现
+
+| 位置 | 改动 |
+| :--- | :--- |
+| `model/ZCDamageStats.ts` | `IZCDamageStatsColumns.maxOwn/maxEnemy` → `totalOwn/totalEnemy`（`buildDamageStatsColumns` 里累加，不是取最大值）；`damageStatsBarRatio(value, total)` 的形参改名并改义 |
+| `ui/GameRunAway.ts` | 两个列表的 `renderItemFn` 改喂列合计；`renderRow(itemNode, index, rows, total)` |
+| `ui/RunAwayUnitItem.ts` | `render(value, total, frame, baseFrame)` |
+
+### 43.3 判据
+
+- `npx tsx --test tests/zcds-damage-stats.test.ts`（6 绿）：`totalOwn/totalEnemy` 逐条对账、
+  「整列占比之和 = 1」、分母 0 / 越界 / 2% 兜底。
+- `npx tsx --test tests/zcds-settlement.test.ts`（16 绿）：喂给行组件的第二参 = 合计
+  （600+300 ⇒ 900；刷新后 900+300 ⇒ 1200），敌方只一席时合计 = 它自己。
+
+### 43.4 遗留
+
+行内只显示绝对值（`formatDamageStatsValue`），没有百分比文案；要「63%」那种显示得给
+`RunAwayUnitItem` 加一个 Label（prefab 目前只有 `Value` 一个文本位）。

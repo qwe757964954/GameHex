@@ -103,11 +103,6 @@ export class FriendGetEndPage extends PopupBase {
         const snapshot = await this.repo.load();
         if (!this.alive || revision !== this.revision) return;
 
-        // `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`：
-        // 不 defer 一帧的话 `refreshList` 会落在「槽位还没建」的空档，列表全空。
-        await this.nextPopupFrame();
-        if (!this.alive || revision !== this.revision) return;
-
         this.snapshot = snapshot;
         this.present();
     }

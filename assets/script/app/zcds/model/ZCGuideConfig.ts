@@ -1,4 +1,10 @@
+import type { SpriteFrame } from 'cc';
 import { BUILDING_ART_ROOT, GAMEUI_ART_ROOT, spriteFramePath } from '../../ArtPaths';
+
+/** 指南配置表（对应 `assets/remoteRef/zcGuide.json`）。*/
+export const ZC_GUIDE_TABLE = 'zcGuide';
+/** 指南全局参数表（对应 `assets/remoteRef/zcGuideParams.json`）。*/
+export const ZC_GUIDE_PARAMS_TABLE = 'zcGuideParams';
 
 /** 奖励品级：来自 `guide` 表的中文 key（`'空'` = 无品级）；卡牌品级是另一套英文 id（见 `ZCCardRarity`）。*/
 export type ZCGuideRarity = '空' | '绿' | '蓝' | '紫' | '金';
@@ -23,6 +29,13 @@ export interface ZCGuideParams {
     panelTitle: string;
     footerText: string;
     emptyText: string;
+}
+
+/** 点开指南后交给弹窗的只读展示数据。*/
+export interface IZCGuidePreparedContent {
+    readonly entries: readonly ZCGuideEntry[];
+    readonly params: ZCGuideParams;
+    readonly iconFrames: ReadonlyMap<string, SpriteFrame>;
 }
 
 const DEFAULT_PARAMS: Readonly<ZCGuideParams> = {

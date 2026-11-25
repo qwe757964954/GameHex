@@ -1,115 +1,62 @@
-/**
- * 战斗特效的时长、缩放、状态 id 前缀与通用兜底值的单一真源。
- *
- * 本文件是纯 TS，不依赖 `cc`；Fx 模块只把这里的值按原导出名转出，
- * 业务系统不需要为了调一个时长或状态前缀去改逻辑文件。
- */
+/** 战斗特效时长（秒）、缩放基准与状态 ID 前缀 */
 
-/** 行为技能与通用表现事件的时长（秒）。*/
 export const ZC_EFFECT_TUNING = {
-    /** 瞬间移动 clip：18 帧 @ sample 24。*/
-    blinkSeconds: 0.75,
-    /** 落雷 clip：20 帧 @ sample 30；配表 boltDelay 0.15 落在第 5 帧。*/
-    boltSeconds: 20 / 30,
-    /** 链雷单跳时长；与落雷同一份美术。*/
+    blinkSeconds: 0.75,              // 18 帧 @ 24fps
+    boltSeconds: 20 / 30,            // 20 帧 @ 30fps，boltDelay 0.15 落在第 5 帧
     chainSeconds: 20 / 30,
-    /** 链雷逐跳错开间隔；只为观感，结算仍在同一帧完成。*/
-    chainStepSeconds: 0.05,
-    /** 链雷逐跳透明度递减量。*/
+    chainStepSeconds: 0.05,          // 仅表现错帧，结算仍同帧完成
     chainFadeStep: 0.12,
-    /** 链雷透明度下限。*/
     chainFadeFloor: 0.4,
-    /** 冲锋残影时长（秒）。*/
     dashSeconds: 0.3,
-    /** 刀盾护盾 clip：17 帧 @ 12fps。*/
-    dashGuardSeconds: 17 / 12,
-    /**
-     * 仙桃行者重击柱 clip 时长：29 帧 @ 24fps。
-     * 需与动画 clip 长度一致，避免事件提前被摘除导致动画被截断。
-     */
-    quakeStrikeSeconds: 29 / 24,
-    /** 长戟兵撕裂 clip：8 帧 @ 12fps。*/
-    singleStrikeSeconds: 8 / 12,
-    /** 陷阱生成动画：12 帧 @ sample 30，同时是常驻视觉的延迟。*/
-    trapSpawnSeconds: 12 / 30,
-    /** 陷阱爆炸动画：18 帧 @ sample 30。*/
-    trapExpireSeconds: 18 / 30,
-    /** 飓风接触判定间隔：20Hz 模拟下每逻辑步一波。*/
-    hurricaneTouchSeconds: 0.05,
-    /** 连射炸弹落点散布半径（逻辑 px）。*/
-    barrageScatterRadius: 15,
-    /** 连射炸弹飞行速度（逻辑 px/s）。*/
-    barrageFlightSpeed: 300,
-    /** 连射间隔兜底；配表 `barrageInterval` 缺省时使用。*/
+    dashGuardSeconds: 17 / 12,       // 17 帧 @ 12fps
+    quakeStrikeSeconds: 29 / 24,     // 29 帧 @ 24fps，需覆盖完整 clip
+    singleStrikeSeconds: 8 / 12,     // 8 帧 @ 12fps
+    trapSpawnSeconds: 12 / 30,       // 12 帧 @ 30fps
+    trapExpireSeconds: 18 / 30,      // 18 帧 @ 30fps
+    hurricaneTouchSeconds: 0.05,     // 20Hz 每步判定一次
+    barrageScatterRadius: 15,        // 逻辑 px
+    barrageFlightSpeed: 300,         // 逻辑 px/s
     barrageDefaultInterval: 0.4,
-    /** 炸弹最短飞行时间，避免贴脸时在出手帧瞬间爆炸。*/
-    barrageMinFlightSeconds: 0.12,
-    /** 导弹命中爆炸的基准判定半径（逻辑 px），事件级缩放以它为 1.0。*/
-    barrageImpactReferenceRadius: 80,
-    /** 通用命中爆点事件时长兜底（秒）。*/
+    barrageMinFlightSeconds: 0.12,   // 防止贴脸出手帧瞬爆
+    barrageImpactReferenceRadius: 80,// 逻辑 px，缩放 1.0 基准
     impactEffectSeconds: 0.5,
-    /** 无命中爆点时的弹道收尾时长（秒）。*/
     projectileFadeSeconds: 0.18,
-    /** 通用近战 / 区域事件时长兜底（秒）。*/
     eventSeconds: 0.3,
-    /** 近战冲击环的余波时长；略长于主特效且不遮盖下次攻击。*/
     shockwaveEventSeconds: 0.35,
-    /** 未登记飞行段时，近战 / 区域事件时长。*/
     defaultAttackTravelSeconds: 0.32,
-    /** 未给弹速时的兜底（逻辑 px/s）。*/
-    defaultProjectileSpeed: 500,
+    defaultProjectileSpeed: 500,     // 逻辑 px/s
 } as const;
 
-/** 屏上 px 与逻辑 px 的换算、按 prefab 烘焙尺寸反算缩放时用的基准。*/
+/** 屏上 px 与逻辑 px 换算及 prefab 缩放基准 */
 export const ZC_EFFECT_SCALE = {
-    /** 屏上 px = 逻辑 px × 0.76875（`combatDistanceScale` 0.3 × view/logical 2.5625）。*/
+    /** combatDistanceScale(0.3) * 视图缩放比(2.5625) */
     screenPxPerLogic: 0.76875,
-    /** `普攻爆炸` prefab 的屏上宽度：UITransform 141 × 根 `_lscale` 2.0。*/
+    /** 普攻爆炸 prefab 屏上宽：UITransform 141 * 节点缩放 2.0 */
     burstPrefabScreenWidth: 282,
-    /**
-     * 射线集束 prefab 基准半长（逻辑 px）。
-     * 资产可见宽 575 屏上 px，对应逻辑约 748 px，半长 374。
-     * 保证 zcRayBeamEffectScale 计算出的屏上光束长度等于判定长度。
-     */
+    /** 射线集束 prefab 基准半长（逻辑 px，对应可见宽 575 屏上 px） */
     rayBeamReferenceHalfLength: 374,
-    /** 扇形甩击爆点数量。*/
     fanBurstCount: 3,
-    /** 每发爆点半径相对扇形半径的比例。*/
     fanBurstRadiusRatio: 0.5,
-    /** 爆点距离相对扇形半径的比例。*/
     fanBurstDistanceRatio: 0.6,
-    /** 相邻爆点角度间隔相对半角比例。*/
     fanBurstSpread: 0.6,
-    /** 光束最短长度（视图 px）：贴脸时避免缩为 0 导致节点不可见。*/
-    beamMinLength: 6,
-    /** 召唤光环可见环覆盖本体与随从的放大倍率（事件级 effectScale）。*/
+    beamMinLength: 6,                // 视图 px，防止贴脸缩成 0 不可见
     summonAuraCoverScale: 1.99,
-    /** effectScale = 1 时持续光环可见环半轴（屏上 px）。*/
-    summonAuraRingHalfScreenX: 91.9,
+    summonAuraRingHalfScreenX: 91.9, // effectScale = 1 时的可见环半轴（屏上 px）
     summonAuraRingHalfScreenY: 36.05,
 } as const;
 
-/** 参数化状态 id 的固定前缀；格式化函数仍留在各自 Fx facade。*/
 export const ZC_EFFECT_STATUS_PREFIX = {
-    /** 落雷麻痹：只禁攻击、移速 -50%，不是 3 秒硬控。*/
-    boltNumb: 'numb',
-    /** 护盾期受到伤害降低。*/
+    boltNumb: 'numb',                // 落雷软控：禁攻 + 减速
     burstGuard: '__burstguard',
-    /** 冲锋落地后受到伤害降低。*/
     dashGuard: '__dashguard',
-    /** 冲锋命中后目标受到伤害提高。*/
     dashVulnerable: '__dashvuln',
-    /** 扇形减速。*/
     fanSlow: '__fanslow',
-    /** 孢爆箭 / 孢子凝珠减速。*/
     splashSlow: '__shotslow',
-    /** 单目标硬控眩晕。*/
     singleStrikeStun: '__stunstrike',
-    /** 命中后自身攻速提高。*/
     singleStrikeHaste: '__strikehaste',
 } as const;
 
-/** 命中附加特效的落点比例；与配表 `pvpSkill.impactEffectAnchor` 的 0~1 口径一致。*/
+/** 命中附加特效的落点比例（与 pvpSkill.impactEffectAnchor 0~1 一致） */
 export const ZC_IMPACT_ANCHOR_RATIO = {
     target: 0,
     midpoint: 0.5,

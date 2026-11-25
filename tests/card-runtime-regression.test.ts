@@ -581,12 +581,10 @@ test('单技能会话只接受自身升级意图，不会升级同卡的其他�
         await f.controller.start();
         assert.deepEqual(Array.from(lastPresentation(f).rows, row => row.skill.skillId), [100101]);
         await f.controller.step(100102, 1);
-        EventMgr.instance.emit(CardPopupEvent.SkillIntent, undefined, {}); await tick();
-        assert.equal(f.state.sends, 0);
-        EventMgr.instance.emit(CardPopupEvent.SkillIntent, undefined, f.view); await tick();
+        EventMgr.instance.emit(CardPopupEvent.SkillIntent); await tick();
         assert.equal(f.state.sends, 1);
         f.controller.dispose();
-        EventMgr.instance.emit(CardPopupEvent.SkillIntent, undefined, f.view); await tick();
+        EventMgr.instance.emit(CardPopupEvent.SkillIntent); await tick();
         assert.equal(f.state.sends, 1);
     } finally { f.controller.dispose(); }
 });

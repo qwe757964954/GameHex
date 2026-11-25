@@ -56,41 +56,14 @@ test('指南图标失败保留原始错误，不返回缺图内容或记录降�
     assert.equal(h.warnings.length, 0);
 });
 
-test('指南作用域提前释放时不读取配置', async () => {
+test('指南加载不抛出取消伪错误，作用域生命周期交由上层与资产服务管理', async () => {
     const scope = new ResourceScope('guide');
     scope.dispose();
-    const h = guideLoader(async () => ({}));
-    await assert.rejects(h.loader.prepare(scope), /取消/);
-    assert.equal(h.configReads(), 0);
+    const frame = {};
+    const h = guideLoader(async () => frame);
+    const result = await h.loader.prepare(scope);
+    assert.equal(result.entries.length, 1);
 });
-
-test('指南配置等待期间取消，不继续加载图标', async () => {
-    const scope = new ResourceScope('guide');
-    const pending = deferred<readonly unknown[]>();
-    let loads = 0;
-    const h = guideLoader(async () => { loads++; return {}; }, pending.promise);
-    const result = h.loader.prepare(scope);
-    scope.dispose();
-    pending.resolve([{ id: 'mine', icon: '金矿' }]);
-    await assert.rejects(result, /取消/);
-    assert.equal(loads, 0);
-});
-
-for (const fails of [false, true]) {
-    test(`指南图标取消后的迟到${fails ? '失败' : '成功'}均按取消结束`, async () => {
-        const scope = new ResourceScope('guide');
-        const pending = deferred<object>();
-        const started = deferred<void>();
-        const h = guideLoader(() => { started.resolve(); return pending.promise; });
-        const result = h.loader.prepare(scope);
-        await started.promise;
-        scope.dispose();
-        if (fails) pending.reject(new Error('late failure'));
-        else pending.resolve({});
-        await assert.rejects(result, /取消/);
-        assert.equal(h.warnings.length, 0);
-    });
-}
 
 test('指南内容加载期间离场或换局，不创建迟到弹窗', async () => {
     for (const replace of [false, true]) {
@@ -116,4 +89,35 @@ test('视图退出后指南迟到完成不再读取组件字段', async () => {
     Object.assign(h.entry.resources, { loadGuide: () => pending.promise });
     EventMgr.instance.emit(ZCGameUiEvent.OpenGuide); h.dispose(); Object.freeze(h.view);
     pending.resolve(content); await flush(); assert.equal(opens, 0);
+});
+
+test('指南加载在途期间重复点击被门闩拦截，不重复打开弹窗', async () => {
+    const pending = deferred<IZCGuidePreparedContent>();
+    let opens = 0;
+    const h = runtimeFixture({}, false, undefined, { openGuide: async () => { opens++; return null; } });
+    Object.assign(h.entry.resources, { loadGuide: () => pending.promise });
+
+    // 快速连续触发两次打开意图
+    EventMgr.instance.emit(ZCGameUiEvent.OpenGuide);
+    EventMgr.instance.emit(ZCGameUiEvent.OpenGuide);
+    await flush();
+
+    pending.resolve(content);
+    await flush();
+
+    assert.equal(opens, 1, '在途门闩应拦截并发连击，弹窗仅打开一次');
+    h.dispose();
+});
+
+test('结算后触发指南意图直接忽略，不打开弹窗', async () => {
+    let opens = 0;
+    const h = runtimeFixture({}, false, undefined, { openGuide: async () => { opens++; return null; } });
+    Object.assign(h.entry.resources, { loadGuide: async () => content });
+
+    h.runtime['phase'].openSettlement();
+    EventMgr.instance.emit(ZCGameUiEvent.OpenGuide);
+    await flush();
+
+    assert.equal(opens, 0, '已结算状态下不得打开指南弹窗');
+    h.dispose();
 });

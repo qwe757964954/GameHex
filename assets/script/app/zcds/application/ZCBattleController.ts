@@ -220,8 +220,8 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
         this.resultRecorded = true;
         this.services.pveResolver?.resolvePveResult(pve, victory, this);
     }
-    private onRuntimeDestroyed(_payload: undefined, source: object): void {
-        if (source === this.runtime) this.dispose();
+    private onRuntimeDestroyed(): void {
+        if (this.runtime) this.dispose();
     }
     dispose(): void {
         if (this.isDisposed) return;

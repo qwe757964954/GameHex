@@ -5747,7 +5747,7 @@
         unitType?: (number|null);
         buffInfo?: (CmdPvpBuffInfo[]|null);
         attrs?: (CmdPvpHeroAttrInfo[]|null);
-        modifyList?: (number[]|null);
+        modifyList?: (Long[]|null);
     }
 
     
@@ -5815,11 +5815,18 @@
 
     
 
+    declare class CmdPvpResourceMonsterAttrInfo {
+        monsterAttrs?: (CmdPvpAttrInfo[]|null);
+    }
+
+    
+
     declare class CmdPvpResourcePointInfo {
         row: number;
         column: number;
         groupId: number;
         resourceId: number;
+        dataBytes?: (Uint8Array|null);
     }
 
     
@@ -7548,6 +7555,7 @@ declare type MessageProtoName =
 | "CmdBattleFrameInfo"
 | "CmdPvpMapInfo"
 | "CmdPvpUnitHomeIndex"
+| "CmdPvpResourceMonsterAttrInfo"
 | "CmdPvpResourcePointInfo"
 | "CmdStartBattleReqMsg"
 | "CmdStartBattleRspMsg"

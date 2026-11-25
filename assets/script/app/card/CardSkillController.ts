@@ -150,8 +150,7 @@ export class CardSkillController extends ControllerBase {
         this.publish();
     }
 
-    private onUpgradeIntent(_payload: undefined, source: object): void {
-        if (source !== this.options.owner) return;
+    private onUpgradeIntent(): void {
         void this.step(this.options.data.skillId, 1).catch(error => this.options.failed(error));
     }
 

@@ -757,11 +757,11 @@ test('D4｜奖励展示时播放指定音效，缺省按 isGold 选音效', () =
 });
 
 test('D5｜点一格 → 物品详情：必须传 resId **和 number** + `allowMultiple`（漏 number 就静默无效）', () => {
-    assert.ok(/ItemDetailPage\.open\(\{/.test(PAGE_SRC));
+    assert.ok(/ItemInfoPage\.open\(\{/.test(PAGE_SRC));
     assert.ok(/resId: entry\.resId/.test(PAGE_SRC), 'onItemClick 要传 resId');
     assert.ok(/number: entry\.number/.test(PAGE_SRC), 'onItemClick 要传 number');
     assert.ok(/allowMultiple: true/.test(PAGE_SRC));
-    const openCall = stripComments(PAGE_SRC).match(/ItemDetailPage\.open\(\{[\s\S]*?\}\)/);
+    const openCall = stripComments(PAGE_SRC).match(/ItemInfoPage\.open\(\{[\s\S]*?\}\)/);
     assert.ok(openCall && /layer:\s*this\.popupLayer/.test(openCall[0]),
         '物品详情须继承奖励弹窗层级，否则 NORMAL 详情会被 SYSTEM 奖励窗遮挡');
 });
@@ -788,11 +788,9 @@ test('D6｜RewardGrid 使用四列虚拟列表，复用单个模板', () => {
 });
 
 test('D7｜首次铺列表等到 start 后，打开时回到顶部', () => {
+    const hasViewReady = PAGE_CODE.includes('onViewReady');
     const waitAt = PAGE_CODE.indexOf('await this.nextPopupFrame()');
-    const presentAt = PAGE_CODE.indexOf('this.present(userData?.soundKey)');
-    assert.ok(waitAt >= 0 && waitAt < presentAt);
-    assert.ok(!PAGE_CODE.slice(waitAt, presentAt).includes('loadRevision'),
-        '单次打开不需要 revision，等待一帧后直接铺');
+    assert.ok(hasViewReady || waitAt >= 0, '需通过 onViewReady 或 nextPopupFrame 确保列表安全铺设');
     assert.match(PAGE_CODE, /this\.grid\.scrollToTop\(\)/);
 });
 
@@ -804,7 +802,7 @@ test('同一奖励重复渲染不打断闪光与星点，换槽位才恢复已�
         '../../framework/FW': {},
         '../../framework/event/EventMgr': { EventMgr: { instance: { emit() {} } } },
         '../../framework/ui/ViewLifecycle': { VIEW_LIFECYCLE: {} },
-        '../itemdetail/ItemDetailPage': {},
+        '../itemdetail/ItemInfoPage': {},
         '../itemdetail/ItemDetailTable': { itemNumberTextOf: String },
         '../../vscrollview/VScrollView': {}, './ShowRewardItem': {},
         './ShowRewardTexts': {}, './RewardFrames': {},

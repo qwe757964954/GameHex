@@ -71,9 +71,8 @@ test('battle result is scoped to runtime, persisted once, and disconnected after
 test('raw runtime destruction ends the session and releases preloaded resources', async () => {
     const h = fixture(), pending = h.controller.adopt(undefined, h.context);
     h.resolve({}); await pending; h.controller.mount(h.runtimeOptions);
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, undefined, {});
     assert.equal(h.controller.current, h.runtime);
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, undefined, h.runtime);
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED);
     assert.equal(h.controller.current, null);
     assert.deepEqual(h.calls, ['initialize', 'controllerDispose', 'shutdown', 'destroy', 'release']);
     h.context.resources.dispose();

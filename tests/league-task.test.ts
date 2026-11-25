@@ -1122,12 +1122,10 @@ test('E2 ⚠️ 列表不发请求：只读缓存（`CmdTask`）+ 两个领奖�
     assert.ok(!/requestTaskProgressReward\([^)]*view\.id/.test(code), '别把宝箱 id 塞进请求体');
 });
 
-test('E3 ⚠️ `refreshList` 必须晚于 `nextPopupFrame()`（否则虚拟列表槽位还没建、列表空白）', () => {
+test('E3 ⚠️ `refreshList` 无需手写 `nextPopupFrame()`（由 VirtualScrollView.start 自动消费）', () => {
     const code = readFileSync(PAGE_TS, 'utf8');
-    const frame = code.indexOf('await this.nextPopupFrame();');
-    const refresh = code.indexOf('this.taskList.refreshList(');
-    assert.ok(frame > 0, '没找到 `await this.nextPopupFrame();`');
-    assert.ok(refresh > frame, '`refreshList` 出现在 defer 一帧之前 ⇒ 列表会空');
+    assert.ok(!code.includes('nextPopupFrame()'), '不应再手写 nextPopupFrame()');
+    assert.ok(code.includes('this.taskList.refreshList('), '没找到 `this.taskList.refreshList(`');
     assert.ok(code.includes('this.taskList.scrollToTop(false)'), '铺完应回到顶部（换页 / 重开都会留着上次的滚动位置）');
     // 行渲染回调在 onInit 里赋一次即可（`PopupBase._inited` 保证每实例只跑一次；放 onOpen 会重复）
     assert.ok(!/if \(!this\.rendererBound\)/.test(code), '`renderItemFn` 不再需要「只绑一次」门闩');

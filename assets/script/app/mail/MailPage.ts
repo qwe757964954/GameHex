@@ -123,8 +123,10 @@ export class MailPage extends PopupBase {
     }
 
     protected async onOpen(): Promise<void> {
-        // 铁律 ②：`VirtualScrollView` 在 `start()` 里建槽位，`onOpen` early 于它
-        await this.nextPopupFrame();
+        // 初始数据准备完成；首帧列表刷新统一由 onViewReady 调度
+    }
+
+    protected async onViewReady(): Promise<void> {
         await this.reload();
     }
 

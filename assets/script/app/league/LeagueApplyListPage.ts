@@ -123,12 +123,7 @@ export class LeagueApplyListPage extends PopupBase {
         return leagueRepository;
     }
 
-    /**
-     * 拉一次申请列表 + 铺行。
-     *
-     * `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-     * ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
-     */
+    /** 拉一次申请列表 + 铺行。 */
     private async reload(): Promise<void> {
         const revision = ++this.revision;
 
@@ -140,9 +135,6 @@ export class LeagueApplyListPage extends PopupBase {
 
         this.pendingCount = snapshot.applys.length;
         this.rows = buildLeagueApplyViews(snapshot.applys);
-
-        await this.nextPopupFrame();
-        if (!this.alive || revision !== this.revision) return;
 
         this.present();
 

@@ -23,7 +23,7 @@ import { Toast } from '../common/Toast';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { PopupLayer } from '../../framework/ui/PopupDef';
 import { REWARD_ITEM_DETAIL_INTENT, type IRewardItemDetailIntent } from '../common/RewardItemEvents';
-import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
+import { ItemInfoPage } from '../itemdetail/ItemInfoPage';
 import { registerRdVars } from '../rd/RdRegistry';
 import { GameNet } from '../net/GameNet';
 import { GameSocketBridge } from '../gm/GameSocketBridge';
@@ -51,7 +51,7 @@ export class ProcedureBootstrap extends Component {
     private readonly onRewardItemDetail = (intent: IRewardItemDetailIntent): void => {
         if (!Number.isSafeInteger(intent.resId) || intent.resId <= 0) return;
         // 奖励为预览数量，不能当成背包持有量开启合成；SYSTEM 层保证压在战斗结算页之上。
-        void ItemDetailPage.open({
+        void ItemInfoPage.open({
             userData: { resId: intent.resId, number: 0 },
             layer: PopupLayer.SYSTEM,
             allowMultiple: true,

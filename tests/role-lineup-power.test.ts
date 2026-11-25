@@ -14,6 +14,8 @@ import test from 'node:test';
 
 import { loadTsModule } from './helpers/cc-sandbox';
 import * as RoleTable from '../assets/script/app/role/RoleTable';
+import { ROLE_TEXTS } from '../assets/script/app/role/RoleTexts';
+import * as RolePowerTable from '../assets/script/app/role/RolePowerTable';
 import * as RoleTypes from '../assets/script/app/role/RoleTypes';
 
 interface ISnapshotLike {
@@ -59,6 +61,8 @@ function loadRepository(power: number, cachedPower: number | null = null, missin
             '/ItemBag': { readItemCounts: async () => new Map<string, number>(missingConfig ? [['100001', 3], ['70001', 1]] : []) },
             '/TableNames': { ITEM_TABLE: 'item', HEAD_TABLE: 'head' },
             '/RoleTable': RoleTable,
+            '/RolePowerTable': RolePowerTable,
+            '/RoleTexts': { ROLE_TEXTS },
             '/RoleTypes': RoleTypes,
         },
     });

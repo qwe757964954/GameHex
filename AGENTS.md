@@ -49,7 +49,7 @@ Cocos Creator 3.8.8 + TypeScript。
 
 - 依赖从外向内：`app/bootstrap → app/procedure、app/<feature>/application、view → core`；`platform` / `framework → core`。`core` 为纯 TS，禁止引入 `cc/framework/app/platform`、直接 I/O 或全局服务访问；`framework` 不依赖 feature / `Procedure*`；adapter 不放业务规则。
 - 页面经 `GameRoute` 导航。正式流程资源、配置、网络经 `AssetService`、`ConfigService`、`NetworkTransport` 或既有 repository/gateway；feature 禁直调 `resources.load/fetch`。规则放 `model/domain` 或 `core`。
-- `await` / Promise 回调之后处理失效与取消：tab 换页销毁，弹窗默认 `cache=false`；`PopupBase` 用 `nextPopupFrame()` 后判 `isValid`，流程预加载判 `context.cancelled`。同步事件、生命周期与组件 `schedule` 回调不重复判 `isValid`。
+- `await` / Promise 回调之后处理失效与取消：tab 换页销毁，弹窗默认 `cache=false`；`PopupBase` 现提供 `onViewReady` 生命周期（首帧渲染就绪后框架自动安全调用，业务无需手动等帧），或显式 `if (!await this.nextPopupFrame()) return;`（已集成有效性与作用域检查，严禁在后重复堆叠第二行 `if (!this.isValid || scope.disposed)`）；流程预加载判 `context.cancelled`。同步事件、生命周期与组件 `schedule` 回调不重复判 `isValid`。
 - caller 直接传真实宿主；退出时统一解除事件、缓存和网络请求。普通组件销毁时 `GameNet.removeCaller(this)`；取消须释放回调并让 Promise 以 `false` 落定。禁止伪造归属或靠派发时判有效代替解除。
 - render 幂等、全量赋值；动画用 `startedAt` + 纯函数计算进度，视图不零散建 tween 或累加 dt。`update` 不加载资源、查全局配置、创建临时数组/节点或混业务规则；遵守现有动态/静态节流。
 - 单例可用于生命周期内唯一的共享服务；明确初始化归属及必要的重置/释放策略。页面、对局、实体状态优先由宿主持有实例；禁止无归属 static 暂存或借单例绕过分层，详见[单例与状态作用域](docs/agent/单例与状态作用域.md)。

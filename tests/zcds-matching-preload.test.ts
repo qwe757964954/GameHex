@@ -815,7 +815,7 @@ test('战斗流程只消费本局通知，销毁和换局后旧宿主事件失�
     EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, undefined, owner);
     assert.equal(h.navigations.length, 1);
     assert.equal(h.navigations[0].route, 'main');
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, undefined, owner);
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED);
     EventMgr.instance.emit(ZC_BATTLE_EVENTS.SHOW_TIP, { message: 'after destroy' }, owner);
     assert.deepEqual(h.tips, ['current'], '会话销毁后立即停止接收通知');
     EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, undefined, owner);

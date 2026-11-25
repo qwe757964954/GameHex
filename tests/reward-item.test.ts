@@ -269,7 +269,7 @@ test('奖励详情由组合根响应，层级覆盖结算、预览不伪造背�
         if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/RewardItemEvents')) return { REWARD_ITEM_DETAIL_INTENT };
         if (name.endsWith('/PopupDef')) return { PopupLayer: { SYSTEM: 1 } };
-        if (name.endsWith('/ItemDetailPage')) return { ItemDetailPage: { open: async options => { opened.push(options); } } };
+        if (name.endsWith('/ItemInfoPage')) return { ItemInfoPage: { open: async options => { opened.push(options); } } };
         if (name.endsWith('/GameNet')) return { GameNet: { instance: { addEvent() {}, removeEvent() {} } } };
         if (name.endsWith('/FW')) return { FW: {} };
         return {};
@@ -393,7 +393,8 @@ test('奖励资源详情支持 roleProperty 名称、说明和图标，item 配�
     assert.equal(silver.row.quality, 3);
     assert.equal(silver.row.icon, 'icons/resource/图标_铜币/spriteFrame');
     assert.equal(silver.row.useJump, 0, '资源详情不开放物品使用操作');
-    assert.equal(silver.canCompos, false);
+    assert.equal(silver.numberText, '');
+    assert.deepEqual(silver.accessRefs, []);
     assert.equal((await repository.load(18003, 0)).row.name, '卡牌碎片');
     assert.equal((await repository.load(1042537, 0)).row, null);
 });

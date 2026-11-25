@@ -158,7 +158,7 @@ export class MainPage extends Component {
      */
     territoryMap: MainTerritoryMap | null = null;
     private readonly treasureRepository = new NewTreasureRepository((goods) => {
-        EventMgr.instance.emit(CHEST_EVENTS.REWARDS, { goods }, this);
+        EventMgr.instance.emit(CHEST_EVENTS.REWARDS, { goods });
     });
     /** 运行时当前章节（来自 `TerritoryViewEvent.Render` 的 `state.chapterId`），弹窗标「当前章」用。 */
     private currentChapterId = 0;

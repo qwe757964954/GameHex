@@ -770,8 +770,8 @@ test('E2 ⚠️ 申请列表三处时序 / 两道闸门', () => {
     const initBody = src.slice(src.indexOf('protected onInit(): void {'), src.indexOf('protected async onOpen'));
     assert.ok(initBody.includes('this.applyList.renderItemFn = '), 'renderItemFn 要在 onInit 里赋一次');
     assert.ok(/this\.applyList\.renderItemFn = /.test(src));
-    // ⚠️ VirtualScrollView 在 start() 里建槽位，onOpen 早于 start ⇒ 必须 defer 一帧
-    assert.ok(/await this\.nextPopupFrame\(\)/.test(src), '取数后要 defer 一帧再 refreshList');
+    // VirtualScrollView 已在 start() 自动补跑待铺条数，不再手动 nextPopupFrame
+    assert.ok(!/nextPopupFrame\(/.test(src), '不应再手写 nextPopupFrame');
     assert.ok(/refreshList\(/.test(src), '要调 refreshList');
     // 空列表不发包（老端两句守卫）
     assert.ok(/canApproveAll\(this\.rows\)/.test(src), '批量按钮要走 canApproveAll 守卫');
@@ -782,12 +782,12 @@ test('E2 ⚠️ 申请列表三处时序 / 两道闸门', () => {
     assert.ok(/row\.onAction = /.test(src) && /row\.onAvatar = /.test(src), '每次 render 都要重设回调');
 });
 
-test('E3 编辑信息视图只渲染并派发带来源的意图，保留统一参数与 prefab', () => {
+test('E3 编辑信息视图只渲染并派发意图，保留统一参数与 prefab', () => {
     const src = stripComments(readFileSync(EDIT_PAGE_TS, 'utf8'));
     assert.doesNotMatch(src, /leagueRepository|ILeagueRepository|Controller|Composition|private editing|private editType|TOUCH_END|async |await /);
     assert.match(src, /render\(state: ILeagueEditViewState\)/);
-    assert.match(src, /emit\(LeagueEditEvent\.Intent, \{ kind: 'submit', [^}]+\}, this\)/);
-    assert.match(src, /emit\(LeagueEditEvent\.Intent, \{ kind: 'change', [^}]+\}, this\)/);
+    assert.match(src, /emit\(LeagueEditEvent\.Intent, \{ kind: 'submit', [^}]+\}\)/);
+    assert.match(src, /emit\(LeagueEditEvent\.Intent, \{ kind: 'change', [^}]+\}\)/);
     assert.match(src, /ILeagueEditParams/);
     assert.match(readFileSync(EDIT_PAGE_TS, 'utf8'), /无 SDK/);
 });

@@ -4510,7 +4510,7 @@ message CmdBattleUnitInfo {
    //英雄的属性
    repeated CmdPvpHeroAttrInfo attrs = 9;//英雄属性   
    //宝石修改器id集合(由服务器收集透传,前端战斗应用)
-   repeated uint32 modifyList = 10;//宝石修改器id   
+   repeated uint64 modifyList = 10;//宝石修改器id   
 }
 
 // 请求战斗信息
@@ -4569,12 +4569,18 @@ message CmdPvpUnitHomeIndex {
    required uint32 homeIndex = 2;//homes 列表下标
 }
 
+// PVP 中立资源怪物属性
+message CmdPvpResourceMonsterAttrInfo {
+   repeated CmdPvpAttrInfo monsterAttrs = 1;//怪物属性
+}
+
 // PVP 中立资源点
 message CmdPvpResourcePointInfo {
    required uint32 row = 1;//行号
    required uint32 column = 2;//列号
    required uint32 groupId = 3;//资源组编号
    required uint32 resourceId = 4;//本局抽取的资源编号
+   optional bytes  dataBytes  = 5;//扩展数据,例如中立怪物的属性加成
 }
 
 // 请求开始战斗

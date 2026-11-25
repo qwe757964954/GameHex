@@ -1,7 +1,7 @@
 import { _decorator, Node, SpriteFrame, UITransform, Vec3, view } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { GoodsBox } from '../itemdetail/GoodsBox';
-import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
+import { ItemInfoPage } from '../itemdetail/ItemInfoPage';
 import {
     ACTIVITY_PREVIEW_HEIGHT,
     previewBubblePlacement,
@@ -246,7 +246,7 @@ export class RewardPreviewPage extends PopupBase {
     private onCellClick(index: number): void {
         const cell = this.currentCells[index];
         if (!cell || !(cell.resId > 0)) return;
-        void ItemDetailPage.open({
+        void ItemInfoPage.open({
             userData: { resId: cell.resId, number: cell.number },
             allowMultiple: true,
         });

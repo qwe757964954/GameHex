@@ -199,9 +199,6 @@ export class LeagueNorthRewardPage extends PopupBase {
         const art = await this.loadArtFrames(snapshot);
         if (!this.alive || revision !== this.revision) return;
 
-        await this.nextPopupFrame();
-        if (!this.alive || revision !== this.revision) return;
-
         this.snapshot = snapshot;
         this.art = art;
         this.applyTabPage();
@@ -245,11 +242,10 @@ export class LeagueNorthRewardPage extends PopupBase {
     private async onClaim(view: ILeagueNorthRewardRowView): Promise<void> {
         if (this.busy) return;
         this.busy = true;
-        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'task', resId: view.resId } } satisfies ILeagueRewardIntent, this);
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'task', resId: view.resId } } satisfies ILeagueRewardIntent);
     }
 
-    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion, source: object): Promise<void> => {
-        if (source !== this) return;
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
         try {
             await this.afterWrite(event.status);
         } finally {

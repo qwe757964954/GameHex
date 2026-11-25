@@ -163,10 +163,10 @@ function harness() {
     };
 }
 
-test('真捐献页只派发带来源的意图，render 绝对赋值且红点恒关', () => {
+test('真捐献页只派发意图，render 绝对赋值且红点恒关', () => {
     const { LeagueDonatePage } = load<{ LeagueDonatePage: new () => IDonateViewHarness }>(PAGE_TS, pageImports());
     const view = makeView(LeagueDonatePage);
-    const events: Array<{ source: object; kind: string }> = [];
+    const events: Array<{ source: object | undefined; kind: string }> = [];
     const target = {};
     EventMgr.instance.on(LeagueDonateEvent.Intent, (event, source) => events.push({ ...event, source }), target);
     try {
@@ -174,7 +174,7 @@ test('真捐献页只派发带来源的意图，render 绝对赋值且红点恒�
         view.freeButton.node.emit('click');
         view.buyButton.node.emit('click');
         assert.deepEqual(events.map(event => event.kind), ['free', 'coin']);
-        assert.ok(events.every(event => event.source === view));
+        assert.ok(events.every(event => event.source === undefined));
 
         const snap = snapshot({ remainText: '剩余捐献次数：1/3', todayDonateAdvTimes: 1 });
         view.render({ snapshot: snap, busy: false });
@@ -199,7 +199,7 @@ test('factory 只认捐献页；真实端口接线，关闭取消 caller，缓�
         h.loadCalls[0].resolve(snapshot()); await flush();
 
         // 免费路：真 playLeagueAd 播完才发 adv=true
-        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'free' }, view);
+        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'free' });
         await flush(); await flush();
         assert.equal(h.adPlayed, 1);
         assert.equal(h.donateCalls.length, 1);
@@ -215,7 +215,7 @@ test('factory 只认捐献页；真实端口接线，关闭取消 caller，缓�
         assert.equal(h.loadCalls.length, 2);
         h.loadCalls[1].resolve(snapshot()); await flush();
         // 金币路：真 CommonTips 的 onSure 才触发 adv=false
-        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'coin' }, view);
+        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'coin' });
         assert.equal(h.confirms.length, 1);
         assert.equal(h.donateCalls.length, 1);
         h.confirms[0].onSure(); await flush();
@@ -226,7 +226,7 @@ test('factory 只认捐献页；真实端口接线，关闭取消 caller，缓�
         // 次数用完时只走 FW.showTip，不弹确认、不发包
         h.donateCalls[1].resolve('ok'); await flush();
         h.loadCalls[2].resolve(snapshot({ hasTimes: false })); await flush();
-        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'coin' }, view);
+        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'coin' });
         assert.equal(h.confirms.length, 1);
         assert.equal(h.donateCalls.length, 2);
         assert.equal(h.tips.length, 2, '捐献成功提示 + 次数用完提示');

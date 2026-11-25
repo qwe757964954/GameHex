@@ -45,8 +45,7 @@ import {
 import { VirtualScrollView } from '../../../vscrollview/VScrollView';
 import { PopupBase } from '../../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
-import type { IZCGuidePreparedContent } from '../application/ZCGuideLoader';
-import type { ZCGuideEntry, ZCGuideParams } from '../model/ZCGuideConfig';
+import type { IZCGuidePreparedContent, ZCGuideEntry, ZCGuideParams } from '../model/ZCGuideConfig';
 import { ZCGuideItem } from './ZCGuideItem';
 
 const { ccclass, property } = _decorator;

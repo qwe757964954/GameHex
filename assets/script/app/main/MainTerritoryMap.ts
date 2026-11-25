@@ -1842,6 +1842,7 @@ export class MainTerritoryMap extends Component {
                 upgrading: detail.upgrading,
                 upgradeProgress: detail.upgradeProgress,
                 upgradeAttempt: detail.upgradeAttempt,
+                whiteMaskMaterial: this.state?.art?.monsterOutlineMaterial ?? null,
             };
     }
 
@@ -2663,7 +2664,7 @@ export class MainTerritoryMap extends Component {
                     EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { playing: false });
                     return;
                 }
-                EventMgr.instance.emit(TerritoryUiEvent.ChestRewardsReady, { rewards: goods }, this);
+                EventMgr.instance.emit(TerritoryUiEvent.ChestRewardsReady, { rewards: goods });
             }, CHEST_HANDOFF_SETTLE_MS);
         };
         // 图标先取齐再起播：`chest_seq` 的飞行图标 / 光柱用的就是这一批 frame，现取会喷空图。

@@ -1861,7 +1861,7 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 10,
+      "x": 20,
       "y": -1,
       "z": 0
     },
@@ -1939,10 +1939,10 @@
       "a": 255
     },
     "_string": "1",
-    "_horizontalAlign": 1,
+    "_horizontalAlign": 0,
     "_verticalAlign": 1,
-    "_actualFontSize": 13,
-    "_fontSize": 20,
+    "_actualFontSize": 18,
+    "_fontSize": 28,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
     "_overflow": 2,
@@ -2660,7 +2660,7 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 10,
+      "x": 20,
       "y": -1,
       "z": 0
     },
@@ -2738,10 +2738,10 @@
       "a": 255
     },
     "_string": "10",
-    "_horizontalAlign": 1,
+    "_horizontalAlign": 0,
     "_verticalAlign": 1,
-    "_actualFontSize": 13,
-    "_fontSize": 20,
+    "_actualFontSize": 18,
+    "_fontSize": 28,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
     "_overflow": 2,
@@ -3320,8 +3320,8 @@
     "_string": "0",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 14,
-    "_fontSize": 20,
+    "_actualFontSize": 20,
+    "_fontSize": 28,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
     "_overflow": 2,
@@ -5549,7 +5549,7 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 10,
+      "x": 20,
       "y": -1,
       "z": 0
     },
@@ -5627,10 +5627,10 @@
       "a": 255
     },
     "_string": "1",
-    "_horizontalAlign": 1,
+    "_horizontalAlign": 0,
     "_verticalAlign": 1,
-    "_actualFontSize": 13,
-    "_fontSize": 20,
+    "_actualFontSize": 18,
+    "_fontSize": 28,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
     "_overflow": 2,
@@ -6348,7 +6348,7 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 10,
+      "x": 20,
       "y": -1,
       "z": 0
     },
@@ -6426,10 +6426,10 @@
       "a": 255
     },
     "_string": "10",
-    "_horizontalAlign": 1,
+    "_horizontalAlign": 0,
     "_verticalAlign": 1,
-    "_actualFontSize": 13,
-    "_fontSize": 20,
+    "_actualFontSize": 18,
+    "_fontSize": 28,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
     "_overflow": 2,
@@ -7008,8 +7008,8 @@
     "_string": "0",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
-    "_actualFontSize": 14,
-    "_fontSize": 20,
+    "_actualFontSize": 20,
+    "_fontSize": 28,
     "_fontFamily": "Arial",
     "_lineHeight": 40,
     "_overflow": 2,

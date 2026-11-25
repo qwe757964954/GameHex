@@ -4,7 +4,7 @@ import { PopupCloseReason } from '../../framework/ui/PopupDef';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { FW } from '../../framework/FW';
-import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
+import { ItemInfoPage } from '../itemdetail/ItemInfoPage';
 import { itemNumberTextOf } from '../itemdetail/ItemDetailTable';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { ShowRewardItem } from './ShowRewardItem';
@@ -68,6 +68,7 @@ export class ShowRewardPage extends PopupBase {
     private frames: IRewardFrames[] = [];
     /** 是否铜钱奖励（决定音效）。 */
     private isGold = false;
+    private soundKey?: string;
 
     /** 已播过动画的数据下标：滚动复用槽位，不记账会重播；每次打开清空。 */
     private readonly playedAni = new Set<number>();
@@ -108,11 +109,12 @@ export class ShowRewardPage extends PopupBase {
         const frames = await loadRewardFrames(sorted);
         if (!this.alive) return;
 
-        await this.nextPopupFrame();
-        if (!this.alive) return;
-
         this.entries = sorted;
         this.frames = frames;
+        this.soundKey = userData?.soundKey;
+    }
+
+    protected onViewReady(userData?: IShowRewardParams): void {
         this.present(userData?.soundKey);
     }
 
@@ -208,7 +210,7 @@ export class ShowRewardPage extends PopupBase {
         if (!this.playedAni.has(dataIndex)) return;
         const entry = this.entries[dataIndex];
         if (!entry || !(entry.resId > 0)) return;
-        void ItemDetailPage.open({
+        void ItemInfoPage.open({
             userData: { resId: entry.resId, number: entry.number },
             layer: this.popupLayer,
             allowMultiple: true,

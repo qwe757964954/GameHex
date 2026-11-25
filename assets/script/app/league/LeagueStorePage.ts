@@ -93,21 +93,13 @@ export class LeagueStorePage extends PopupBase {
         return leagueRepository;
     }
 
-    /**
-     * 读一次商店（缓存 + 表），再把本趟要用到的图全取好，最后铺行。
-     *
-     * `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-     * ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
-     */
+    /** 读一次商店（缓存 + 表），再把本趟要用到的图全取好，最后铺行。 */
     private async reload(): Promise<void> {
         const revision = ++this.revision;
         const snapshot = await this.repository.loadStore();
         if (!this.alive || revision !== this.revision) return;
 
         const art = await this.loadArtFrames(snapshot);
-        if (!this.alive || revision !== this.revision) return;
-
-        await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
         this.snapshot = snapshot;
@@ -170,7 +162,7 @@ export class LeagueStorePage extends PopupBase {
             return;
         }
         if (!this.beginWrite()) return;
-        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'store', id: view.id } } satisfies ILeagueRewardIntent, this);
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'store', id: view.id } } satisfies ILeagueRewardIntent);
     }
 
     /**
@@ -190,8 +182,7 @@ export class LeagueStorePage extends PopupBase {
         return true;
     }
 
-    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion, source: object): Promise<void> => {
-        if (source !== this) return;
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
         try {
             await this.afterWrite(event.status);
         } finally {

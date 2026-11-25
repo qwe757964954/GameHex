@@ -2,9 +2,8 @@
  * 物品详情的数据端口：只读配置表，不发任何请求。
  *
  * 数据来源：
- *   `item`                主数据（name / desc / quality / icon / access / itemBox / useJump）
+ *   `item`                主数据（name / desc / quality / icon / access / useJump）
  *   `viewtype`            `access` 的 id → 文案
- *   `itemCraft`           碎片合成（异步表，见下）
  *   `gameConfig`          品质名 CSV（`qualityname`）
  *   `roleProperty`        item 未命中时的货币 / 体力名称、说明、品质与图标
  *
@@ -12,9 +11,6 @@
  *
  * 老端打开这个界面时也不发请求（`openLayerRoleItemDetails` 只是 `SetGoods + load`），
  * 所以表读不到就显示空态，离线 / 编辑器预览都能打开。
- *
- * `itemCraft` 不在 `refSmallAll.json` 里，老端要专门 `preloadRef()`；本工程的对应动作
- * 就是这里的 `readRows('itemCraft')`（走 `getRefAllAsync`，缺失即空数组）。
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
@@ -22,18 +18,14 @@ import { readRefRowsSafe } from '../common/TableRead';
 import { resBarCellOfRefId, resBarIconSpritePath } from '../common/ResTypes';
 import {
     accessRefsOf,
-    canComposOf,
     itemNumberTextOf,
-    parseItemCraftRows,
     parseItemRows,
     parseItemRow,
     parseViewTypeRows,
     qualityNameOf,
-    typeStateOf,
 } from './ItemDetailTable';
 import type {
     IItemAccessRef,
-    IItemDetailButtonState,
     IItemRow,
 } from './ItemDetailTable';
 
@@ -50,14 +42,6 @@ export interface IItemDetailSnapshot {
     readonly numberText: string;
     /** 获取途径（文案与跳转 id 成对 —— 途径行点击要拿同一个 id 去 `jumpTo`）。 */
     readonly accessRefs: readonly IItemAccessRef[];
-    /** 「内容」格子的 resId 列表。 */
-    readonly itemBox: readonly number[];
-    /** 合成按钮显不显示。 */
-    readonly canCompos: boolean;
-    /** 下半部四块的显隐。 */
-    readonly buttons: IItemDetailButtonState;
-    /** 全量 `item` 表（`itemBox` 里的物品要按 `resId` 取名字 / 品质 / 图标）。 */
-    readonly items: ReadonlyMap<number, IItemRow>;
 }
 
 export interface IItemDetailRepository {
@@ -90,16 +74,14 @@ async function readQualityNameCsv(): Promise<string> {
 
 class ItemDetailRepositoryImpl implements IItemDetailRepository {
     async load(resId: number, owned: number): Promise<IItemDetailSnapshot> {
-        const [itemRows, viewTypeRows, craftRows, qualityCsv] = await Promise.all([
+        const [itemRows, viewTypeRows, qualityCsv] = await Promise.all([
             readRows(ITEM_TABLE),
             readRows('viewtype'),
-            readRows('itemCraft'),
             readQualityNameCsv(),
         ]);
 
         const items = parseItemRows(itemRows);
         const viewTypes = parseViewTypeRows(viewTypeRows);
-        const crafts = parseItemCraftRows(craftRows);
 
         let row = items.get(resId) ?? null;
         if (!row) {
@@ -115,18 +97,12 @@ class ItemDetailRepositoryImpl implements IItemDetailRepository {
         }
 
         const ownedCount = Number.isFinite(owned) ? owned : 0;
-        const canCompos = canComposOf(crafts.get(resId), ownedCount);
-        const itemBox = row?.itemBox ?? [];
         return {
             row,
             number: ownedCount,
             qualityName: qualityNameOf(qualityCsv, row?.quality ?? 1),
             numberText: itemNumberTextOf(ownedCount),
             accessRefs: row ? accessRefsOf(viewTypes, row.access) : [],
-            itemBox,
-            canCompos,
-            buttons: typeStateOf(itemBox.length > 0, row?.useJump ?? 0, canCompos),
-            items,
         };
     }
 

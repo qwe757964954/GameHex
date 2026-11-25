@@ -189,6 +189,8 @@ export const TERRITORY_TEXTS = {
     monsterBoxUpgradeFailed: '宝箱升级失败，请稍后再试',
     /** 升级成功：用**服务端回包的新等级**，不本地 +1。 */
     monsterBoxUpgraded: (lv: number) => `怪物宝箱已升至 ${lv} 级`,
+    /** 升级成功但回包没带新等级（会随后重拉快照）⇒ 只报成功，不猜数字。 */
+    monsterBoxUpgradeSucceeded: '怪物宝箱升级成功',
     /** 「宝箱开启」奖励页：跳过卡片入场（蓝湖「宝箱开启」设计稿原文，`>>` 不是省略号）。 */
     chestOpenSkip: '跳过>>',
     /** 「宝箱开启」奖励页：关闭提示（设计稿原文）。 */

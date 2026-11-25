@@ -89,7 +89,7 @@ function fixture() {
     });
     controller.start();
 
-    const emit = (intent: ILeagueJoinIntent, source: object) => EventMgr.instance.emit(LeagueJoinEvent.Intent, intent, source);
+    const emit = (intent: ILeagueJoinIntent) => EventMgr.instance.emit(LeagueJoinEvent.Intent, intent);
     return {
         owner, controller, views, tips, joined, cancelled,
         openedCreate, openedUnion, listCalls, searchCalls, joinCalls,
@@ -119,13 +119,13 @@ test('搜索空值提示；乱序搜索只落最新一趟', async () => {
     try {
         h.listCalls[0].resolve('ok');
         await flush();
-        h.emit({ kind: 'search' }, h.owner);
+        h.emit({ kind: 'search' });
         assert.deepEqual(h.tips, [LEAGUE_TIP_INPUT_UNION_ID], '空输入不发包');
 
-        h.emit({ kind: 'input', text: '12' }, h.owner);
-        h.emit({ kind: 'search' }, h.owner);
-        h.emit({ kind: 'input', text: '11' }, h.owner);
-        h.emit({ kind: 'search' }, h.owner);
+        h.emit({ kind: 'input', text: '12' });
+        h.emit({ kind: 'search' });
+        h.emit({ kind: 'input', text: '11' });
+        h.emit({ kind: 'search' });
         assert.equal(h.searchCalls.length, 2);
 
         h.setCached(row('11'));
@@ -147,8 +147,8 @@ test('快速加入防连点；成功后重新拉列表并发 Joined', async () =
     try {
         h.listCalls[0].resolve('ok');
         await flush();
-        h.emit({ kind: 'quickJoin' }, h.owner);
-        h.emit({ kind: 'quickJoin' }, h.owner);
+        h.emit({ kind: 'quickJoin' });
+        h.emit({ kind: 'quickJoin' });
         await flush();
         assert.equal(h.joinCalls.length, 1, '写操作在飞时第二次点击被挡掉');
         assert.equal(h.joinCalls[0].caller, h.controller);
@@ -171,7 +171,7 @@ test('无快速加入目标只提示，不发包', async () => {
         h.listCalls[0].resolve('ok');
         await flush();
         h.setUnions([row('21', { autoJoin: false })]);
-        h.emit({ kind: 'quickJoin' }, h.owner);
+        h.emit({ kind: 'quickJoin' });
         await flush();
         assert.equal(h.joinCalls.length, 0);
         assert.deepEqual(h.tips, [LEAGUE_NO_JOINABLE]);
@@ -195,21 +195,15 @@ test('dispose 后迟到列表 / 搜索 / 加入结果不上屏，removeCaller �
     assert.deepEqual(h.joined, []);
 });
 
-test('意图按 owner 隔离；create / openUnion 走组合注入的路由', async () => {
+test('create / openUnion 走组合注入的路由', async () => {
     const h = fixture();
     try {
         h.listCalls[0].resolve('ok');
         await flush();
-        const stranger = {};
-        h.emit({ kind: 'quickJoin' }, stranger);
-        h.emit({ kind: 'create' }, stranger);
-        assert.equal(h.joinCalls.length, 0);
-        assert.deepEqual(h.openedCreate, []);
-
-        h.emit({ kind: 'create' }, h.owner);
+        h.emit({ kind: 'create' });
         assert.deepEqual(h.openedCreate, [true]);
         const union = h.views[0][0];
-        h.emit({ kind: 'openUnion', union }, h.owner);
+        h.emit({ kind: 'openUnion', union });
         assert.deepEqual(h.openedUnion, [union]);
     } finally {
         h.controller.dispose();

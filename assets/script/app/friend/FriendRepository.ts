@@ -56,6 +56,7 @@ import {
     RequestFriendsSearch,
 } from './RequestFriendMsg';
 
+import { GAME_CONFIG_TABLE } from '../../core/config/TableNames';
 import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 一次界面刷新要的全部数据。 */
 export interface IFriendSnapshot {
@@ -163,7 +164,7 @@ export class RuntimeFriendRepository implements IFriendRepository {
     private readonly localPatches = new Map<string, IFriendPatch>();
 
     async load(nowMs: number = Date.now()): Promise<IFriendSnapshot> {
-        const config = parseFriendConfig(await readRows('gameConfig'));
+        const config = parseFriendConfig(await readRows(GAME_CONFIG_TABLE));
 
         const role = readRole() as { readonly id?: unknown; readonly name?: unknown } | null;
         const selfId = toIdString(role?.id);

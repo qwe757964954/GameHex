@@ -6,12 +6,12 @@ import { FW } from '../../framework/FW';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
-import { loadRoleArt } from './RoleArtLoader';
-import { loadMilitiaTalentIcon } from './RoleArtLoader';
+import { loadMilitiaTalentIcon, loadRoleArt } from './RoleArtLoader';
 import { militiaRepository } from './MilitiaRepository';
 import { MilitiaTalentOverviewPage } from './MilitiaTalentOverviewPage';
 import { ROLE_TEXTS } from './RoleTexts';
 import { MilitiaTalentItem } from './MilitiaTalentItem';
+import { MilitiaTalentCostItem } from './MilitiaTalentCostItem';
 import type { IMilitiaTalentCell, IMilitiaTalentDetail, IMilitiaTalentSnapshot, MilitiaTalentState } from './MilitiaTypes';
 
 import { ITEM_TABLE } from '../../core/config/TableNames';
@@ -24,15 +24,7 @@ const { ccclass, property } = _decorator;
  *   · 纵向虚拟列表 = `armyLevel[id=66014]` 的等级曲线（**等级降序**），打开时滚到「下一级」并居中；
  *   · 点一格 → 详情小弹窗（效果名 / 描述 / 两行消耗 / 激活按钮）；
  *   · 「激活」发 `CmdArmyLevelUpReqMsg { armyId }`，成功后整页重刷。
- *
- * ## 为什么「小弹窗」是一组节点而不是一个父节点
- *
- * FGUI 里它们是 advanced group `强化小弹窗`（`popBg` + 文本 + icon + `n52` group），
- * 靠 controller `显示小弹窗` 的「是 / 否」两页切换；生成器**不认 controller**，把这些节点
- * 摊平到了根下 ⇒ 这里用一个名字数组统一显隐，而不是去改 prefab 的层级（改层级要重算 lpos）。
  */
-const INFO_NODE_NAMES = ['Popup', 'SkillName', 'NodeIcon', 'SkillDesc', 'Cost1', 'Cost2', 'BtnActivate'] as const;
-
 /** 节点底图三态（FGUI `按钮_天赋项` 的「状态」controller 三页，生成器只烘了默认页）。 */
 const STATE_ART: Readonly<Record<MilitiaTalentState, string>> = {
     locked: 'talentNodeBg',
@@ -47,30 +39,51 @@ const GOLD_ICON_PATH = 'icons/resource/图标_铜币';
 export class MilitiaTalentPage extends PopupBase {
     static prefabPath = 'ui/Role/TabMilitiaTalent';
 
-    @property({ type: Node, tooltip: 'List：天赋列表（其上挂 VirtualScrollView，gridCount=1）' })
-    listNode: Node = null;
+    @property({ type: VirtualScrollView, tooltip: '天赋列表' })
+    private list: VirtualScrollView = null!;
 
-    @property({ type: Node, tooltip: 'AttrBtn：天赋属性总览按钮（挂 cc.Button）' })
-    attrButton: Node = null;
+    @property({ type: Button, tooltip: '天赋属性总览按钮' })
+    private attrButton: Button = null!;
 
-    @property({ type: Node, tooltip: 'Mask：详情弹窗的遮罩（挂 cc.Button，点它关弹窗）' })
-    maskButton: Node = null;
+    @property({ type: Button, tooltip: '详情弹窗遮罩按钮' })
+    private maskButton: Button = null!;
 
-    @property({ type: Node, tooltip: 'BtnActivate：激活按钮（挂 cc.Button）' })
-    activateButton: Node = null;
+    @property({ type: Button, tooltip: '激活按钮' })
+    private activateButton: Button = null!;
+
+    @property({ type: Button, tooltip: '关闭详情按钮' })
+    private infoCloseButton: Button = null!;
+
+    @property({ type: [Node], tooltip: '随详情一起显隐的节点' })
+    private infoNodes: Node[] = [];
+
+    @property({ type: Label, tooltip: '天赋详情名称' })
+    private skillName: Label = null!;
+
+    @property({ type: Label, tooltip: '天赋详情描述' })
+    private skillDesc: Label = null!;
+
+    @property({ type: Sprite, tooltip: '天赋详情图标' })
+    private skillIcon: Sprite = null!;
+
+    @property({ type: MilitiaTalentCostItem, tooltip: '金币消耗行' })
+    private goldCost: MilitiaTalentCostItem = null!;
+
+    @property({ type: MilitiaTalentCostItem, tooltip: '道具消耗行' })
+    private itemCost: MilitiaTalentCostItem = null!;
 
     // ---- 底部菜单层（`MenuBar`，老端 `组件_民兵_菜单层`）----
 
     /** `MenuBar/BtnBack`：返回（关整页）。老端 `LayerMiltiaMenuMenuUI.onReturnClick`。 */
-    @property({ type: Node, tooltip: 'MenuBar/BtnBack：返回（挂 cc.Button）' })
-    backButton: Node = null;
+    @property({ type: Button, tooltip: 'MenuBar/BtnBack：返回' })
+    private backButton: Button = null!;
 
     /**
      * `MenuBar/TabTalent`：「天赋」页签（复用 `ui/common/TabButton` ——
      * 老端 `按钮_首页_菜单` 的 `类型=23`，图标 `zjm_icon01_TianFu/TianFu02`）。
      */
     @property({ type: TabButton, tooltip: 'MenuBar/TabTalent：天赋页签（当前页，常驻选中）' })
-    tabTalent: TabButton = null;
+    tabTalent: TabButton = null!;
 
     /**
      * `MenuBar/TabSkin`：「皮肤」页签（`类型=24`，图标 `zjm_icon01_PiFu/PiFu02`）。
@@ -79,10 +92,7 @@ export class MilitiaTalentPage extends PopupBase {
      * ⇒ 页签照摆（还原原稿），点击给「没移植」提示，不留死按钮（规则 113 的同款口径）。
      */
     @property({ type: TabButton, tooltip: 'MenuBar/TabSkin：皮肤页签（未移植，点击给提示）' })
-    tabSkin: TabButton = null;
-
-    /** 缓存：列表组件。 */
-    private list: VirtualScrollView = null;
+    tabSkin: TabButton = null!;
 
     /** 当前列表数据（等级降序）。 */
     private cells: readonly IMilitiaTalentCell[] = [];
@@ -104,50 +114,34 @@ export class MilitiaTalentPage extends PopupBase {
 
     /** 每趟刷新递增，丢弃过期的异步结果。 */
     private revision = 0;
-
-    /** {@link ensureInit} 是否跑过（幂等标记）。 */
-    private inited = false;
+    private isActivating = false;
 
     // ============================================================
     // 生命周期
     // ============================================================
 
     protected onInit(): void {
-        this.ensureInit();
-        // 详情小弹窗在 prefab 里是**展开**的（生成器不认 FGUI 的 controller 页）⇒
-        // 这里先收掉，否则打开的第一帧会闪一下弹窗（refresh 是异步的，来不及）。
+        this.list.renderItemFn = (node, index) => this.renderItem(node, index);
+        this.list.onItemClickFn = (_node, index) => this.onItemClick(index);
+        this.attrButton.node.on(Button.EventType.CLICK, this.onAttrClick, this);
+        this.maskButton.node.on(Button.EventType.CLICK, this.hideInfo, this);
+        this.activateButton.node.on(Button.EventType.CLICK, this.onActivateClick, this);
+        this.backButton.node.on(Button.EventType.CLICK, this.closeByButton, this);
+        this.infoCloseButton.node.on(Button.EventType.CLICK, this.hideInfo, this);
+        this.tabTalent.setSelected(true);
+        this.tabSkin.setSelected(false);
+        this.tabSkin.bindSelect(() => FW.showTip(ROLE_TEXTS.tabSkinMissing));
         this.hideInfo();
     }
 
     protected onOpen(): void {
-        this.ensureInit();
+        this.isActivating = false;
+        this.activateButton.interactable = true;
         void this.refresh();
     }
 
     protected onClose(): void {
         this.hideInfo();
-    }
-
-    /** 取组件 + 接回调（幂等：宿主可能初始非激活 ⇒ `onInit` 未必先跑，见规则 108）。 */
-    private ensureInit(): void {
-        if (this.inited) return;
-        this.inited = true;
-
-        this.list = this.listNode.getComponent(VirtualScrollView);
-        this.list.renderItemFn = (node: Node, index: number) => this.renderItem(node, index);
-        this.list.onItemClickFn = (_node: Node, index: number) => this.onItemClick(index);
-
-        // CLICK 挂在**节点**上（Button 自身没有 on）。
-        this.attrButton.getComponent(Button).node.on(Button.EventType.CLICK, this.onAttrClick, this);
-        this.maskButton.getComponent(Button).node.on(Button.EventType.CLICK, this.hideInfo, this);
-        this.activateButton.getComponent(Button).node.on(Button.EventType.CLICK, this.onActivateClick, this);
-        this.backButton.getComponent(Button).node.on(Button.EventType.CLICK, this.closeByButton, this);
-        // 页签：天赋 = 当前页（常驻选中、不接点击）；皮肤没迁 ⇒ 点它给提示。
-        this.tabTalent.setSelected(true);
-        this.tabSkin.setSelected(false);
-        this.tabSkin.bindSelect(() => FW.showTip(ROLE_TEXTS.tabSkinMissing));
-        this.node.getChildByName('Popup').getChildByName('CloseBtn')
-            .getComponent(Button).node.on(Button.EventType.CLICK, this.hideInfo, this);
     }
 
     // ============================================================
@@ -156,18 +150,20 @@ export class MilitiaTalentPage extends PopupBase {
 
     /** 读表 → 取快照 → 预加载图 → 铺列表 → 滚到「下一级」居中。 */
     private async refresh(): Promise<void> {
-        const rev = (this.revision += 1);
+        const context = this.popupOpenContext;
+        if (!context) return;
+        const rev = ++this.revision;
         this.hideInfo();
         await militiaRepository.loadTables();
-        if (!this.alive || rev !== this.revision) return;
+        if (!this.isValid || context.cancelled || rev !== this.revision) return;
 
         const snapshot: IMilitiaTalentSnapshot = militiaRepository.snapshot();
-        this.cells = snapshot.cells;
-        this.redDot = snapshot.redDot;
 
         // 图先 await 完再铺（renderItemFn 是同步的，边加载边写会闪上一格图）。
-        await this.preloadArt();
-        if (!this.alive || rev !== this.revision) return;
+        await this.preloadArt(snapshot.cells);
+        if (!this.isValid || context.cancelled || rev !== this.revision) return;
+        this.cells = snapshot.cells;
+        this.redDot = snapshot.redDot;
 
         // 菜单层页签红点：老端 `onRdChanged` 里天赋格取 `checkMilitiaCanLevelUp()`、
         // 皮肤格取 `hasArmySkinRD()` —— 本工程皮肤页没迁 ⇒ 恒 0（收起）。
@@ -182,8 +178,8 @@ export class MilitiaTalentPage extends PopupBase {
     }
 
     /** 预加载：天赋图标去重 + 节点三态底图 + 金币图。 */
-    private async preloadArt(): Promise<void> {
-        const keys = Array.from(new Set(this.cells.map((c) => c.iconKey).filter((k) => k !== '')));
+    private async preloadArt(cells: readonly IMilitiaTalentCell[]): Promise<void> {
+        const keys = Array.from(new Set(cells.map((c) => c.iconKey).filter((k) => k !== '')));
         await Promise.all(keys.map(async (key) => {
             this.iconFrames.set(key, await loadMilitiaTalentIcon(key));
         }));
@@ -197,7 +193,6 @@ export class MilitiaTalentPage extends PopupBase {
     private renderItem(node: Node, index: number): void {
         const item = node.getComponent(MilitiaTalentItem);
         const cell = this.cells[index];
-        if (!item || !cell) return;
         item.render(
             cell,
             this.stateFrames.get(cell.state) ?? null,
@@ -228,7 +223,8 @@ export class MilitiaTalentPage extends PopupBase {
     /** 「激活」：只认「下一级」+ 材料够（与老端 `onUpClick` 同一口径）。 */
     private async onActivateClick(): Promise<void> {
         const detail = this.detail;
-        if (!detail) return;
+        const context = this.popupOpenContext;
+        if (!detail || !context || this.isActivating) return;
         if (!detail.activatable) {
             FW.showTip(ROLE_TEXTS.talentNotNext);
             return;
@@ -237,19 +233,24 @@ export class MilitiaTalentPage extends PopupBase {
             FW.showTip(ROLE_TEXTS.talentLack);
             return;
         }
-        const result = await militiaRepository.requestLevelUp();
-        if (!this.alive) return;
-        if (result === 'offline') {
-            FW.showTip(ROLE_TEXTS.offline);
-            return;
+        const button = this.activateButton;
+        this.isActivating = true;
+        button.interactable = false;
+        try {
+            const result = await militiaRepository.requestLevelUp(this);
+            if (!this.isValid || context.cancelled) return;
+            if (result !== 'ok') {
+                FW.showTip(result === 'offline' ? ROLE_TEXTS.offline : ROLE_TEXTS.failed);
+                return;
+            }
+            FW.showTip(ROLE_TEXTS.talentUpOk);
+            await this.refresh();
+        } finally {
+            if (this.isValid && !context.cancelled) {
+                this.isActivating = false;
+                button.interactable = true;
+            }
         }
-        if (result === 'failed') {
-            FW.showTip(ROLE_TEXTS.failed);
-            return;
-        }
-        FW.showTip(ROLE_TEXTS.talentUpOk);
-        this.hideInfo();
-        await this.refresh();
     }
 
     // ============================================================
@@ -258,66 +259,43 @@ export class MilitiaTalentPage extends PopupBase {
 
     /** 打开详情（老端 `showSkillEffect`）。 */
     private async showInfo(detail: IMilitiaTalentDetail): Promise<void> {
-        const rev = this.revision;
+        const context = this.popupOpenContext;
+        if (!context) return;
         this.detail = detail;
 
-        this.setInfoVisible(true);
-        this.node.getChildByName('SkillName').getComponent(Label).string = detail.effectName;
-        this.node.getChildByName('SkillDesc').getComponent(Label).string = detail.effectDesc;
+        this.skillName.string = detail.effectName;
+        this.skillDesc.string = detail.effectDesc;
+        const cachedIcon = this.iconFrames.get(detail.iconKey) ?? null;
+        this.skillIcon.spriteFrame = cachedIcon;
+        this.goldCost.render(this.goldFrame, detail.goldOwned, detail.goldNeed);
+        this.itemCost.render(null, detail.itemOwned, detail.itemNeed);
+        this.renderInfoVisibility();
 
-        // 图标：详情的 key 可能不在列表预加载的集合里（点的是未解锁的高等级）⇒ 现加载。
-        const icon = this.iconFrames.get(detail.iconKey) ?? await loadMilitiaTalentIcon(detail.iconKey);
-        if (!this.alive || rev !== this.revision) return;
-        this.node.getChildByName('NodeIcon').getChildByName('Icon').getComponent(Sprite).spriteFrame = icon;
-
-        this.renderCost('Cost1', this.goldFrame, detail.goldOwned, detail.goldNeed);
-        const itemFrame = await this.loadCostItemIcon(detail.itemId);
-        if (!this.alive || rev !== this.revision) return;
-        this.renderCost('Cost2', itemFrame, detail.itemOwned, detail.itemNeed);
-
-        // 「激活」只在点的是「下一级」时出现（老端 `激活项` 页）。
-        this.activateButton.active = detail.activatable;
+        const [icon, itemFrame] = await Promise.all([
+            cachedIcon ?? loadMilitiaTalentIcon(detail.iconKey),
+            this.loadCostItemIcon(detail.itemId),
+        ]);
+        if (!this.isValid || context.cancelled || this.detail !== detail) return;
+        this.skillIcon.spriteFrame = icon;
+        this.itemCost.render(itemFrame, detail.itemOwned, detail.itemNeed);
     }
 
     /** 关掉详情（老端 `closeInfo`）。 */
     private hideInfo(): void {
         this.detail = null;
-        this.setInfoVisible(false);
+        this.renderInfoVisibility();
     }
 
-    /** 一组节点统一显隐（见文件头「为什么是一组节点」）。 */
-    private setInfoVisible(visible: boolean): void {
-        for (const name of INFO_NODE_NAMES) {
-            const node = this.node.getChildByName(name);
-            if (node) node.active = visible;
-        }
-        // 遮罩压在小弹窗下面、列表上面 —— 只在弹窗开着时收点击。
-        this.maskButton.active = visible;
-        if (!visible) this.activateButton.active = false;
-    }
-
-    /** 一行消耗：图标 + 「持有/需要」（`HasText` / `NeedText`）。 */
-    private renderCost(nodeName: string, frame: SpriteFrame | null, owned: number, need: number): void {
-        const box = this.node.getChildByName(nodeName);
-        box.getChildByName('CostIcon').getComponent(Sprite).spriteFrame = frame;
-        box.getChildByName('HasText').getComponent(Label).string = String(owned);
-        box.getChildByName('NeedText').getComponent(Label).string = `/${need}`;
+    private renderInfoVisibility(): void {
+        const visible = this.detail !== null;
+        for (const node of this.infoNodes) node.active = visible;
+        this.maskButton.node.active = visible;
+        this.activateButton.node.active = this.detail?.activatable === true;
     }
 
     /** 消耗道具的图标（`item.icon` 的 resources 相对路径）。 */
     private async loadCostItemIcon(itemId: number): Promise<SpriteFrame | null> {
-        const rows = await this.itemRowOf(itemId);
-        return rows ? loadItemIconArt(String(rows.icon ?? '')) : null;
-    }
-
-    /** 取一行 item（走 `RefUtil`，与背包同一张表）。 */
-    private async itemRowOf(itemId: number): Promise<{ icon?: string } | null> {
-        const row = await RefUtil.instance.getRefAsync(ITEM_TABLE, 'resId', itemId);
-        return (row as { icon?: string } | null) ?? null;
-    }
-
-    /** 组件所在节点是否仍然有效（弹窗随时可能被关，`close()` 是直接 destroy）。 */
-    private get alive(): boolean {
-        return this.isPopupOpen && (!this.node || this.node.isValid);
+        const row = await RefUtil.instance.getRefAsync(ITEM_TABLE, 'resId', itemId) as { icon?: string } | null;
+        return row ? loadItemIconArt(String(row.icon ?? '')) : null;
     }
 }

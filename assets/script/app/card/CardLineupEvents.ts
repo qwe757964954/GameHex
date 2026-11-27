@@ -3,7 +3,7 @@
  * 保存结果走事件而不是回调，面板开着时也能立刻刷新；本文件不 import cc。
  */
 import type { CardLineupData } from './CardRepository';
-import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 
 /** 本链条对外派发的事件名。 */
 export const CardLineupEvent = {
@@ -41,8 +41,13 @@ export interface ISkillStepPayload {
 }
 
 export const CardLineupUiEvent = {
-    Intent: 'card-lineup:intent', Render: 'card-lineup:render',
+    Intent: 'card-lineup:intent', Render: 'card-lineup:render', Output: 'card-lineup:output',
 } as const;
+
+export type CardLineupOutput =
+    | { readonly kind: 'openEditor' }
+    | { readonly kind: 'openUpgrade'; readonly card: ZCDeckCard; readonly level: number }
+    | { readonly kind: 'failed'; readonly error: unknown };
 
 /** 编辑与升级只报意图，数据更新由控制器发布。 */
 export interface ICardLineupIntent {

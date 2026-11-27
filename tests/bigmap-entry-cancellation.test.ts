@@ -10,6 +10,7 @@ import { toIdString } from '../assets/script/app/net/RequestGuard';
 import * as artifactPaths from '../assets/script/app/ArtPaths';
 // core 纯 TS：直接拿真源常量，别在桩里写死 'bigmap'（改名后断言要跟着红）。
 import * as BundleCatalog from '../assets/script/core/asset/BundleCatalog';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 
 test('加载配置期间切走页面，取消的世界入口不能稍后弹出覆盖新页', async () => {
     let finishConfig: (config: object) => void = () => undefined;
@@ -23,6 +24,7 @@ test('加载配置期间切走页面，取消的世界入口不能稍后弹出�
     runInNewContext(code, { exports, console: { warn: () => undefined },
         require: (name: string) => {
             if (name.endsWith('/EventMgr')) return { EventMgr };
+            if (name.endsWith('/ResourceScope')) return { ResourceScope };
         if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { director: { getScene: () => { canvasLookups += 1; return null; } } };
             if (name === './BigMapConfigLoader') return { loadBigMapConfig: () => config };
@@ -127,6 +129,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, { exports, console: { warn() {} }, require(name: string) {
         if (name.endsWith('/EventMgr')) return { EventMgr: { instance: events } };
+        if (name.endsWith('/ResourceScope')) return { ResourceScope };
         if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { Node: FakeNode, UITransform: Transform, Widget, UIOpacity: Opacity,
             // ⚠️ 刻意不提供 `assetManager`：页面宿主 prefab 必须经 `AssetService` 加载，

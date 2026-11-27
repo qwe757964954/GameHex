@@ -7,7 +7,7 @@ import { applyBigMapScheduleOverrides } from '../model/BigMapCitySchedule';
 import type { IBigMapConfig } from '../model/BigMapTypes';
 import { withBigMapCampCities } from '../model/BigMapCampWorld';
 
-import { ITEM_TABLE } from '../../../core/config/TableNames';
+import { GAME_CONFIG_TABLE, ITEM_TABLE } from '../../../core/config/TableNames';
 /**
  *从 `ConfigService` 读取 BigMap 表（含联机据点 bigMapCamp）并解析成强类型配置。
  *
@@ -38,7 +38,7 @@ export async function loadBigMapConfig(config: ConfigService): Promise<IBigMapCo
 async function applyScheduleOverrides(config: ConfigService, parsed: IBigMapConfig): Promise<IBigMapConfig> {
     let rows: readonly unknown[];
     try {
-        rows = await config.getTable('gameConfig');
+        rows = await config.getTable(GAME_CONFIG_TABLE);
     } catch (error) {
         console.warn('[BigMapConfigLoader] gameConfig 读取失败，攻城时点退回 bigmapSchedule 表值', error);
         return parsed;

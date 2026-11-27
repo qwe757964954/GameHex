@@ -15,7 +15,7 @@ import type { IRewardAmount } from '../../core/types/Reward';
 // ============================================================
 
 /** 活动类型（= `activity.type`，与老端 `ActivityType` 同值）。 */
-export const RECHARGE_ACTIVITY_TYPE = {
+const RECHARGE_ACTIVITY_TYPE = {
     /** 充值好礼 —— 页签「累计充值」列表用的那组（`plan 1`）。 */
     payGift: 1003,
     /** 充值豪礼（一）—— 页签「充值好礼」列表用的那组（`plan 2`），并决定该页签显不显示。 */

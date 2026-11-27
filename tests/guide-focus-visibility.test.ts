@@ -22,7 +22,8 @@ const blockMethod = methodOf('needsFullScreenBlock');
 // 第 25 条：立绘挡不挡孔也在 `placeFocusRing` 末尾判（`hole` 步不再「一律藏立绘」）。
 // 判定要用到立绘的摆放公式，所以这一组方法得一起搬进来。
 // 第 27 条：对话条一关，立绘必须跟着收（`placeFocusRing` 里逐帧兜底）⇒ `hidePortrait` 也要搬。
-const portraitMethods = ['syncPortraitSuppression', 'applyPortraitPlacement', 'portraitHitsFocus',
+// 2026-11-25：`hole` 与 `holeThrough`（8-1 挖孔穿透）共用「挖孔形态」判据 ⇒ `usesFocusHole` 一起搬。
+const portraitMethods = ['syncPortraitSuppression', 'usesFocusHole', 'applyPortraitPlacement', 'portraitHitsFocus',
     'placePortrait', 'portraitFoot', 'portraitDropX', 'hidePortrait']
     .map(methodOf).map(node => node.getText(source)).join(' ');
 

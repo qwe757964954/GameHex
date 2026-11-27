@@ -17,7 +17,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildTerritoryMonsterBoxDetail } from '../assets/script/app/territory/model/TerritoryMonsterBoxDetail';
+import { buildTerritoryMonsterBoxDetail, monsterBoxRewardText } from '../assets/script/app/territory/model/TerritoryMonsterBoxDetail';
 import { TERRITORY_MONSTER_BOX_SPEC } from '../assets/script/app/territory/model/TerritoryMonsterBoxSpec';
 import type { TerritoryCampaignStage, TerritorySite } from '../assets/script/app/territory/model/TerritoryMapConfig';
 import { TERRITORY_SITE_TYPE } from '../assets/script/app/territory/model/TerritoryMapConfig';
@@ -115,10 +115,10 @@ test('等级取服务端下发值，不本地造（0 也不崩）', () => {
 test('奖励取「当前等级」那行的胜利奖励池，概率从万分比换成百分比', () => {
     const detail = buildTerritoryMonsterBoxDetail({ site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 2 });
     assert.ok(detail);
-    // mock 里 grade 2 的池：10010×200(100%) + 7×50(5%)
+    // mock 里 grade 2 的池：10010×200(100%) + 7×100(5%)；grade 3 是 300 / 150 ⇒ 增量 +100 / +50
     assert.deepEqual(detail.rewards, [
-        { resId: 10010, amount: 200, ratePercent: 100 },
-        { resId: 7, amount: 100, ratePercent: 5 },
+        { resId: 10010, amount: 200, addAmount: 100, ratePercent: 100 },
+        { resId: 7, amount: 100, addAmount: 50, ratePercent: 5 },
     ]);
 });
 
@@ -201,12 +201,37 @@ test('同一个 resId 的多档奖励合并成一格（否则 4 格全是同一�
     assert.ok(detail);
     // 7 条 → 4 种资源，正好铺满面板 4 格
     assert.equal(detail.rewards.length, 4);
+    // 数量取该资源的**下限**（100，不再是 500）：区间口径在 11-25 换成「当前+增量」后读不出来
+    // 这组只有一个 grade ⇒ 没有下一级可比 ⇒ 增量全 0
     assert.deepEqual(detail.rewards, [
-        { resId: 10010, amount: 500, ratePercent: 100, amountText: '100~500' },
-        { resId: 7, amount: 50, ratePercent: 5 },
-        { resId: 19350, amount: 3, ratePercent: 5 },
-        { resId: 19301, amount: 1, ratePercent: 5 },
+        { resId: 10010, amount: 100, addAmount: 0, ratePercent: 100 },
+        { resId: 7, amount: 50, addAmount: 0, ratePercent: 5 },
+        { resId: 19350, amount: 3, addAmount: 0, ratePercent: 5 },
+        { resId: 19301, amount: 1, addAmount: 0, ratePercent: 5 },
     ]);
+});
+
+test('★下一级同资源更少（配表反向）⇒ 增量为 0，只显示当前值', () => {
+    // 真实 monsterBox 表有 5 处这种反向配置（见 §3.53）：照 GROUP 的 grade 3 → grade 4，银币 150 → 50
+    const lv3 = buildTerritoryMonsterBoxDetail({ site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 3 });
+    assert.ok(lv3);
+    assert.deepEqual(lv3.rewards, [
+        { resId: 10010, amount: 300, addAmount: 100, ratePercent: 100 },
+        { resId: 7, amount: 150, addAmount: 0, ratePercent: 5 },
+    ]);
+    // 满级没有下一级 ⇒ 增量全 0
+    const lv4 = buildTerritoryMonsterBoxDetail({ site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 4 });
+    assert.ok(lv4);
+    assert.deepEqual(lv4.rewards.map((reward) => reward.addAmount), [0, 0]);
+});
+
+test('奖励文案：有增量写 `当前+增量`，没增量只写当前值', () => {
+    assert.equal(monsterBoxRewardText({ amount: 300, addAmount: 100 }), '300+100');
+    assert.equal(monsterBoxRewardText({ amount: 150, addAmount: 0 }), '150');
+    // 配表脏数据（负数 / 小数 / NaN）一律向下归零，不把 `300+-20` 送到界面
+    assert.equal(monsterBoxRewardText({ amount: 300, addAmount: -20 }), '300');
+    assert.equal(monsterBoxRewardText({ amount: 300.9, addAmount: 99.9 }), '300+99');
+    assert.equal(monsterBoxRewardText({ amount: Number.NaN, addAmount: Number.NaN }), '0');
 });
 
 // ------------------------------------------------------------------

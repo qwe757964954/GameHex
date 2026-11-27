@@ -5,6 +5,7 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
  * 请求统一返回 ok | offline | failed，读 800ms、写 5000ms 超时。
  */
 
+import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import type { IResGoodsInfo as ILeagueGoodsInfo } from '../common/ResTypes';
 import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
@@ -64,11 +65,9 @@ import {
     LEAGUE_CREATE_COST_RES_ID,
     LEAGUE_GAME_CONFIG_TABLE,
     LEAGUE_GUANKA_REWARD_TABLE,
-    LEAGUE_ITEM_TABLE,
     LEAGUE_MONSTER_TABLE,
     LEAGUE_NORTH_RANK_SHOW_NUM,
     LEAGUE_NORTH_RANK_TYPE,
-    LEAGUE_PROPERTY_TABLE,
     LEAGUE_TASK_PROGRESS_TABLE,
     LEAGUE_TASK_UNION_TABLE,
     LEAGUE_UNION_COIN_RES_ID,
@@ -912,7 +911,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * 不发包、不缓存（消耗量会随运营改配置变）。
      */
     async createCost(): Promise<ILeagueCostView> {
-        const properties = parseLeaguePropertyRows(await readRows(LEAGUE_PROPERTY_TABLE));
+        const properties = parseLeaguePropertyRows(await readRows(ROLE_PROPERTY_TABLE));
         const property = findLeagueProperty(properties, LEAGUE_CREATE_COST_RES_ID);
         const need = leagueCreateCost(await readRows(LEAGUE_GAME_CONFIG_TABLE));
         const has = rolePropertyAmount(readSelfRoleRow(), property?.key ?? '');
@@ -954,7 +953,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     async loadStore(): Promise<ILeagueStoreSnapshot> {
         const rows = parseUnionShopRows(await readRows(LEAGUE_UNION_SHOP_TABLE));
         const goods = this.readShopGoodsRows();
-        const properties = parseLeaguePropertyRows(await readRows(LEAGUE_PROPERTY_TABLE));
+        const properties = parseLeaguePropertyRows(await readRows(ROLE_PROPERTY_TABLE));
         const self = readSelfRoleRow();
         const propertyOf = new Map<number, { key: string }>();
         for (const property of properties) propertyOf.set(property.resId, property);
@@ -1411,7 +1410,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * P4 用它两处：砍价的 `enough`（`resId 10` 金币）、捐献的 `enough`（`resId 11` 联盟银币）。
      */
     private async ownedResourceOf(resId: number): Promise<number> {
-        const properties = parseLeaguePropertyRows(await readRows(LEAGUE_PROPERTY_TABLE));
+        const properties = parseLeaguePropertyRows(await readRows(ROLE_PROPERTY_TABLE));
         const key = findLeagueProperty(properties, resId)?.key ?? '';
         return rolePropertyAmount(readSelfRoleRow(), key).value;
     }
@@ -1428,8 +1427,8 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         resources: Map<number, ILeagueGoodsInfo>;
     }> {
         return {
-            items: parseItemRows(await readRows(LEAGUE_ITEM_TABLE)),
-            resources: parseRolePropertyRows(await readRows(LEAGUE_PROPERTY_TABLE)),
+            items: parseItemRows(await readRows(ITEM_TABLE)),
+            resources: parseRolePropertyRows(await readRows(ROLE_PROPERTY_TABLE)),
         };
     }
 

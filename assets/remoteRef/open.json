@@ -1,4 +1,4 @@
-[{"refId":1,"belond":1,"order":0,"resShowType":[10,7],"url":"TabStore","type":1,"tipShow":"通关第1关解锁","isShowOpen":0,"tlRDResId":[405,406,407],"visibleCondition":[{"param":{"resId":1},"type":"battleLevel"},{"param":{},"type":"notTiShen"}],"condition":[]},
+[{"refId":1,"belond":1,"order":0,"resShowType":[7,9,10],"url":"TabStore","type":1,"tipShow":"通关第1关解锁","isShowOpen":0,"tlRDResId":[405,406,407],"visibleCondition":[{"param":{"resId":1},"type":"battleLevel"},{"param":{},"type":"notTiShen"}],"condition":[]},
 {"refId":2,"belond":1,"order":0,"resShowType":[10,7,16014],"url":"TabRoleMain","type":1,"tipShow":"通关第1关解锁","isShowOpen":0,"tlRDResId":[11,16,17,18,19,399],"visibleCondition":[{"param":{"resId":1},"type":"battleLevel"}],"condition":[]},
 {"refId":3,"belond":1,"order":0,"resShowType":[10,7,9],"url":"TabFight","type":1,"isShowOpen":0,"RDExpr":"[RDFightRewards]","tlRDResId":[101,102,103,104,202,206,301],"visibleCondition":[],"condition":[]},
 {"refId":4,"belond":1,"order":0,"resShowType":[10,7,9],"url":"TabGuildMain","type":1,"tipShow":"通关第1关解锁","isShowOpen":0,"RDExpr":"[RDCity]","visibleCondition":[{"param":{"resId":1},"type":"battleLevel"}],"condition":[]},

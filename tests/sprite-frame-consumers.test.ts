@@ -76,7 +76,8 @@ test('角色键经原路径解析，背包按类型分目录；reset 同时释�
     const { api, paths, frames } = fixture<typeof import('../assets/script/app/role/RoleArtLoader')>('role/RoleArtLoader', {
         '../itemdetail/ItemDetailArtLoader': {},
     });
-    const key = Object.keys(RoleArt.RL_ART_NAMES)[0];
+    const key = 'listRow';
+    assert.equal(api.roleFramePathOf('不存在的key'), '');
     const first = await api.loadRoleArt(key);
     assert.equal(api.peekRoleArt(key), first);
     await api.loadRoleBagIconSprite('gem', 'a');

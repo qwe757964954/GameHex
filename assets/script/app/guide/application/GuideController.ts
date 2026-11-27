@@ -5,42 +5,18 @@
  */
 
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
+import { EventMgr } from '../../../framework/event/EventMgr';
 import { CardLineupEvent } from '../../card/CardLineupEvents';
 import { GuideDebugEvent, GuideEvent } from './GuideEvents';
-import type { IGuideAdvancePayload, IGuideCompletePayload } from './GuideEvents';
+import type { GuideOutput, IGuideAdvancePayload, IGuideCompletePayload, IGuideViewState } from './GuideEvents';
 import type { IGuideGateway } from './GuideGateway';
 import type { GuideProgress } from '../model/GuideProgress';
 import type { GuideSaveStore } from '../model/GuideSaveStore';
 import { restoreGuideProgress, remoteCursorToData } from '../model/GuideSaveStore';
 import type { GuideSyncOutbox } from '../model/GuideSyncOutbox';
-import type {
-    GuideMaskType,
-    GuideRequireAction,
-    GuideStep,
-} from '../model/GuideStepConfig';
+import type { GuideStep } from '../model/GuideStepConfig';
 
-/** 交给 View 的只读状态。View 按它建遮罩 / 定位焦点 / 播台词，不反向问 Controller。 */
-export interface IGuideViewState {
-    /** 当前步 id；空串 = 引导已结束。 */
-    readonly stepId: string;
-    readonly flowName: string;
-    readonly maskType: GuideMaskType;
-    /** 焦点锚点名；空串 = 本步无焦点。业务侧按名解析 Node，不要当路径 `cc.find`。 */
-    readonly focusNode: string;
-    readonly dialogId: string;
-    readonly requireAction: GuideRequireAction;
-    /**
-     * 完成判定 guideStep.completeCond。View 决定能否点对话条推进时必须用它，
-     * 不能用 requireAction；requireAction 只表示玩家要做一个动作，不代表点对话条算完成。
-     */
-    readonly completeCond: string;
-    /** 本次是否首次进入（`firstLogin` 触发判据）。 */
-    readonly isFirstRun: boolean;
-    /** 是否已结束（走完或被跳过）。 */
-    readonly finished: boolean;
-    /** 是否是「跳过」结束的。 */
-    readonly skipped: boolean;
-}
+export type { IGuideViewState };
 
 export interface IGuideControllerOptions {
     readonly store: GuideSaveStore;
@@ -49,14 +25,10 @@ export interface IGuideControllerOptions {
     /** 已解析的步骤表（`parseGuideSteps` 的结果，行序即执行序）。 */
     readonly steps: readonly GuideStep[];
     readonly gateway?: IGuideGateway;
-    /** 展示实例与只读状态出口；点击推进经 GuideEvent.Advance 回传。 */
-    readonly view?: {
-        readonly owner: object;
-        readonly render: (state: IGuideViewState) => void;
-    };
-    readonly failed?: (error: unknown) => void;
     /** 时间源，默认 `Date.now`（单测注入固定值）。 */
-    readonly now?: () => number;
+    readonly clock?: {
+        readonly now?: () => number;
+    };
 }
 
 export class GuideController extends ControllerBase {
@@ -134,7 +106,7 @@ export class GuideController extends ControllerBase {
         console.log(`[Guide] 完成 ${step.stepId}(${step.flowName}) → ${result.next?.stepId ?? '(结束)'}`);
         this.persist();
         this.syncProgress(step.stepId);
-        this.publish();
+        this.publish(step.stepId);
         return true;
     }
 
@@ -185,7 +157,8 @@ export class GuideController extends ControllerBase {
         }
     }
 
-    private publish(): void {
+    private publish(completedStepId?: string): void {
+        if (this.isDisposed) return;
         const progress = this.progress;
         const step = progress?.current ?? null;
         const state: IGuideViewState = step
@@ -214,24 +187,18 @@ export class GuideController extends ControllerBase {
                 skipped: progress?.wasSkipped ?? false,
             };
 
-        if (this.options.view) {
-            try {
-                // 点击推进只对 click 步有效；`notify` 内部还会校验「是不是当前步」，
-                // 所以 View 拿着过期状态晚一步回调也是安全的。
-                this.options.view.render(state);
-            } catch (error) {
-                this.report(error);
-            }
-            return;
-        }
-        console.log(`[GuideController] 当前步 ${state.stepId || '(结束)'} · ${state.flowName} · ${state.maskType}`);
+        const output: GuideOutput = completedStepId
+            ? { kind: 'render', state, completedStepId }
+            : { kind: 'render', state };
+        EventMgr.instance.emit(GuideEvent.Output, output, this);
     }
 
-    private readonly onForceSkip = (): void => { this.skipAll(); };
+    private readonly onForceSkip = (): void => {
+        this.skipAll();
+    };
 
     private readonly onAdvance = (payload: IGuideAdvancePayload): void => {
-        const view = this.options.view;
-        if (!view || payload.stepId !== this.currentStepId) return;
+        if (payload.stepId !== this.currentStepId) return;
         this.notify('click');
     };
 
@@ -368,11 +335,13 @@ export class GuideController extends ControllerBase {
     };
 
     private now(): number {
-        return this.options.now?.() ?? Date.now();
+        return this.options.clock?.now?.() ?? Date.now();
     }
 
     private report(error: unknown): void {
-        if (this.options.failed) this.options.failed(error);
-        else console.warn('[GuideController]', error);
+        if (!this.isDisposed) {
+            EventMgr.instance.emit(GuideEvent.Output, { kind: 'failed', error } satisfies GuideOutput, this);
+        }
+        console.warn('[GuideController]', error);
     }
 }

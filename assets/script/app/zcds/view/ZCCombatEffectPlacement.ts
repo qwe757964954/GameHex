@@ -19,17 +19,10 @@ import {
     zcEffectOverlayChildOf,
 } from '../model/ZCEffectCatalog';
 
-/** 特效锚点：`caster` = 出手方（既有口径）、`midpoint` = 攻击者与受击目标的连线中点、
- *  `target` = 受击方（「一定落在目标坐标」的重击类）。*/
-export type ZCCombatEffectAnchor = ZCEffectAnchor;
-
-/** 特效层级：`ground` = 铺在地上（棋盘之上、动态对象之下）；`top` = 动态对象最上层。*/
-export type ZCCombatEffectLayer = ZCEffectLayer;
-
 /** 特效路径 → 锚点。空路径 / 未登记 = `caster`（既有行为）。*/
 export function zcCombatEffectAnchorOf(
     effectPrefabPath: string | null | undefined,
-): ZCCombatEffectAnchor {
+): ZCEffectAnchor {
     return zcEffectAnchorOf(effectPrefabPath);
 }
 
@@ -49,7 +42,7 @@ export interface IZCombatEffectSpan {
  */
 export function zcCombatEffectAnchorPoint(
     span: Readonly<IZCombatEffectSpan>,
-    anchor: ZCCombatEffectAnchor,
+    anchor: ZCEffectAnchor,
 ): { x: number; y: number } {
     //  `target`：受击方的落点。用 `toX/toY` 而不是「谁离得近取谁」—— 结构物（墙 / 建筑）
     //  的 `to` 也是它的格子坐标，同一份口径对单位与结构都成立。
@@ -74,7 +67,7 @@ export function zcCombatEffectLiftY(effectPrefabPath: string | null | undefined)
  * `area` 是「铺在地上的一片火」，必须在角色之下；`melee` / `projectile` 是「打在空中的一下」，
  * 必须在角色之上，否则刀光会被自己的身体挡住。
  */
-export function zcCombatEffectLayerOf(type: ZCCombatEventType): ZCCombatEffectLayer {
+export function zcCombatEffectLayerOf(type: ZCCombatEventType): ZCEffectLayer {
     return type === 'area' ? 'ground' : 'top';
 }
 
@@ -85,7 +78,7 @@ export function zcCombatEffectLayerOf(type: ZCCombatEventType): ZCCombatEffectLa
 export function zcCombatEffectLayerOfPath(
     type: ZCCombatEventType,
     effectPrefabPath: string | null | undefined,
-): ZCCombatEffectLayer {
+): ZCEffectLayer {
     return zcEffectLayerOfPath(effectPrefabPath) ?? zcCombatEffectLayerOf(type);
 }
 
@@ -104,7 +97,7 @@ export function zcCombatEffectOverlayChild(effectPrefabPath: string | null | und
  * @param siblingCount 含自己的兄弟数（节点已 `setParent` 到末尾）
  */
 export function zcCombatEffectSiblingIndex(
-    layer: ZCCombatEffectLayer,
+    layer: ZCEffectLayer,
     boardIndex: number,
     siblingCount: number,
 ): number {

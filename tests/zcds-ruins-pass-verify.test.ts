@@ -92,7 +92,7 @@ test('任意一方小兵穿过对方废墟，废墟立即归属经过方（双�
     }
 });
 
-test('小兵经过中立资源格后归属行军方，但不领取资源', () => {
+test('小兵经过未领取的资源格时保留中立归属及奖励', () => {
     let pair: {
         resource: typeof base.map.hexes[number];
         start: typeof base.map.hexes[number];
@@ -144,7 +144,7 @@ test('小兵经过中立资源格后归属行军方，但不领取资源', () =>
 
     system.update(state, .05, (hex: any, owner: any) => (game as any).captureEmptyTile(hex, owner));
 
-    assert.equal(state.hexes[resource.id].owner, 'player');
-    assert.equal(state.hexes[resource.id].neutralResourceId, 1300101, '经过只改归属，不领取资源');
+    assert.equal(state.hexes[resource.id].owner, 'neutral');
+    assert.equal(state.hexes[resource.id].neutralResourceId, 1300101, '经过不领取资源');
     assert.equal(state.hexes[resource.id].developmentResolved, false);
 });

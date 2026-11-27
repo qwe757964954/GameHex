@@ -73,19 +73,19 @@ export const FX_DURATION = 1;
  *
  * 想让它比叠色再晚一点点就调大这里（单位秒），别去动 `LEVEL_POP_DELAY`。
  */
-export const FX_DELAY = 0;
+const FX_DELAY = 0;
 
 /** 立绘落位到等级数字起跳的间隔（特挂到刷光之后，这一拍就是落位后的第一个动作）。 */
-export const LEVEL_POP_DELAY = 0.35;
+const LEVEL_POP_DELAY = 0.35;
 /** 数字放大段（到峰值 = 换数字那一刻）。 */
-export const LEVEL_POP_UP = 0.14;
+const LEVEL_POP_UP = 0.14;
 /** 数字回弹段。 */
-export const LEVEL_POP_SETTLE = 0.22;
+const LEVEL_POP_SETTLE = 0.22;
 /** 放大峰值倍数。 */
 export const LEVEL_POP_SCALE = 1.32;
 
 /** 数字回弹到下一次刷光之间的间隔。 */
-export const SHINE_DELAY = 0.14;
+const SHINE_DELAY = 0.14;
 /** 一次刷光扫过的时长（两条光带共用）。 */
 export const SHINE_DURATION = 0.42;
 
@@ -116,13 +116,10 @@ export const PROGRESS_RESET = 0.2;
  */
 export const PROGRESS_GROW = 0.55;
 
-/** 换档演出的总时长（清空 + 涨格），只给断言与文档用。 */
-export const PROGRESS_SWAP = PROGRESS_RESET + PROGRESS_GROW;
-
 /** 退格起手时数量文字的那一下弹跳（1 → 峰值 → 1）。 */
 export const PROGRESS_POP_SCALE = 1.14;
-export const PROGRESS_POP_UP = 0.1;
-export const PROGRESS_POP_SETTLE = 0.18;
+const PROGRESS_POP_UP = 0.1;
+const PROGRESS_POP_SETTLE = 0.18;
 
 /** 一条完整时间轴的全部关键节点（单位：秒，从打开算起）。 */
 export interface ICardUpgradedSchedule {
@@ -258,7 +255,7 @@ export function shineProgressAt(schedule: ICardUpgradedSchedule, t: number): num
 }
 
 /** 刷光包络的淡入淡出占比（占整段扫过的比例）。 */
-export const SHINE_FADE = 0.18;
+const SHINE_FADE = 0.18;
 
 /**
  * 梯形包络：`0..1` 的进度 → 亮度，进/出各占 `fadeIn` / `fadeOut` 的比例。
@@ -294,10 +291,10 @@ export function shineOpacityAt(progress: number): number {
  *
  * 出段占比必须 ≤ 0.5，否则中段就已经在掉了 —— 用例「中段满亮」会直接红。
  */
-export const HERO_GLOW_FADE_IN = 0.14;
-export const HERO_GLOW_FADE_OUT = 0.42;
-export const BAR_GLOW_FADE_IN = 0.1;
-export const BAR_GLOW_FADE_OUT = 0.34;
+const HERO_GLOW_FADE_IN = 0.14;
+const HERO_GLOW_FADE_OUT = 0.42;
+const BAR_GLOW_FADE_IN = 0.1;
+const BAR_GLOW_FADE_OUT = 0.34;
 
 /** 角色本体发光的强度包络（0..1）。 */
 export function heroGlowAt(progress: number): number {

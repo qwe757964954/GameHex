@@ -1,27 +1,25 @@
 /**
- * 菌丝绞杀（fan_slow）的 facade。
+ * 菌丝绞杀 / 武器绞杀（fan_slow）的 facade。
  *
  * 爆点路径、行为键、三个扇形比例与减速状态前缀已迁到目录/调参表；
  * 本文件只保留原导出名与纯函数。
+ *
+ * 2026-11-25 第 45 批：扇形甩击的表现从「扇形里铺 3 发爆点」换成**整条扇形挥击特效**
+ * （机甲菇_武器绞杀，`tools/build_jiajigu_fan_fx.py`）。原来那三个 burst 常量
+ * （片数 / 半径比 / 距离比 / 角度间隔）随之退场 —— 留着就是「没人读但看着像还在生效」。
  */
 
-import { ZC_EFFECT_BEHAVIOR_KEYS, zcEffectPathsForBehavior } from './ZCEffectCatalog';
-import { ZC_EFFECT_SCALE, ZC_EFFECT_STATUS_PREFIX } from './ZCEffectTuning';
+import { ZC_EFFECT_BEHAVIOR_KEYS, ZC_EFFECT_PATHS, zcEffectPathsForBehavior } from './ZCEffectCatalog';
+import { ZC_EFFECT_TUNING, ZC_EFFECT_STATUS_PREFIX } from './ZCEffectTuning';
 
 /** 菌丝绞杀的行为键。*/
 export const ZC_FAN_SWEEP_BEHAVIOR_KEY = ZC_EFFECT_BEHAVIOR_KEYS.fanSlow;
 
-/** 扇形里铺几发爆点。*/
-export const ZC_FAN_SWEEP_BURSTS = ZC_EFFECT_SCALE.fanBurstCount;
+/** 扇形挥击 prefab：锚点在施法者、尖端朝 +X（由目录的 `facingDegrees: 0` 转向目标）。*/
+export const ZC_FAN_SWEEP_PREFAB_PATH = ZC_EFFECT_PATHS.jiajiguFan;
 
-/** 每发爆点的半径 = 扇形半径 × 这个比例。*/
-export const ZC_FAN_SWEEP_BURST_RADIUS_RATIO = ZC_EFFECT_SCALE.fanBurstRadiusRatio;
-
-/** 爆点离施法者的距离 = 扇形半径 × 这个比例。*/
-export const ZC_FAN_SWEEP_BURST_DISTANCE_RATIO = ZC_EFFECT_SCALE.fanBurstDistanceRatio;
-
-/** 相邻爆点的角度间隔 = 半个扇形角 × 这个比例。*/
-export const ZC_FAN_SWEEP_BURST_SPREAD = ZC_EFFECT_SCALE.fanBurstSpread;
+/** 挥击演出时长（秒）= 19 帧 @ 24fps；短于它 clip 会被事件寿命截断。*/
+export const ZC_FAN_SWEEP_SECONDS = ZC_EFFECT_TUNING.fanSweepSeconds;
 
 /** 这个行为键走不走「扇形甩击」这条车道。*/
 export function zcIsFanSweepBehavior(behaviorKey: string | null | undefined): boolean {

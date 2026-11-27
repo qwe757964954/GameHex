@@ -1,18 +1,28 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
-import { RoleEvent, type IRoleIntent } from './RoleEvents';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { RoleEvent, type IRoleIntent, type RoleOutput } from './RoleEvents';
 import { ROLE_NAV_READY, getGemChange, isRoleBagTabReady } from './RoleTable';
 import type { GameRequestStatus } from '../net/RequestGuard';
 import type { ProtoInput } from '../../framework/net/RequestMsg';
 import type { IRoleEquipGrowth, IRoleEquipPlan, IRoleGemGrowth, IRoleGrowthProtocol } from './RoleTypes';
-import { ROLE_TEXTS } from './RoleTexts';
-import type { IRoleEquipSlotData, IRoleGemEntry, IRoleGemSocket, RoleBagTabId, RoleGemChange } from './RoleTypes';
+import { ROLE_TEXTS, roleQualityName } from './RoleTexts';
+import type { IRoleDecomposeResult, IRoleEquipSlotData, IRoleGemEntry, IRoleGemSocket, RoleBagTabId, RoleGemChange } from './RoleTypes';
+import {
+    buildRoleComposeView,
+    composeGemOf,
+    ROLE_COMPOSE_HIGH_QUALITY,
+    type IRoleComposeQuality,
+    type IRoleComposeView,
+} from './RoleComposeView';
 
 export interface IRoleGemDialog {
     readonly title: string;
-    readonly content: string;
+    readonly content?: string;
     readonly sureText?: string;
     readonly cancelText?: string;
     readonly confirmAgainText?: string;
+    /** 一键合成的图标台账；有值时由 `RoleComposePopup` 渲染，而不是 `CommonTips` 文本。 */
+    readonly compose?: IRoleComposeView;
 }
 
 export interface IRoleGrowthOperations {
@@ -22,52 +32,43 @@ export interface IRoleGrowthOperations {
     readonly plans: () => Promise<readonly IRoleEquipPlan[]>;
     readonly filters: () => Promise<readonly { id: number; name: string }[]>;
     request<K extends keyof IRoleGrowthProtocol>(
-        proto: K, payload: ProtoInput<IRoleGrowthProtocol[K][0]>,
+        proto: K, payload: ProtoInput<IRoleGrowthProtocol[K][0]>, caller: object,
         apply?: (response: IRoleGrowthProtocol[K][1]) => void,
     ): Promise<GameRequestStatus>;
 }
 
 type RoleOperationIntent = Exclude<IRoleIntent, { kind: 'bag' | 'nav' }>;
 
-interface IRoleGemOperations {
+export interface IRoleGemOperations {
     readonly slots: () => readonly IRoleEquipSlotData[];
     readonly find: (id: string) => IRoleGemEntry | null;
-    readonly change: (change: RoleGemChange) => Promise<GameRequestStatus>;
-    readonly preview: () => Promise<{ status: GameRequestStatus; materials: readonly { id: string; count: number }[] }>;
-    readonly compose: () => Promise<{ status: GameRequestStatus; rewards: CmdGoods[] }>;
+    readonly change: (change: RoleGemChange, caller: object) => Promise<GameRequestStatus>;
+    readonly preview: (caller: object) => Promise<{ status: GameRequestStatus; materials: readonly { id: string; count: number }[] }>;
+    readonly compose: (caller: object) => Promise<{ status: GameRequestStatus; rewards: CmdGoods[] }>;
+    /** 批量分解：正常一次 `CmdEquipDecomposeReqMsg` 整包提交，仓库内部在缺件时才逐件补发。 */
+    readonly decompose: (ids: readonly string[], caller: object) => Promise<IRoleDecomposeResult>;
+    /** `gemQuality` 表（品质 → consume / icon），合成产出估算与棋子图标用。 */
+    readonly qualities: () => Promise<readonly IRoleComposeQuality[]>;
     readonly showRewards: (rewards: CmdGoods[]) => void;
     readonly dialog: (data: IRoleGemDialog) => Promise<'confirm' | 'alternate' | null>;
     readonly cancel: () => void;
 }
 
 export interface IRoleControllerOptions<T> {
-    readonly owner: object;
     readonly gems?: IRoleGemOperations;
     readonly growth?: IRoleGrowthOperations;
-    readonly failed: (error: unknown) => void;
     readonly repository: {
         readonly load: () => Promise<T>;
     };
-    readonly view: {
-        readonly render: (snapshot: T) => Promise<void>;
-        readonly showBag: (tab: RoleBagTabId, filter?: number, filterName?: string) => Promise<void>;
-        readonly selectBag: (tab: RoleBagTabId) => void;
-    };
-    readonly popups: {
-        readonly openTalent: () => void;
-        readonly openEquipInfo?: (partId: number, bagUniqueId?: string) => void;
-        readonly openEquipEvolve?: (partId?: number, tab?: 'strengthen' | 'upgrade') => void;
-        readonly openGemInfo?: (gemId: string) => void;
-        readonly openGongMing?: () => void;
-    };
-    readonly feedback: {
-        readonly tip: (text: string) => void;
+    readonly popups?: {
+        readonly equipInfo?: boolean;
+        readonly equipEvolve?: boolean;
+        readonly gemInfo?: boolean;
     };
 }
 export class RoleController<T> extends ControllerBase {
     private revision = 0;
     private selectionRevision = 0;
-    private started = false;
     private selectedBag: RoleBagTabId = 1;
     private selectedSocket: IRoleGemSocket | null = null;
     private gemBusy = false;
@@ -77,12 +78,15 @@ export class RoleController<T> extends ControllerBase {
         super(context, 'role');
     }
     start(): void {
-        if (this.started || this.isDisposed) return;
-        this.started = true;
         this.listen(RoleEvent.Intent, this.onIntent);
         this.listen(RoleEvent.GemChanged, this.onGemChanged);
+        this.listen(RoleEvent.EquipChanged, this.onEquipChanged);
     }
     private onGemChanged(): void {
+        void this.refresh(false);
+    }
+    /** 装备写入由锻造弹窗完成。收到成功事件后保留当前背包选择并重新读取快照。 */
+    private onEquipChanged(): void {
         void this.refresh(false);
     }
     async refresh(resetBag = true): Promise<void> {
@@ -91,15 +95,15 @@ export class RoleController<T> extends ControllerBase {
         try {
             const snapshot = await this.options.repository.load();
             if (this.isDisposed || revision !== this.revision) return;
-            await this.options.view.render(snapshot);
+            this.emitOutput({ kind: 'render', snapshot });
             if (this.isDisposed || revision !== this.revision || selection !== this.selectionRevision) return;
-            if (resetBag) await this.selectBag(1);
-            else await this.showSelectedBag();
+            if (resetBag) this.selectBag(1);
+            else this.showSelectedBag();
         } catch (error) {
-            if (!this.isDisposed && revision === this.revision) this.options.failed(error);
+            if (!this.isDisposed && revision === this.revision) this.emitOutput({ kind: 'failed', error });
         }
     }
-    cancel(): void {
+    private resetSession(): void {
         this.revision++;
         this.selectionRevision++;
         this.gemSession++;
@@ -109,25 +113,30 @@ export class RoleController<T> extends ControllerBase {
         this.gemBusy = false;
     }
 
+    cancel(): void {
+        this.resetSession();
+        this.clearCallbackOwners();
+    }
+
     dispose(): void {
-        this.cancel();
+        this.resetSession();
         super.dispose();
     }
 
     private onIntent(event: IRoleIntent): void {
         if (event.kind !== 'bag' && event.kind !== 'nav') {
-            if (event.kind === 'forge' && this.options.popups.openEquipEvolve) {
-                this.options.popups.openEquipEvolve(event.partId);
+            if (event.kind === 'forge' && this.options.popups?.equipEvolve) {
+                this.emitOutput({ kind: 'openEquipEvolve', partId: event.partId });
                 return;
             }
             const gems = this.options.gems;
             if (gems && !this.gemBusy) void this.handleGem(event, gems);
             return;
         }
-        if (event.kind === 'bag') { void this.selectBag(event.tab); return; }
-        if (event.navId === 2) { this.options.popups.openTalent(); return; }
-        if (event.navId === 3) { this.options.popups.openGongMing?.(); return; }
-        if (!ROLE_NAV_READY.has(event.navId)) this.options.feedback.tip(ROLE_TEXTS.navMissing);
+        if (event.kind === 'bag') { this.selectBag(event.tab); return; }
+        if (event.navId === 2) { this.emitOutput({ kind: 'openTalent' }); return; }
+        if (event.navId === 3) { this.emitOutput({ kind: 'openGongMing' }); return; }
+        if (!ROLE_NAV_READY.has(event.navId)) this.tip(ROLE_TEXTS.navMissing);
     }
 
     private async handleGem(
@@ -140,11 +149,15 @@ export class RoleController<T> extends ControllerBase {
             if (event.kind === 'socket') await this.chooseSocket(event.partId, event.order, operations, session);
             else if (event.kind === 'gem') await this.inspectGem(event.id, operations, session);
             else if (event.kind === 'compose') await this.compose(operations, session);
+            else if (event.kind === 'decompose') await this.decompose(event.ids, operations, session);
             else if (this.options.growth) await this.handleGrowth(event, operations, this.options.growth, session);
         } catch (error) {
             if (this.isGemSession(session)) {
-                this.options.failed(error);
-                this.options.feedback.tip(ROLE_TEXTS.failed);
+                if (event.kind === 'decompose') {
+                    this.emitOutput({ kind: 'decomposeDone', status: 'failed', removedIds: [], rewards: [] });
+                }
+                this.emitOutput({ kind: 'failed', error });
+                this.tip(ROLE_TEXTS.failed);
             }
         } finally {
             if (this.isGemSession(session)) this.gemBusy = false;
@@ -156,28 +169,28 @@ export class RoleController<T> extends ControllerBase {
         const socket = slot?.sockets.find(candidate => candidate.order === order);
         this.selectedSocket = null;
         if (!socket) {
-            this.options.feedback.tip(ROLE_TEXTS.gemUnavailable);
+            this.tip(ROLE_TEXTS.gemUnavailable);
             return;
         }
-        if (this.selectedBag !== 1) await this.selectBag(1);
+        if (this.selectedBag !== 1) this.selectBag(1);
         if (!this.isGemSession(session)) return;
         if (!socket.gemId) {
             this.selectedSocket = socket;
-            this.options.feedback.tip(ROLE_TEXTS.gemChoose(order));
+            this.tip(ROLE_TEXTS.gemChoose(order));
             return;
         }
 
         const gem = ops.find(socket.gemId);
         const choice = await ops.dialog({
             title: gem?.name ?? ROLE_TEXTS.gemUnknown(socket.gemId),
-            content: [ROLE_TEXTS.gemSocket(order), gem?.desc].filter(Boolean).join('\n'),
+            content: [gem?.desc, ROLE_TEXTS.gemDownPrompt].filter(Boolean).join('\n'),
             sureText: ROLE_TEXTS.gemDown,
             cancelText: ROLE_TEXTS.gemChooseReplacement,
         });
         if (!this.isGemSession(session)) return;
         if (choice === 'alternate') {
             this.selectedSocket = socket;
-            this.options.feedback.tip(ROLE_TEXTS.gemChoose(order));
+            this.tip(ROLE_TEXTS.gemChoose(order));
         } else if (choice === 'confirm') {
             await this.changeGem(socket, null, ops, session);
         }
@@ -190,8 +203,8 @@ export class RoleController<T> extends ControllerBase {
         const change = socket && getGemChange(ops.slots().flatMap(slot => slot.sockets), socket, gem);
         const details = ROLE_TEXTS.gemDetails(gem.desc, gem.count, gem.equipped);
         if (!change) {
-            if (!socket && this.options.popups.openGemInfo) {
-                this.options.popups.openGemInfo(id);
+            if (!socket && this.options.popups?.gemInfo) {
+                this.emitOutput({ kind: 'openGemInfo', gemId: id });
                 return;
             }
             const growth = this.options.growth;
@@ -223,42 +236,62 @@ export class RoleController<T> extends ControllerBase {
             ? null
             : getGemChange(ops.slots().flatMap(slot => slot.sockets), socket, currentGem);
         if (!change) {
-            this.options.feedback.tip(ROLE_TEXTS.gemInvalid);
+            this.tip(ROLE_TEXTS.gemInvalid);
             return;
         }
-        const status = await ops.change(change);
+        const status = await ops.change(change, this);
         if (!this.isGemSession(session) || !this.gemSucceeded(status)) return;
         this.selectedSocket = null;
-        this.options.feedback.tip(ROLE_TEXTS.gemChanged);
+        this.tip(ROLE_TEXTS.gemChanged);
         await this.refresh(false);
     }
 
     private async compose(ops: IRoleGemOperations, session: number): Promise<void> {
-        const preview = await ops.preview();
+        const [preview, qualities] = await Promise.all([ops.preview(this), ops.qualities()]);
         if (!this.isGemSession(session) || !this.gemSucceeded(preview.status)) return;
         if (!preview.materials.length) {
-            this.options.feedback.tip(ROLE_TEXTS.gemComposeEmpty);
+            this.tip(ROLE_TEXTS.gemComposeEmpty);
             return;
         }
-        const materials = preview.materials.map(item => ({ ...item, gem: ops.find(item.id) }));
-        const content = materials.map(({ id, count, gem }) => ROLE_TEXTS.gemLine(gem?.name ?? ROLE_TEXTS.gemUnknown(id), count));
+        const view = buildRoleComposeView(
+            preview.materials,
+            id => {
+                const gem = ops.find(id);
+                return gem ? composeGemOf(gem) : null;
+            },
+            qualities,
+        );
+        if (!view.materials.length) {
+            this.tip(ROLE_TEXTS.gemComposeEmpty);
+            return;
+        }
         const choice = await ops.dialog({
             title: ROLE_TEXTS.gemCompose,
-            content: [ROLE_TEXTS.gemComposeMaterials, ...content].join('\n'),
+            compose: view,
             sureText: ROLE_TEXTS.gemComposeConfirm,
-            confirmAgainText: materials.some(({ gem }) => gem && gem.quality >= 5) ? ROLE_TEXTS.gemComposeAgain : undefined,
+            // 具体品质名（传说 / 绝世 / 神话），不用笼统的「高品质」。
+            confirmAgainText: view.topQuality >= ROLE_COMPOSE_HIGH_QUALITY
+                ? ROLE_TEXTS.gemComposeAgain(roleQualityName(view.topQuality))
+                : undefined,
         });
         if (choice !== 'confirm' || !this.isGemSession(session)) return;
-        const result = await ops.compose();
+        const result = await ops.compose(this);
         if (!this.isGemSession(session) || !this.gemSucceeded(result.status)) return;
         this.selectedSocket = null;
         if (result.rewards.length) ops.showRewards(result.rewards);
-        else this.options.feedback.tip(ROLE_TEXTS.gemComposed);
+        else this.tip(ROLE_TEXTS.gemComposed);
         await this.refresh(false);
     }
 
+    private async decompose(ids: readonly string[], ops: IRoleGemOperations, session: number): Promise<void> {
+        if (!ids.length) return;
+        const result = await ops.decompose(ids, this);
+        if (!this.isGemSession(session)) return;
+        this.emitOutput({ kind: 'decomposeDone', ...result });
+    }
+
     private async handleGrowth(
-        event: Exclude<RoleOperationIntent, { kind: 'gem' | 'socket' | 'compose' }>,
+        event: Exclude<RoleOperationIntent, { kind: 'gem' | 'socket' | 'compose' | 'decompose' }>,
         ops: IRoleGemOperations, growth: IRoleGrowthOperations, session: number,
     ): Promise<void> {
         const t = ROLE_TEXTS;
@@ -284,8 +317,8 @@ export class RoleController<T> extends ControllerBase {
             return;
         }
         if (event.kind === 'forge') {
-            if (this.options.popups.openEquipEvolve) {
-                this.options.popups.openEquipEvolve(event.partId);
+            if (this.options.popups?.equipEvolve) {
+                this.emitOutput({ kind: 'openEquipEvolve', partId: event.partId });
                 return;
             }
             const choice = await ops.dialog({
@@ -293,19 +326,19 @@ export class RoleController<T> extends ControllerBase {
             });
             if (choice === 'confirm' && this.isGemSession(session)) {
                 await this.confirmEquipWrite(t.equipAllLevel, t.equipAllLevelConfirm, ops, session,
-                    () => growth.request('CmdEquipUpLevelAllReqMsg', {}));
+                    () => growth.request('CmdEquipUpLevelAllReqMsg', {}, this));
             } else if (choice === 'alternate' && this.isGemSession(session)) {
                 await this.selectEquipPlan(ops, growth, session);
             }
             return;
         }
 
-        if (event.kind === 'equipPart' && this.options.popups.openEquipInfo) {
-            this.options.popups.openEquipInfo(event.partId);
+        if (event.kind === 'equipPart' && this.options.popups?.equipInfo) {
+            this.emitOutput({ kind: 'openEquipInfo', partId: event.partId });
             return;
         }
-        if (event.kind === 'equip' && this.options.popups.openEquipInfo) {
-            this.options.popups.openEquipInfo(0, event.id);
+        if (event.kind === 'equip' && !event.manage && this.options.popups?.equipInfo) {
+            this.emitOutput({ kind: 'openEquipInfo', partId: 0, bagUniqueId: event.id });
             return;
         }
 
@@ -314,7 +347,7 @@ export class RoleController<T> extends ControllerBase {
             : growth.equip(null, event.partId));
         if (!this.isGemSession(session)) return;
         if (!gear) {
-            this.options.feedback.tip(t.equipEmpty);
+            this.tip(t.equipEmpty);
             return;
         }
         const details = [t.equipDetails(gear.rank, gear.level, gear.attack, gear.hpPercent), ...gear.effects].join('\n');
@@ -324,10 +357,10 @@ export class RoleController<T> extends ControllerBase {
             });
             if (!this.isGemSession(session)) return;
             if (choice === 'confirm') {
-                await this.finishEquipWrite(await growth.request('CmdEquipReplaceReqMsg', { uniqueId: gear.id }), session);
+                await this.finishEquipWrite(await growth.request('CmdEquipReplaceReqMsg', { uniqueId: gear.id }, this), session);
             } else if (choice === 'alternate') {
                 await this.confirmEquipWrite(t.equipDecompose, t.equipDecomposeConfirm(gear.name), ops, session,
-                    () => growth.request('CmdEquipDecomposeReqMsg', { tlUniqueIds: [gear.id] }, response => {
+                    () => growth.request('CmdEquipDecomposeReqMsg', { tlUniqueIds: [gear.id] }, this, response => {
                         if (response.tlCmdGoods?.length) ops.showRewards(response.tlCmdGoods);
                     }));
             }
@@ -342,7 +375,7 @@ export class RoleController<T> extends ControllerBase {
         if (!this.isGemSession(session) || !choice) return;
         if (choice === 'confirm' && gear.levelCost.length) {
             await this.confirmEquipWrite(t.equipLevel, t.equipConfirmCost(t.equipLevel, gear.levelCost.join('、')),
-                ops, session, () => growth.request('CmdEquipUpLevelReqMsg', { id: gear.baseId, type: 0 }));
+                ops, session, () => growth.request('CmdEquipUpLevelReqMsg', { id: gear.baseId, type: 0 }, this));
         } else if (more) {
             await this.equipMore(gear, ops, growth, session);
         }
@@ -353,7 +386,7 @@ export class RoleController<T> extends ControllerBase {
         if (!this.isGemSession(session)) return;
         const t = ROLE_TEXTS;
         if (!plans.length) {
-            this.options.feedback.tip(t.equipPlanEmpty);
+            this.tip(t.equipPlanEmpty);
             return;
         }
         let index = Math.max(0, plans.findIndex(plan => plan.selected));
@@ -369,7 +402,7 @@ export class RoleController<T> extends ControllerBase {
             if (!this.isGemSession(session) || !choice) return;
             if (choice === 'confirm') {
                 if (!plan.selected && !plan.lockedUntil) {
-                    await this.finishEquipWrite(await growth.request('CmdEquipSelectPageReqMsg', { page: plan.page }), session);
+                    await this.finishEquipWrite(await growth.request('CmdEquipSelectPageReqMsg', { page: plan.page }, this), session);
                 }
                 return;
             }
@@ -392,7 +425,7 @@ export class RoleController<T> extends ControllerBase {
         if (!this.isGemSession(session) || !choice) return;
         if (choice === 'confirm' && qualityCost) {
             await this.confirmEquipWrite(t.equipQuality, t.equipConfirmCost(t.equipQuality, qualityCost),
-                ops, session, () => growth.request('CmdEquipUpQualityReqMsg', { equipId: gear.baseId }));
+                ops, session, () => growth.request('CmdEquipUpQualityReqMsg', { equipId: gear.baseId }, this));
             return;
         }
         if (!washCost) return;
@@ -401,7 +434,7 @@ export class RoleController<T> extends ControllerBase {
         });
         if (confirm !== 'confirm' || !this.isGemSession(session)) return;
         let preview: CmdEquipWashRspMsg | null = null;
-        const status = await growth.request('CmdEquipWashReqMsg', { equipId: gear.baseId }, response => {
+        const status = await growth.request('CmdEquipWashReqMsg', { equipId: gear.baseId }, this, response => {
             preview = response;
         });
         if (!this.isGemSession(session) || !this.gemSucceeded(status) || !preview) return;
@@ -415,7 +448,7 @@ export class RoleController<T> extends ControllerBase {
         if (!this.isGemSession(session)) return;
         await this.finishEquipWrite(await growth.request('CmdEquipWashConformReqMsg', {
             equipId: preview.equipId ?? gear.baseId, change: result === 'confirm',
-        }), session);
+        }, this), session);
     }
 
     private async confirmEquipWrite(
@@ -428,7 +461,7 @@ export class RoleController<T> extends ControllerBase {
     private async finishEquipWrite(status: GameRequestStatus, session: number): Promise<void> {
         if (!this.isGemSession(session) || !this.gemSucceeded(status)) return;
         this.selectedSocket = null;
-        this.options.feedback.tip(ROLE_TEXTS.equipChanged);
+        this.tip(ROLE_TEXTS.equipChanged);
         await this.refresh(false);
     }
 
@@ -453,7 +486,7 @@ export class RoleController<T> extends ControllerBase {
                 const unlock = await ops.dialog({ title: label, content: t.gemUnlockWorn, sureText: label });
                 if (unlock !== 'confirm' || !this.isGemSession(session)) return;
             }
-            await this.finishGemWrite(await growth.request('CmdGemLockReqMsg', { id: gem.gemId, lock }), session);
+            await this.finishGemWrite(await growth.request('CmdGemLockReqMsg', { id: gem.gemId, lock }, this), session);
         }
     }
 
@@ -471,7 +504,7 @@ export class RoleController<T> extends ControllerBase {
                 sureText: t.gemRefine,
             });
             if (!this.isGemSession(session) || choice !== 'confirm') return;
-            const status = await growth.request('CmdGemRefineReqMsg', { id: gem.gemId, type: refineType });
+            const status = await growth.request('CmdGemRefineReqMsg', { id: gem.gemId, type: refineType }, this);
             if (!this.isGemSession(session) || !this.gemSucceeded(status)) return;
             const updated = await growth.gem(gem.gemId);
             if (!this.isGemSession(session)) return;
@@ -494,20 +527,22 @@ export class RoleController<T> extends ControllerBase {
         }
         await this.finishGemWrite(await growth.request('CmdGemRefineSaveReqMsg', {
             id: gem.gemId, type: decision === 'confirm' ? saveType : 0,
-        }), session);
+        }, this), session);
     }
 
     private async finishGemWrite(status: GameRequestStatus, session: number): Promise<void> {
         if (!this.isGemSession(session) || !this.gemSucceeded(status)) return;
         this.selectedSocket = null;
-        this.options.feedback.tip(ROLE_TEXTS.gemChanged);
+        this.tip(ROLE_TEXTS.gemChanged);
         await this.refresh(false);
     }
 
-    private showSelectedBag(): Promise<void> {
-        return this.selectedBag === 1 && this.gemFilter.id
-            ? this.options.view.showBag(1, this.gemFilter.id, this.gemFilter.name)
-            : this.options.view.showBag(this.selectedBag);
+    private showSelectedBag(): void {
+        if (this.selectedBag === 1 && this.gemFilter.id) {
+            this.emitOutput({ kind: 'showBag', tab: 1, filter: this.gemFilter.id, filterName: this.gemFilter.name });
+            return;
+        }
+        this.emitOutput({ kind: 'showBag', tab: this.selectedBag });
     }
 
     private isGemSession(session: number): boolean {
@@ -516,18 +551,21 @@ export class RoleController<T> extends ControllerBase {
 
     private gemSucceeded(status: GameRequestStatus): boolean {
         if (status === 'ok') return true;
-        this.options.feedback.tip(status === 'offline' ? ROLE_TEXTS.offline : ROLE_TEXTS.failed);
+        this.tip(status === 'offline' ? ROLE_TEXTS.offline : ROLE_TEXTS.failed);
         return false;
     }
-    private async selectBag(tab: RoleBagTabId): Promise<void> {
-        if (!isRoleBagTabReady(tab)) { this.options.feedback.tip(ROLE_TEXTS.bagTabMissing); return; }
+    private selectBag(tab: RoleBagTabId): void {
+        if (!isRoleBagTabReady(tab)) { this.tip(ROLE_TEXTS.bagTabMissing); return; }
         this.selectionRevision++;
         this.selectedBag = tab;
         if (tab !== 1) this.selectedSocket = null;
-        this.options.view.selectBag(tab);
-        try {
-            await this.showSelectedBag();
-        }
-        catch (error) { if (!this.isDisposed) this.options.failed(error); }
+        this.emitOutput({ kind: 'selectBag', tab });
+        this.showSelectedBag();
+    }
+    private tip(text: string): void {
+        this.emitOutput({ kind: 'tip', text });
+    }
+    private emitOutput(output: RoleOutput<T>): void {
+        EventMgr.instance.emit(RoleEvent.Output, output);
     }
 }

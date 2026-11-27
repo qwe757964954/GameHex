@@ -673,10 +673,10 @@ test('外部战斗控制器装配结算页与伤害统计，ZCGame 只保留展�
     assert.match(runtime, /mvp: this\.settlementMvp\(\)/);
     assert.match(runtime, /units: this\.damageUnits\(\), seats: this\.damageSeats\(\)/);
     assert.match(settlement, /this\.listen\(ZCGameUiEvent\.SettlementViewTeam, this\.onViewTeam\)/);
-    assert.match(settlement, /this\.services\.popup\.openDamage\(this\.units, this\.seats\)/);
+    assert.match(settlement, /kind:\s*'openDamage',\s*phase:\s*'settlement',\s*units:\s*this\.units,\s*seats:\s*this\.seats/);
     assert.match(settlement, /mvp: request\.mvp \?\? null/);
-    const close = settlement.indexOf("popup?.close('manual');");
-    assert.ok(close >= 0 && close < settlement.indexOf('emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN'));
+    assert.match(settlement, /kind:\s*'closeSettlement',\s*reason:\s*'manual'/);
+    assert.ok(settlement.indexOf("kind: 'closeSettlement'") < settlement.indexOf('emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN'));
     assert.doesNotMatch(stripComments(gameSource), /ZCSettlementPage|finishBattle|ProcedureManager|settlementPopup/);
     assert.match(pageSource, /static prefabPath = 'ui\/game\/ZCSettlement'/);
     assert.match(pageSource, /export class ZCSettlementPage extends PopupBase/);

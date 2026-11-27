@@ -7,7 +7,8 @@ import { EventMgr } from '../../framework/event/EventMgr';
 import { _decorator, Button, Component, EditBox, Label, Node } from 'cc';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { loadArt } from '../card/CardLineupIcons';
-import { LEAGUE_ART_ROOT, leagueBannerArt } from './LeagueArt';
+import { LEAGUE_ART_ROOT } from '../ArtPaths';
+import { leagueBannerArt } from './LeagueArt';
 import { LeagueJoinEvent, type ILeagueJoinIntent } from './LeagueJoinEvents';
 import { LeagueUnionRow } from './LeagueUnionRow';
 import {

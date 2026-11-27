@@ -1,8 +1,10 @@
+import { ZCTileSystem } from './ZCTileSystem';
 import { findCatalogCard, type ZCDeckCard, type ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { IZCNeutralFeatureState, IZCMonsterPatrolState, ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import { ownersForPlayerCount, type ZCOwner } from '../ZCMapConfig';
-import type { ZCMatchMap } from '../ZCMatchConfig';
+import type { ZCMatchMap, ZCMatchConfig } from '../ZCMatchConfig';
 import { ZCMapGeometry } from '../ZCMapGeometry';
+import type { ZCMonsterFocusBlock } from '../ZCMonsterPresentation';
 import { neutralResourceItemOf, ZCNeutralResourceType, type IZCNeutralFeatureConfig } from '../ZCNeutralResourceGroup';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 import { ZCTargetingSystem } from './ZCTargetingSystem';
@@ -10,7 +12,8 @@ import type { IZCBarracksSpawn } from './ZCEconomySystem';
 import { hexGridDistance, HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
 
 export interface IZCNeutralFeatureContext {
-    readonly rules?: Pick<ZCRuntimeRules, 'neutralMonsterFocusSwitchCdSeconds' | 'neutralMonsterRegenDelaySeconds' | 'neutralMonsterRegenRate' | 'combatDistanceScale'>;
+    readonly ownerBuildingLevels?: ZCMatchConfig['ownerBuildingLevels'];
+    readonly rules: Pick<ZCRuntimeRules, 'neutralMonsterFocusSwitchCdSeconds' | 'neutralMonsterRegenDelaySeconds' | 'neutralMonsterRegenRate' | 'combatDistanceScale' | 'wallMaxHp'>;
     random(): number;
     definition(unit: ZCUnitState): ZCUnitDefinition;
     monsterDefinition(card: ZCDeckCard): ZCUnitDefinition;
@@ -77,6 +80,18 @@ export class ZCNeutralFeatureSystem {
             this.hasFeatures = true;
             if (item.resourceType === ZCNeutralResourceType.Gate) this.hasGates = true;
             if (hex.neutralFeature) {
+                // 旧对局的号角和割草机已消耗但未标记开发。只补结算一次，避免修复被打掉的墙。
+                const feature = hex.neutralFeature;
+                if (feature.claimed && (item.resourceType === ZCNeutralResourceType.Horn || item.resourceType === ZCNeutralResourceType.Extension)) {
+                    if (!hex.developmentResolved && hex.owner !== 'neutral') {
+                        ZCTileSystem.finishDevelopment(hex, this.context.rules.wallMaxHp, this.context.ownerBuildingLevels?.[hex.owner]?.wall);
+                    }
+                    if (item.resourceType === ZCNeutralResourceType.Horn || feature.lineProgress >= feature.lineHexIds?.length) {
+                        hex.neutralResourceId = null;
+                        delete hex.neutralFeature;
+                        continue;
+                    }
+                }
                 if (item.feature.gates && hex.neutralFeature.gateId === undefined) {
                     const gate = item.feature.gates.find(gate => gate.effect === hex.neutralFeature.effect) ?? item.feature.gates[0];
                     hex.neutralFeature.gateId = gate.id;
@@ -131,19 +146,21 @@ export class ZCNeutralFeatureSystem {
                 continue;
             }
             const neighborId = this.map.hexes[hex.id].neighbors.find(id => state.hexes[id].owner !== 'neutral'
-                && state.hexes[id].developmentResolved
-                && (item.resourceType !== ZCNeutralResourceType.Extension || !state.hexes.some(resource =>
-                    resource.neutralFeature?.mowerOwner === state.hexes[id].owner
-                    && resource.neutralFeature.startedAt !== undefined)));
+                && state.hexes[id].developmentResolved);
             if (neighborId === undefined) continue;
             const owner = state.hexes[neighborId].owner as ZCOwner;
             hex.owner = owner;
             feature.claimed = true;
+            if (item.resourceType === ZCNeutralResourceType.Extension || item.resourceType === ZCNeutralResourceType.Horn) {
+                ZCTileSystem.finishDevelopment(hex, this.context.rules.wallMaxHp, this.context.ownerBuildingLevels?.[owner]?.wall);
+            }
             if (item.resourceType === ZCNeutralResourceType.Extension) this.extend(state, hex, neighborId, owner);
             if (item.resourceType === ZCNeutralResourceType.Horn) {
                 for (const barracks of state.hexes) {
                     if (barracks.owner === owner) this.context.spawnBatch(barracks);
                 }
+                hex.neutralResourceId = null;
+                delete hex.neutralFeature;
             }
             this.context.changed();
         }
@@ -205,9 +222,16 @@ export class ZCNeutralFeatureSystem {
                 feature.hitUnitIds.push(unit.id);
                 this.context.damageUnit(unit, feature.lineDamage, feature.mowerOwner);
             }
-            if (hex.owner === 'neutral' && hex.building === 'none') this.context.capture(hex, feature.mowerOwner);
+            if (hex.owner === 'neutral' && hex.building === 'none' && !hex.neutralResourceId && hex.wallHp <= 0) {
+                this.context.capture(hex, feature.mowerOwner);
+            }
         }
         feature.lineProgress = progress;
+        if (progress >= line.length) {
+            resource.neutralResourceId = null;
+            delete resource.neutralFeature;
+            this.context.changed();
+        }
     }
 
     /** 每批只选一次出生格；出口兵营、普通兵团奖励和路过的单位不再传送。*/
@@ -380,12 +404,34 @@ export class ZCNeutralFeatureSystem {
         if (unlocked.length !== previousCount) this.context.changed();
     }
 
-    toggleFocus(state: ZCSnapshot, hex: ZCHexState, owner: ZCOwner): boolean {
+    /**
+     * 「这一下为什么切不了集火」—— `null` 表示能切。
+     *
+     * 2026-11-26 第 56 批：按钮从「点不动」改成**恒可点**，点不成必须能给出一句话，
+     * 所以判据要能单独问出来。开关（`toggleFocus`）与提示（控制器）都收敛到这一个函数，
+     * 不会出现「按钮说不能集火、模型却切了」或者反过来的错位。
+     *
+     * 🔴 会顺手跑一遍 `unlockMonster`：解锁是**按棋盘实时算**的（相邻地块有我方已建成地块
+     * 就解锁），上一拍建的房子这一拍才出现在 `unlockedOwners` 里。不刷这一遍，
+     * 刚建好相邻地块的玩家会被误判成 `not-adjacent`。`unlockMonster` 幂等，
+     * 和 `toggleFocus` 里那次重复调用不会多派 `changed()`。
+     *
+     * 非野怪 / 已被收下的格子也回 `not-adjacent`：按钮只长在醒着的野怪上，
+     * 真正走到这里的情况不存在（点击路由有 `isMonsterFocusHex` 挡），不额外造第三种原因。
+     */
+    focusBlockReason(state: ZCSnapshot, hex: ZCHexState, owner: ZCOwner): ZCMonsterFocusBlock | null {
         const item = neutralResourceItemOf(hex.neutralResourceId);
-        if (item?.resourceType !== ZCNeutralResourceType.Monster || hex.neutralFeature.claimed) return false;
+        if (item?.resourceType !== ZCNeutralResourceType.Monster || hex.neutralFeature.claimed) return 'not-adjacent';
         this.unlockMonster(state, hex);
         const feature = hex.neutralFeature;
-        if (!feature.unlockedOwners.includes(owner) || (feature.focusReadyAt?.[owner] ?? 0) > state.elapsedSeconds) return false;
+        if (!feature.unlockedOwners?.includes(owner)) return 'not-adjacent';
+        if ((feature.focusReadyAt?.[owner] ?? 0) > state.elapsedSeconds) return 'cooldown';
+        return null;
+    }
+
+    toggleFocus(state: ZCSnapshot, hex: ZCHexState, owner: ZCOwner): boolean {
+        if (this.focusBlockReason(state, hex, owner) !== null) return false;
+        const feature = hex.neutralFeature;
         const focused = feature.focusOwners ?? (feature.focusOwners = []);
         const index = focused.indexOf(owner);
         if (index < 0) {

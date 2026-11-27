@@ -295,8 +295,14 @@ test('真实模型首次集火唤醒后，命中的射程外攻击者会收到�
     };
     const monster = access.state.hexes[center.id];
     assert.equal(isZCAwakeMonster(monster), false);
+    // 点击路由：没唤醒的野怪格不算集火格（点它等于什么都没点），唤醒后才接管地块点击。
+    assert.equal(model.isMonsterFocusHex(monster.id), false);
     assert.equal(model.toggleMonsterFocus(monster.id), true);
     assert.equal(isZCAwakeMonster(monster), true);
+    assert.equal(model.isMonsterFocusHex(monster.id), true);
+    monster.neutralFeature.claimed = true;
+    assert.equal(model.isMonsterFocusHex(monster.id), false, '拆掉后不再是集火格');
+    monster.neutralFeature.claimed = false;
     const shooter = access.state.units[0];
     assert.ok(definition);
     assert.ok(Math.hypot(shooter.freeX - center.x, shooter.freeY - center.y)
@@ -440,7 +446,8 @@ test('趣味资源只认已翻开的邻格，不被未翻格的归属或远处�
         assert.equal(isZCAwakeMonster(f.hex), false, `类型 ${type}`);
         neighbor.developmentResolved = true;
         f.system.claim(f.state);
-        assert.equal(f.hex.neutralFeature.claimed, true, `类型 ${type}`);
+        if (type === 10) assert.equal(f.hex.neutralResourceId, null);
+        else assert.equal(f.hex.neutralFeature.claimed, true, `类型 ${type}`);
     }
 });
 
@@ -692,6 +699,25 @@ test('号角只出一次波，不改变兵营时钟', () => {
     assert.equal(f.state.spawnClocks[`barracks:${neighbor.id}`], 4);
 });
 
+test('领取号角时，卡组外已建成的兵营也立即出一波，读档不重复', () => {
+    const { config, state, hex } = fixture(10, {});
+    const card = findCatalogCard('68001');
+    const deck = config.playerDeck.filter(entry => entry.id !== card.id);
+    const match = { ...config, playerDeck: deck, enemyDeck: deck,
+        ownerDecks: { player: deck, enemy: deck, enemy2: deck, enemy3: deck } };
+    const anchor = state.hexes[config.map.hexes[hex.id].neighbors[0]];
+    Object.assign(anchor, { owner: 'player', building: 'barracks', cardId: card.id, hp: 100, maxHp: 100,
+        tier: 1, developmentResolved: true, constructionRemainingSeconds: 0 });
+    const game = new ZCGameModel(state, () => 0, match);
+    assert.equal(game.snapshot.hexes[hex.id].neutralResourceId, null);
+    assert.equal(game.snapshot.hexes[hex.id].wallHp, config.rules.wallMaxHp);
+    const troops = game.snapshot.units.filter(u => u.sourceHexId === anchor.id);
+    assert.equal(troops.length, card.cycleBaseValue);
+    assert.ok(troops.every(u => u.owner === 'player' && u.cardId === card.id));
+    const restored = new ZCGameModel(game.exportSnapshot(), () => 0, match);
+    assert.equal(restored.snapshot.units.length, game.snapshot.units.length);
+});
+
 test('割草机随时间推进，只占中立格，敌方空地保持归属且不授予自由建造权', () => {
     const f = fixture(8, {});
     const from = f.config.map.hexes[f.hex.id].neighbors[0];
@@ -712,7 +738,10 @@ test('割草机随时间推进，只占中立格，敌方空地保持归属且�
     if (neutral !== last) assert.equal(neutral.owner, 'player');
     ZCTileSystem.refresh(f.state, f.config.map);
     assert.equal(ZCTileSystem.canDevelopFor(f.state, f.config.map, last.id, 'player'), false);
-    assert.equal('buildUsed' in f.hex.neutralFeature, false);
+    assert.equal(f.hex.neutralResourceId, null);
+    assert.equal(f.hex.neutralFeature, undefined);
+    assert.equal(f.hex.wallHp, f.config.rules.wallMaxHp);
+    assert.equal(ZCTileSystem.canDevelopFor(f.state, f.config.map, f.hex.id, 'player'), false);
 });
 
 test('割草机按全队总攻击力伤害一次，非中立格保持归属，恢复后不补发伤害', () => {
@@ -761,7 +790,7 @@ test('割草机沿开启邻格的反方向推进，六个方向都不掉头', ()
     }
 });
 
-test('每名玩家每局只触发一次割草机，恢复与易手不重置，其他玩家仍可触发', () => {
+test('同一玩家可触发两台割草机，每台只启动一次，读档和易手不重启', () => {
     const f = fixture(8, {});
     const second = f.state.hexes.find(hex => hex.id !== f.hex.id && hex.owner === 'neutral'
         && f.config.map.hexes[hex.id].playable && f.config.map.hexes[hex.id].neighbors.length === 6
@@ -777,23 +806,40 @@ test('每名玩家每局只触发一次割草机，恢复与易手不重置，�
         f.state.hexes[id].owner = 'player'; f.state.hexes[id].developmentResolved = true;
     }
     f.system.claim(f.state);
-    assert.equal(second.neutralFeature.claimed, false, '同一玩家不能触发第二台');
+    assert.equal(second.neutralFeature.claimed, true);
+    assert.equal(second.neutralFeature.mowerOwner, 'player');
     const restored = ZCSnapshotCodec.clone(f.state);
+    restored.elapsedSeconds += 5;
     restored.hexes[f.hex.id].owner = 'enemy';
+    for (const id of f.config.map.hexes[second.id].neighbors) restored.hexes[id].owner = 'enemy';
     f.system.initialize(restored);
     f.system.claim(restored);
-    assert.equal(restored.hexes[second.id].neutralFeature.claimed, false, '恢复和资源格易手不能刷新已用次数');
-    const neighbors = f.config.map.hexes[second.id].neighbors;
-    const enemyNeighbor = neighbors[neighbors.length - 1];
-    restored.hexes[enemyNeighbor].owner = 'enemy';
-    f.system.claim(restored);
-    assert.equal(restored.hexes[second.id].neutralFeature.mowerOwner, 'enemy', '跳过已用次数的玩家，允许其他邻接玩家触发');
-    const fresh = ZCSnapshotCodec.createInitialState(f.config);
-    fresh.hexes[f.hex.id].neutralResourceId = f.hex.neutralResourceId;
-    fresh.hexes[from.id].owner = 'player'; fresh.hexes[from.id].developmentResolved = true;
-    f.system.initialize(fresh);
-    f.system.claim(fresh);
-    assert.equal(fresh.hexes[f.hex.id].neutralFeature.mowerOwner, 'player', '新局恢复每名玩家的使用机会');
+    for (const id of [f.hex.id, second.id]) {
+        assert.equal(restored.hexes[id].neutralFeature.mowerOwner, 'player');
+        assert.equal(restored.hexes[id].neutralFeature.startedAt, f.state.elapsedSeconds);
+    }
+});
+
+test('割草机经过未领取资源时继续前进，保留资源与地块归属，结束时不补墙', () => {
+    const f = fixture(8, {});
+    const from = f.state.hexes[f.config.map.hexes[f.hex.id].neighbors[0]];
+    from.owner = 'player'; from.developmentResolved = true;
+    f.system.claim(f.state);
+    const line = f.hex.neutralFeature.lineHexIds;
+    assert.ok(line.length > 2);
+    const other = f.state.hexes[line[1]];
+    other.neutralResourceId = f.hex.neutralResourceId;
+    other.owner = 'neutral';
+    f.system.initialize(f.state);
+    f.hex.wallHp = 1;
+    f.state.elapsedSeconds = line.length;
+    f.system.tick(f.state);
+    assert.equal(other.owner, 'neutral');
+    assert.equal(other.neutralFeature.claimed, false);
+    assert.ok(other.neutralResourceId);
+    assert.equal(f.state.hexes[line[2]].owner, 'player');
+    assert.equal(f.hex.wallHp, 1);
+    assert.equal(f.hex.neutralResourceId, null);
 });
 
 test('割草机经过有敌兵的中立格仍按新规则归属触发方', () => {
@@ -920,14 +966,16 @@ test('割草机穿过敌方建筑并只命中一次，虚空不入线，恢复�
     assert.deepEqual(f.structureHits, [blocked.id]);
     f.system.initialize(f.state);
     f.system.tick(f.state);
-    f.state.elapsedSeconds = 10;
-    f.system.tick(f.state);
-    assert.deepEqual(f.structureHits, [blocked.id]);
-    assert.equal(blocked.owner, 'enemy');
     f.hex.neutralFeature.hitUnitIds = [1];
     assert.equal(ZCSnapshotCodec.decode(f.state, f.config).ok, true);
     delete f.hex.neutralFeature.hitUnitIds;
     assert.equal(ZCSnapshotCodec.decode(f.state, f.config).ok, false);
+    f.hex.neutralFeature.hitUnitIds = [1];
+    f.state.elapsedSeconds = 10;
+    f.system.tick(f.state);
+    assert.deepEqual(f.structureHits, [blocked.id]);
+    assert.equal(blocked.owner, 'enemy');
+
 });
 
 test('割草机启动时已有建筑也不截断路线', () => {
@@ -983,6 +1031,65 @@ test('小兵穿过中立推车或号角后能继续占领空地，资源格保�
     }
 });
 
+test('双方穿过未领取资源仍可占其后的中立或敌方空地，普通中立空格不能传递补给', () => {
+    for (const owner of ['player', 'enemy'] as const) {
+        const other = owner === 'player' ? 'enemy' : 'player';
+        const { config, state, hex, unit } = fixture(8, {});
+        loadPvpTables(tables);
+        delete hex.neutralFeature;
+        const resource = config.map.hexes[hex.id];
+        const home = config.map.hexes[resource.neighbors[0]];
+        const next = config.map.hexes[resource.neighbors.find(id => id !== home.id && !home.neighbors.includes(id))];
+        const homes = [config.map.playerHomeId, config.map.enemyHomeId];
+        homes[owner === 'player' ? 0 : 1] = home.id;
+        const map = { ...config.map, homes };
+        const capture = new ZCCaptureSystem(new ZCMapGeometry(map), map,
+            { ...config.rules, captureSeconds: 0.1, captureRequireSupply: true });
+        for (const tile of state.hexes) tile.owner = 'neutral';
+        state.hexes[home.id].owner = owner;
+        for (const id of [null, 1300101, 1300501, 1300401, 1300203, 1300601, 1300801, 1400101, 1400701]) {
+            if (id !== null) assert.ok(neutralResourceItemOf(id));
+            for (const initial of ['neutral', other] as const) {
+                hex.neutralResourceId = id;
+                const target = state.hexes[next.id];
+                target.owner = initial;
+                const runner = unit(1, owner);
+                if (id === null) { runner.freeX = next.x; runner.freeY = next.y; }
+                state.units = [runner];
+                capture.beginStep(state.units);
+                runner.freeX = next.x;
+                runner.freeY = next.y;
+                capture.update(state, 0.1, ZCDevelopmentSystem.captureEmptyTile);
+                assert.equal(target.owner, id === null ? initial : owner, String(id));
+                assert.equal(hex.neutralResourceId, id);
+                if (id !== null) assert.equal(hex.owner, 'neutral');
+                hex.owner = 'neutral';
+            }
+        }
+    }
+});
+
+test('未解锁的强化门和传送门不受踩格影响，邻格开发才归属开发方', () => {
+    for (const type of [7, 9]) {
+        const f = fixture(type, type === 7 ? gateParam : {}, false);
+        const adjacent = f.config.map.hexes[f.hex.id].neighbors;
+        for (const id of adjacent) f.state.hexes[id].developmentResolved = false;
+        f.state.units = [f.unit(1, 'enemy')];
+        const capture = new ZCCaptureSystem(new ZCMapGeometry(f.config.map), f.config.map,
+            { ...f.config.rules, captureSeconds: 0.05, captureRequireSupply: false });
+        capture.beginStep(f.state.units);
+        capture.update(f.state, 1, ZCDevelopmentSystem.captureEmptyTile);
+        f.system.claim(f.state);
+        assert.equal(f.hex.owner, 'neutral');
+        assert.equal(f.hex.neutralFeature.claimed, false);
+        const anchor = f.state.hexes[adjacent[0]];
+        anchor.owner = 'player'; anchor.developmentResolved = true;
+        f.system.claim(f.state);
+        assert.equal(f.hex.owner, 'player');
+        assert.equal(f.hex.neutralFeature.claimed, true);
+    }
+});
+
 test('已触发推车格可被路过小兵占领，未触发时保留资源', () => {
     const f = fixture(8, {});
     const enemy = f.unit(1, 'enemy');
@@ -996,6 +1103,9 @@ test('已触发推车格可被路过小兵占领，未触发时保留资源', ()
     const from = f.state.hexes[f.config.map.hexes[f.hex.id].neighbors[0]];
     from.owner = 'player'; from.developmentResolved = true;
     f.system.claim(f.state);
+    capture.update(f.state, 0.05, applyCapture);
+    assert.equal(f.hex.owner, 'player');
+    f.hex.wallHp = 0;
     capture.update(f.state, 0.05, applyCapture);
     assert.equal(f.hex.owner, 'enemy');
     assert.equal(f.hex.neutralFeature.mowerOwner, 'player');

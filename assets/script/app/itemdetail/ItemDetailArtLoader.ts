@@ -1,15 +1,12 @@
 import type { SpriteFrame } from 'cc';
 import { createRoutedSpriteFrameCache } from '../common/SpriteFrameCache';
-import { spriteFramePathOf } from '../ArtPaths';
+import { ART_ROOT, spriteFramePathOf } from '../ArtPaths';
 import { ID_ART_NAMES, qualityFrameArtPath, titleArtPathOf } from './ItemDetailArt';
 import { qualityFrameSuffixOf } from './ItemDetailTable';
 
-/** 物品详情图的根（`ID_ART_NAMES` 的 value 是相对 `assets/resources/image/` 的路径）。 */
-export const ID_ART_ROOT = 'image';
-
 /** 相对 `image/` 的路径 → `resources.load` 用的装配路径。 */
 export function idFramePathOf(rel: string): string {
-    return spriteFramePathOf(`${ID_ART_ROOT}/${rel}`);
+    return spriteFramePathOf(`${ART_ROOT}/${rel}`);
 }
 
 const cache = createRoutedSpriteFrameCache('ItemDetailArt');
@@ -54,7 +51,7 @@ export function loadQualityFrameArt(suffix: string): Promise<SpriteFrame | null>
 
 /** 品质档位 → 相对 `resources` 的路径（不带 `/spriteFrame`；给控制器级 loader 用）。 */
 export function itemQualityFrameRelPath(quality: number): string {
-    return `${ID_ART_ROOT}/${qualityFrameArtPath(qualityFrameSuffixOf(quality))}`;
+    return `${ART_ROOT}/${qualityFrameArtPath(qualityFrameSuffixOf(quality))}`;
 }
 
 /** 品质档位 → `resources.load` 用的完整装配路径。 */

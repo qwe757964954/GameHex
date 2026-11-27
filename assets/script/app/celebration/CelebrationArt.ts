@@ -9,7 +9,7 @@
  * 前缀：`os_` 是开服冲榜包自有（`image/celebration/`），`cu_` 是前几轮迁进来的共用图（`image/common/`）。
  * 九宫数据由生成器从老端 `.bin` 的 `scale9Grid` 写入 `.meta`，不要手抄。
  */
-import { FRAME_ART_ROOT, spriteFramePath, spriteFramePathOf } from '../ArtPaths';
+import { ART_ROOT, FRAME_ART_ROOT, spriteFramePath, spriteFramePathOf } from '../ArtPaths';
 import { qualityFrameNameOfLevel } from '../common/QualityFrameArt';
 import { ECelebrationRankSegment } from './CelebrationTable';
 import type { ICelebrationGoodsInfo } from './CelebrationTable';
@@ -123,7 +123,7 @@ export const OS_ART_TILED = new Set<string>([]);
 
 /** `Sprite.Type.SIMPLE` / `SLICED` 的数值，省得为它 import `cc`。 */
 export const OS_SPRITE_SIMPLE = 0;
-export const OS_SPRITE_SLICED = 1;
+const OS_SPRITE_SLICED = 1;
 
 /**
  * `OS_ART_NAMES` 的 key → `{root, name}`：把值的最后一个 `/` 切开。
@@ -144,10 +144,10 @@ export function osArtRef(key: string): { root: string; name: string } | null {
 // ============================================================
 
 /**
- * 庆典固定图的根（value 相对 `assets/resources/image/`，与 `RoleArtLoader.ROLE_ART_ROOT` 同口径）。
+ * 庆典固定图的根（相对 `assets/resources/image/`）。
  * 运行时 load 必须带这个前缀，否则报 `Bundle resources doesn't contain …`，表现是静默留白。
  */
-export const OS_ART_ROOT = 'image';
+export const OS_ART_ROOT = ART_ROOT;
 
 /**
  * `OS_ART_NAMES` 的 key → `resources.load` 能吃的装配路径（含 `/spriteFrame`）。
@@ -179,7 +179,7 @@ export function osSharedPath(ref: { root: string; name: string }): string {
 // ============================================================
 
 /** 品质框根目录（与 activity / sevenDay / hang 共用 `image/frame`）。 */
-export const OS_QUALITY_FRAME_ROOT = FRAME_ART_ROOT;
+const OS_QUALITY_FRAME_ROOT = FRAME_ART_ROOT;
 
 /**
  * 品质档 → 框档（越界钳到 1..4）。
@@ -293,7 +293,7 @@ function hex(value: string): OsRgb {
  * `<gearColor controller="名次" pages="1,2" values="#33d6ff,#1e160f|#eae2b6,#1e160f" default="#f33333,#1e160f"/>`：
  * `values` 按 `pages` 列出的页 id 顺序一一对应，第一名（页 id 0）不在 `pages` 里，走 `default`。
  */
-export const OS_RANK_TEXT_COLORS: Readonly<Record<ECelebrationRankSegment, OsRgb>> = {
+const OS_RANK_TEXT_COLORS: Readonly<Record<ECelebrationRankSegment, OsRgb>> = {
     [ECelebrationRankSegment.First]: hex('#f33333'),
     [ECelebrationRankSegment.SecondThird]: hex('#33d6ff'),
     [ECelebrationRankSegment.Other]: hex('#eae2b6'),
@@ -309,13 +309,13 @@ export const OS_RANK_TEXT_STROKE: OsRgb = hex('#1e160f');
  * `color`（设计期默认色）；未达标更亮是老端的强调。两档不要对调。
  */
 export const OS_POWER_TEXT_REACHED: OsRgb = hex('#818181');
-export const OS_POWER_TEXT_UNREACHED: OsRgb = hex('#eae2b6');
+const OS_POWER_TEXT_UNREACHED: OsRgb = hex('#eae2b6');
 
 /** 战力要求文案的描边色。 */
 export const OS_POWER_TEXT_STROKE: OsRgb = hex('#000000');
 
 /** 原始（未染色）tint。 */
-export const OS_TINT_NORMAL: OsRgb = [255, 255, 255];
+const OS_TINT_NORMAL: OsRgb = [255, 255, 255];
 
 /**
  * 置灰 tint。
@@ -323,7 +323,7 @@ export const OS_TINT_NORMAL: OsRgb = [255, 255, 255];
  * FGUI 的 `grayed` 是真灰度滤镜，Cocos 3.x 的 `Sprite` / `Label` 没有内置灰度，这里用灰色 tint 近似，
  * 取 132 与 `FriendArt` / `ChatArt` 同口径。要真灰度得挂灰度材质的 effect，对「未达标」这种非关键态不值得。
  */
-export const OS_TINT_GRAY: OsRgb = [132, 132, 132];
+const OS_TINT_GRAY: OsRgb = [132, 132, 132];
 
 /** 按是否置灰取 tint。 */
 export function osTint(gray: boolean): OsRgb {

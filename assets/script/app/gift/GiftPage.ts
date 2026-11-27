@@ -1,11 +1,11 @@
 import { _decorator, Button, Color, Label, Node, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { loadArt } from '../card/CardLineupIcons';
+import { qualityFrameName } from '../common/QualityFrameArt';
 import {
     GIFT_ART_NAMES,
     GIFT_ART_ROOT,
     GIFT_SUB_TAB_ART,
-    qualityFrameName,
     resolveGiftIconRef,
 } from './GiftArt';
 import { giftRepository } from './GiftRepository';

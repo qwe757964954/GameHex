@@ -28,7 +28,7 @@ import { RD_SERVER_VAR_TYPES, normalizeRdCount } from './RdTypes';
 import { RdVarBase } from './RdVarBase';
 
 /** 服务端红点缓存名（`CacheMgrGen` 的 `getCmdRedDotCache` 用的就是它）。 */
-export const RD_CACHE_NAME = 'CmdRedDotCache';
+const RD_CACHE_NAME = 'CmdRedDotCache';
 
 /** 取某个 `CmdRedDotType` 当前的数字；取不到 / 读坏一律 `0`（红点收起，不抛）。 */
 export function readServerRedDot(type: CmdRedDotType): number {

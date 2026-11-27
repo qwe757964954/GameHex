@@ -19,6 +19,7 @@ import type {
 import { BigMapPlayerLevelPanel, type IBigMapPlayerLevelContent, type IBigMapPlayerLevelReward } from '../view/BigMapPlayerLevelPanel';
 import { TerritoryMonsterBoxPanel, type ITerritoryMonsterBoxContent } from '../view/TerritoryMonsterBoxPanel';
 import type { ITerritoryBattleArt } from '../application/TerritoryPageAssets';
+import { monsterBoxRewardText } from '../model/TerritoryMonsterBoxDetail';
 
 /**
  * 宿主提供给 DetailCoordinator 的上下文契约。
@@ -138,7 +139,9 @@ export class TerritoryDetailCoordinator {
             rewards: detail.rewards.map((reward) => ({
                 resId: reward.resId,
                 amount: reward.amount,
-                amountText: reward.amountText,
+                // 「当前值+增量」(`300+100`)：文案口径收在 Model 的纯函数里，
+                // 这里只负责转交 —— 面板与其它复用 `RewardItemView` 的地方都不用知道规则。
+                amountText: monsterBoxRewardText(reward),
                 ratePercent: reward.ratePercent,
             })),
             upgradeCost: detail.upgradeCost,

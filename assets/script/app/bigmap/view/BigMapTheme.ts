@@ -96,6 +96,26 @@ export const BIGMAP_TERRITORY_SELF_COLOR = BIGMAP_COLORS.open;
 export const BIGMAP_TERRITORY_ENEMY_COLOR = BIGMAP_COLORS.campOccupied;
 
 /**
+ *「打不了」的据点势力范围色 —— 中性灰 `#757575`（2026-11-26 用户指定色值，
+ * 同日口径：「这类不可攻打的城池据点的势力范围都要使用灰色」）。
+ *
+ * 两条硬约束：
+ * 1. **必须严格无色相（r = g = b）**。灰靠「没有颜色」这件事自证，一旦掺一点蓝就落回色板
+ *    的「青灰（124,140,160）」—— 玩家会读成「某号势力」，而不是「这块不开」。
+ *    用例按饱和度 = 0 断言（`tests/bigmap-transparent-tiles.test.ts`）。
+ * 2. **压得比沙地暗一档**。地图底是暖沙（`grounds/` 约 `#CFAF8C`），中灰按 41% 叠上去几乎
+ *    就是「没染」（沙色本身亮度已经很高）；取 `#757575` + 52% 才落成一块「发闷的暗灰」，
+ *    和周围冷色块、己方绿、他人红都能一眼分开。
+ *
+ * 判定「打不了」**不看 `state`**（服务器快照会把它改写成 open/occupied），
+ * 只看 `IBigMapCityView.unplayable`（配置层：本期未开放 / 未解锁），见 `BigMapWorldView.territoryPaint`。
+ *
+ * 注意它只管**地块填充**：据点图标与名条仍走原口径（图标见
+ * `BigMapWorldView.refresh` 里 `state === 'unavailable'` 的压暗，名条只表达归属）。
+ */
+export const BIGMAP_TERRITORY_LOCKED_COLOR = new Color(0x75, 0x75, 0x75);
+
+/**
  *势力染色透明度。
  *
  *填充只给 ~40%（`104/255`）：必须透出地块的裂缝与明暗，这正是图片 3「颜色叠加」的样子 ——
@@ -113,6 +133,14 @@ export const BIGMAP_TERRITORY_STROKE_ALPHA = 216;
  *所以归属地给到 ~59%，仍然透得出地块裂缝，但不靠色相也能看出重点。
  */
 export const BIGMAP_TERRITORY_OWNED_FILL_ALPHA = 150;
+
+/**
+ *「未开放」据点地块的填充浓度（`BIGMAP_TERRITORY_LOCKED_COLOR` 专用）。
+ *
+ * 取在无主（104）与归属（150）之间：比无主实 —— 否则那块灰会被沙地吃掉、看不出「封着」；
+ * 但又不该比「己方 / 他人占据」更抢眼 —— 那是玩家要冲的目标，未开放只是「别去」。
+ */
+export const BIGMAP_TERRITORY_LOCKED_FILL_ALPHA = 132;
 
 /**
  *「相邻势力」的判定距离（六边格数）。

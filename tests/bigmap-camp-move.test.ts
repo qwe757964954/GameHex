@@ -25,10 +25,16 @@ import {
 import { BigMapCampRepository, type IBigMapCampGateway } from '../assets/script/app/bigmap/application/BigMapCampRepository';
 import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import type { BigMapSlgRepository } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
+import { createControllerContext } from './helpers/controller-context';
+import { loadBigMapController } from './helpers/bigmap-controller';
+import { BigMapViewEvent, BigMapUiEvent } from '../assets/script/app/bigmap/application/BigMapEvents';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 import { assetPath } from './helpers/asset-paths';
 import { sendGameRequest } from '../assets/script/app/net/RequestGuard';
+
+const { BigMapController } = loadBigMapController();
 
 const CMD = 'com.xkhy.tafang.cmd';
 
@@ -130,21 +136,24 @@ test('★回包：campId / pos / moveType 任一不符都作废（迟到、串�
 // ④ 仓库
 // ============================================================================
 
-function deferred() {
-    let resolve: (value: unknown) => void = () => undefined;
-    const promise = new Promise<unknown>((finish) => { resolve = finish; });
+function deferred<T = unknown>() {
+    let resolve: (value: T) => void = () => undefined;
+    const promise = new Promise<T>((finish) => { resolve = finish; });
     return { promise, resolve };
 }
 
 function makeGateway() {
     const moves: { campId: number; pos: number; moveType: number }[] = [];
-    const move = deferred();
+    const move = deferred<requestGuard.ScopedRequestOutcome>();
     const detail = deferred();
     const gateway: IBigMapCampGateway = {
         fetchSimple: async () => null,
         fetchDetail: () => detail.promise,
         fetchRoles: async () => null,
-        requestMove: (body) => { moves.push({ ...body }); return move.promise; },
+        requestMove: (body) => {
+            moves.push({ ...body });
+            return move.promise;
+        },
     };
     return { moves, move, detail, gateway };
 }
@@ -154,9 +163,10 @@ test('仓库：迁城成功向上报 ok，且成功后不改本地快照（新�
     const repository = new BigMapCampRepository(h.gateway);
     const pending = repository.moveCamp(205, 7);
     assert.deepEqual(h.moves, [{ campId: 205, pos: 7, moveType: 1 }], 'moveType 自动补 1');
-    h.move.resolve({ succ: 1, req: { campId: 205, pos: 7, moveType: 1 } });
+    h.move.resolve({ status: 'ok', response: { succ: 1, req: { campId: 205, pos: 7, moveType: 1 } } });
     const result = await pending;
-    assert.deepEqual(result, { ok: true, message: BIGMAP_CAMP_MOVE_TEXT.moved });
+    assert.deepEqual(result, { ok: true, status: 'ok' });
+    assert.equal('message' in result, false, '仓储只返回结构化结果，不决策文案');
     assert.equal(repository.get(205), null, '仓库不猜新状态，交给 Presenter 重拉');
 });
 
@@ -165,8 +175,7 @@ test('★仓库：参数不合法直接拒，不发请求', async () => {
     const repository = new BigMapCampRepository(h.gateway);
     for (const [campId, pos] of [[0, 1], [205, -1], [205, 1.5], [205, 0x100000000]] as const) {
         const result = await repository.moveCamp(campId, pos);
-        assert.equal(result.ok, false);
-        assert.equal(result.message, BIGMAP_CAMP_MOVE_TEXT.invalid);
+        assert.deepEqual(result, { ok: false, status: 'invalid' });
     }
     assert.deepEqual(h.moves, []);
 });
@@ -176,9 +185,9 @@ test('★仓库：串行——上一发未落地时再点直接拒（busy），�
     const repository = new BigMapCampRepository(h.gateway);
     const first = repository.moveCamp(205, 7);
     const second = await repository.moveCamp(205, 8);
-    assert.deepEqual(second, { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.busy });
+    assert.deepEqual(second, { ok: false, status: 'busy' });
     assert.equal(h.moves.length, 1, '第二发不许出去');
-    h.move.resolve({ succ: 1, req: { campId: 205, pos: 7, moveType: 1 } });
+    h.move.resolve({ status: 'ok', response: { succ: 1, req: { campId: 205, pos: 7, moveType: 1 } } });
     assert.equal((await first).ok, true);
 });
 
@@ -192,9 +201,23 @@ test('★仓库：失败/超时只返失败，不清已有据点快照与角色�
     assert.equal(repository.get(205)?.opType, 1);
 
     const pending = repository.moveCamp(205, 7);
-    h.move.resolve({ succ: 0, req: { campId: 205, pos: 7, moveType: 1 } });
-    assert.deepEqual(await pending, { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.failed });
+    h.move.resolve({ status: 'ok', response: { succ: 0, req: { campId: 205, pos: 7, moveType: 1 } } });
+    assert.deepEqual(await pending, { ok: false, status: 'failed' });
     assert.equal(repository.get(205)?.opType, 1, '★失败不能把已有据点状态抹掉');
+});
+
+test('仓库：服务端 CmdTips 拒绝与离线分别透传 rejected / offline，不误报「迁城失败」', async () => {
+    const h = makeGateway();
+    const repository = new BigMapCampRepository(h.gateway);
+    const rejectedPending = repository.moveCamp(205, 7);
+    h.move.resolve({ status: 'rejected' });
+    assert.deepEqual(await rejectedPending, { ok: false, status: 'rejected' });
+
+    const second = makeGateway();
+    const offlineRepo = new BigMapCampRepository(second.gateway);
+    const offlinePending = offlineRepo.moveCamp(205, 7);
+    second.move.resolve({ status: 'offline' });
+    assert.deepEqual(await offlinePending, { ok: false, status: 'offline' });
 });
 
 test('仓库：dispose 后不再发迁城请求', async () => {
@@ -202,8 +225,7 @@ test('仓库：dispose 后不再发迁城请求', async () => {
     const repository = new BigMapCampRepository(h.gateway);
     repository.dispose();
     const result = await repository.moveCamp(205, 7);
-    assert.equal(result.ok, false);
-    assert.equal(result.message, BIGMAP_CAMP_MOVE_TEXT.disposed);
+    assert.deepEqual(result, { ok: false, status: 'disposed' });
     assert.deepEqual(h.moves, []);
 });
 
@@ -211,7 +233,7 @@ test('仓库：dispose 后不再发迁城请求', async () => {
 // ⑤ 网关
 // ============================================================================
 
-test('★网关：真发 CmdSlgCampMoveReqMsg，body 三项，allowRetry=false', async () => {
+test('★网关：真发 CmdSlgCampMoveReqMsg，body 三项，allowRetry=false，CmdTips 透传 rejected', async () => {
     const requests = loadModule('assets/script/app/bigmap/application/RequestBigMapCampMsg.ts', () => ({
         RequestMsg: class {
             allowRetry = true;
@@ -221,12 +243,18 @@ test('★网关：真发 CmdSlgCampMoveReqMsg，body 三项，allowRetry=false',
     const sent: { name: string; body: Record<string, unknown>; allowRetry: boolean; needLoading: boolean }[] = [];
     const removed: object[] = [];
     let requestOwner: object | null = null;
+    let rejectReason: string | null | undefined = undefined;
     const net = {
         isConnected: true,
         async send(req: { getReqMsgProtoName(): string; cmdReqMsg: Record<string, unknown>; fCallback(rsp: unknown): void;
+            fErrorCallback?: (reason: string | null) => void;
             caller: object; allowRetry: boolean }, needLoading: boolean) {
             requestOwner = req.caller;
             sent.push({ name: req.getReqMsgProtoName(), body: req.cmdReqMsg, allowRetry: req.allowRetry, needLoading });
+            if (rejectReason !== undefined) {
+                req.fErrorCallback?.(rejectReason);
+                return false;
+            }
             req.fCallback({ succ: 1, req: { campId: 205, pos: 7, moveType: 1 } });
             return true;
         },
@@ -239,17 +267,23 @@ test('★网关：真发 CmdSlgCampMoveReqMsg，body 三项，allowRetry=false',
         return {};
     });
     const Gateway = mod.GameNetBigMapCampGateway as new () => {
-        requestMove(body: { campId: number; pos: number; moveType: number }): Promise<unknown>;
+        requestMove(body: { campId: number; pos: number; moveType: number }): Promise<requestGuard.ScopedRequestOutcome>;
         dispose(): void;
     };
     const gateway = new Gateway();
-    await gateway.requestMove({ campId: 205, pos: 7, moveType: 1 });
+    assert.equal((await gateway.requestMove({ campId: 205, pos: 7, moveType: 1 })).status, 'ok');
     assert.equal(requestOwner, gateway);
+    rejectReason = 'server_error';
+    assert.equal((await gateway.requestMove({ campId: 205, pos: 7, moveType: 1 })).status, 'rejected');
+    net.isConnected = false;
+    assert.equal((await gateway.requestMove({ campId: 205, pos: 7, moveType: 1 })).status, 'offline');
+    net.isConnected = true;
+    rejectReason = undefined;
     gateway.dispose();
     gateway.dispose();
     assert.deepEqual(removed, [gateway]);
-    assert.equal(await gateway.requestMove({ campId: 205, pos: 7, moveType: 1 }), null);
-    assert.equal(sent.length, 1);
+    assert.equal((await gateway.requestMove({ campId: 205, pos: 7, moveType: 1 })).status, 'offline');
+    assert.equal(sent.length, 2);
     assert.equal(sent[0].name, 'CmdSlgCampMoveReqMsg');
     assert.deepEqual(Object.keys(sent[0].body), ['campId', 'pos', 'moveType']);
     assert.equal(sent[0].body.campId, 205);
@@ -281,19 +315,19 @@ function makePresenter(overrides: { gameRefreshes?: { count: number } } = {}) {
     return { ...h, repository, presenter, gameRefreshes: counter };
 }
 
-test('★Presenter：离线（无仓库）直接拒，给明确文案', async () => {
+test('★Presenter：离线（无仓库）直接拒，返回结构化 offline', async () => {
     const presenter = new BigMapModel({
         config: loadBigMapConfig(), storage: createMemoryBigMapStorage(), saveKey: 'camp-move-offline',
         adventureChapter: () => 0, now: () => 957600,
     });
     const result = await presenter.requestMoveCamp(205, 7);
-    assert.deepEqual(result, { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.offline });
+    assert.deepEqual(result, { ok: false, status: 'offline' });
 });
 
 test('★Presenter：迁城成功后重拉 GameInfo 与据点详情（否则界面停在上一个城）', async () => {
     const h = makePresenter();
     const pending = h.presenter.requestMoveCamp(205, 7);
-    h.move.resolve({ succ: 1, req: { campId: 205, pos: 7, moveType: 1 } });
+    h.move.resolve({ status: 'ok', response: { succ: 1, req: { campId: 205, pos: 7, moveType: 1 } } });
     const result = await pending;
     assert.equal(result.ok, true);
     assert.equal(h.gameRefreshes.count, 1, '★toCampId 变了必须重拉 GameInfo');
@@ -304,13 +338,81 @@ test('★Presenter：迁城成功后重拉 GameInfo 与据点详情（否则界�
     assert.ok(h.presenter.cityView(205) !== null || true, '重拉链路已触发');
 });
 
-test('Presenter：迁城未确认仍重拉服务端事实，失败文案原样透传', async () => {
+test('Presenter：迁城未确认仍重拉服务端事实，CmdTips 拒绝不重拉；Controller 统一解析文案', async () => {
     const h = makePresenter();
     const pending = h.presenter.requestMoveCamp(205, 7);
-    h.move.resolve({ succ: 0, req: { campId: 205, pos: 7, moveType: 1 } });
+    h.move.resolve({ status: 'ok', response: { succ: 0, req: { campId: 205, pos: 7, moveType: 1 } } });
     const result = await pending;
-    assert.deepEqual(result, { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.failed });
+    assert.deepEqual(result, { ok: false, status: 'failed' });
     assert.equal(h.gameRefreshes.count, 1);
+
+    const rejected = makePresenter();
+    const pendingRejected = rejected.presenter.requestMoveCamp(205, 7);
+    rejected.move.resolve({ status: 'rejected' });
+    assert.deepEqual(await pendingRejected, { ok: false, status: 'rejected' });
+    assert.equal(rejected.gameRefreshes.count, 0);
+
+    // Controller 端端到端验证：rejected 不发第二条 Toast，failed/offline/moved 查 BIGMAP_CAMP_MOVE_TEXT 播报。
+    const wired = makePresenter();
+    const controller = new BigMapController(wired.presenter, {
+        context: createControllerContext(),
+        campRepository: wired.repository,
+        schedule: () => () => {},
+    });
+    const commands: unknown[] = [];
+    const listener = {};
+    EventMgr.instance.on(BigMapViewEvent.Command, ({ command }) => {
+        commands.push(command);
+    }, listener);
+    controller.start();
+    try {
+        const region = wired.presenter.territoryRegions()[0];
+        const city = wired.presenter.world.cities.get(region.id)!;
+        const submitMove = async (outcome: { status: 'ok' | 'rejected' | 'offline'; response?: unknown }): Promise<void> => {
+            EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'worldTap', hexId: city.anchorHexId } });
+            EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'campRoles' } });
+            EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'primary' } });
+            EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'worldTap', hexId: region.hexIds[0] } });
+            EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'primary' } });
+            wired.move.resolve(outcome);
+            await new Promise((resolve) => setImmediate(resolve));
+        };
+        const moveCountBefore = commands.length;
+        // 通过 requestMoveCamp 顺序驱动：第一次 rejected，之后 clearSelection 后测 offline。
+        await submitMove({ status: 'rejected' });
+        assert.deepEqual(
+            JSON.parse(JSON.stringify(commands.slice(moveCountBefore))).filter((cmd: { kind: string }) => cmd.kind === 'feedback'),
+            [{ kind: 'feedback', ok: true, message: BIGMAP_CAMP_MOVE_TEXT.pickHint }],
+            'rejected 只有进入选格态时的 pickHint，不得补发第二条失败 feedback',
+        );
+
+        const next = makePresenter();
+        const nextCtrl = new BigMapController(next.presenter, {
+            context: createControllerContext(),
+            campRepository: next.repository,
+            schedule: () => () => {},
+        });
+        nextCtrl.start();
+        try {
+            const countBeforeOffline = commands.length;
+            EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'worldTap', hexId: city.anchorHexId } });
+            EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'campRoles' } });
+            EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'primary' } });
+            EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'worldTap', hexId: region.hexIds[0] } });
+            EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'primary' } });
+            next.move.resolve({ status: 'offline' });
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.deepEqual(
+                JSON.parse(JSON.stringify(commands.slice(countBeforeOffline))).at(-1),
+                { kind: 'feedback', ok: false, message: BIGMAP_CAMP_MOVE_TEXT.offline },
+            );
+        } finally {
+            nextCtrl.dispose();
+        }
+    } finally {
+        controller.dispose();
+        EventMgr.instance.offTarget(listener);
+    }
 });
 
 test('迁城成功同时强制刷新迁出城、迁入城与所属城池信息', async () => {
@@ -319,7 +421,7 @@ test('迁城成功同时强制刷新迁出城、迁入城与所属城池信息',
     const calls: { campId: number; force: boolean }[] = [];
     h.presenter.refreshCampDetail = async (campId, force) => { calls.push({ campId, force }); };
     const pending = h.presenter.requestMoveCamp(205, 7);
-    h.move.resolve({ succ: 1, req: { campId: 205, pos: 7, moveType: 1 } });
+    h.move.resolve({ status: 'ok', response: { succ: 1, req: { campId: 205, pos: 7, moveType: 1 } } });
     assert.equal((await pending).ok, true);
     assert.deepEqual(calls, [{ campId: 101, force: true }, { campId: 205, force: true }]);
     assert.equal(h.gameRefreshes.count, 1);
@@ -336,5 +438,5 @@ test('请求封装与网关都挂在 camp 域（不是 build 域）', () => {
     assert.match(source, /return 'CmdSlgCampMoveReqMsg'/);
     const gateway = readFileSync('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', 'utf8');
     assert.match(gateway, /new RequestSlgCampMove\(/);
-    assert.match(gateway, /request\.allowRetry = false/);
+    assert.match(gateway, /allowRetry:\s*false/);
 });

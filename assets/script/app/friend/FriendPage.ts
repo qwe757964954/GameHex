@@ -19,12 +19,16 @@ import { FW } from '../../framework/FW';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { loadArt } from '../card/CardLineupIcons';
-import { FRIEND_ART_ROOT, FRIEND_ART_TAB_OFF, FRIEND_ART_TAB_ON, friendButtonArt } from './FriendArt';
+import { RedDot } from '../common/RedDot';
+import { RED_DOT_TYPE_NUMBER } from '../common/RedDotState';
+import { FRIEND_ART_ROOT } from '../ArtPaths';
+import { FRIEND_ART_BTN_BLUE, FRIEND_ART_BTN_BLUE_ROOT, FRIEND_ART_BTN_DARK, FRIEND_ART_BTN_GOLD, FRIEND_ART_BTN_GOLD_ROOT, FRIEND_ART_TAB_ON, FRIEND_ART_TAB_ON_ROOT } from './FriendArt';
 import { friendRepository } from './FriendRepository';
 import type { FriendRequestResult, IFriendRepository, IFriendSnapshot } from './FriendRepository';
 import { FriendApplyPage } from './FriendApplyPage';
 import { FriendGetEndPage } from './FriendGetEndPage';
 import { FriendRow } from './FriendRow';
+import type { IFriendRowArt } from './FriendRow';
 import { FriendTabButton } from './FriendTabButton';
 import {
     buildFriendRowView,
@@ -50,6 +54,11 @@ import {
     FRIEND_REMOVE_SELECT_TEMPLATE,
     FRIEND_ROW_TEXTS,
     FRIEND_SEND_TIMES_TEMPLATE,
+    FRIEND_TAG_ADD,
+    FRIEND_TAG_BLACK,
+    FRIEND_TAG_COUNT_TEMPLATE,
+    FRIEND_TAG_LIST,
+    FRIEND_TAG_REMOVE,
     FRIEND_TAB_LABELS,
     FRIEND_TIP_APPLY_OK,
     FRIEND_TIP_CANT_SEARCH_SELF,
@@ -152,8 +161,24 @@ export class FriendPage extends PopupBase {
     @property({ type: Label, tooltip: 'SendTimesLabel：今日还可赠送 N 次（页签 0 且非删除模式）' })
     sendTimesLabel: Label = null;
 
-    @property({ type: Label, tooltip: 'RemoveCountLabel：已选择：N 人（页签 0 且删除模式）' })
+    @property({ type: Label, tooltip: 'RemoveCountLabel：已选择 N 人（页签 0 且删除模式）' })
     removeCountLabel: Label = null;
+
+    // ---- v2 顶部统计卡 / 标签行 ----
+    @property({ type: Node, tooltip: 'StatBar：好友数 + 今日赠送次数（页签 0）' })
+    statBar: Node = null;
+
+    @property({ type: Node, tooltip: 'BlackStatBar：黑名单单独统计卡（页签 2）' })
+    blackStatBar: Node = null;
+
+    @property({ type: Label, tooltip: 'TagRow/TagTitle：好友列表 / 推荐好友 / 黑名单 / 批量删除' })
+    tagTitleLabel: Label = null;
+
+    @property({ type: Label, tooltip: 'TagRow/TagCount：标签后人数（删除模式隐藏）' })
+    tagCountLabel: Label = null;
+
+    @property({ type: Node, tooltip: 'TagRow/RemoveCountPill：删除模式「已选择 N 人」药丸' })
+    removeCountPill: Node = null;
 
     /** 数据端口；测试可注入替身。 */
     private repo: IFriendRepository = friendRepository;
@@ -180,11 +205,14 @@ export class FriendPage extends PopupBase {
     /** 每次取数 / 换页签递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
-    /** 两帧页签底图（首次用到后缓存）。 */
-    private tabFrames: { readonly on: SpriteFrame | null; readonly off: SpriteFrame | null } | null = null;
+    /** 选中页签的金黄底（首次用到后缓存）。 */
+    private tabFrames: { readonly on: SpriteFrame | null } | null = null;
 
-    /** 两张按钮底图（`batchRemoveButton` 在删除模式要换深色）。 */
-    private buttonFrames: { readonly gold: SpriteFrame | null; readonly dark: SpriteFrame | null } | null = null;
+    /** 行主按钮三张底图（金 / 蓝 / 暗）；行内只切引用。 */
+    private rowButtonFrames: IFriendRowArt | null = null;
+
+    /** 好友申请按钮上的通用红点（数字 = 待处理申请数）。 */
+    private applyListRedDot: RedDot | null = null;
 
     // ============================================================
     // 生命周期
@@ -205,6 +233,8 @@ export class FriendPage extends PopupBase {
         this.bind(this.refreshButton, this.onRefreshClick);
         this.bind(this.applyListButton, this.onApplyListClick);
         this.bind(this.searchButton, this.onSearchClick);
+
+        this.applyListRedDot = this.node.getChildByName('ApplyRedDot')?.getComponent(RedDot) ?? null;
 
         // 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）。
         this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
@@ -285,8 +315,6 @@ export class FriendPage extends PopupBase {
         // ---- 17 个开关 + 文案（全部绝对赋值） ----
         this.batchRemoveButton.active = layout.showBatchRemove;
         this.batchRemoveLabel.string = layout.batchRemoveText;
-        const frames = this.buttonFrames;
-        if (frames) this.batchRemoveBackground.spriteFrame = layout.batchRemoveGold ? frames.gold : frames.dark;
 
         this.sendOneKeyButton.active = layout.showSendOneKey;
         this.sendOneKeyLabel.string = FRIEND_BTN_SEND_ONE_KEY;
@@ -298,6 +326,7 @@ export class FriendPage extends PopupBase {
         this.refreshLabel.string = FRIEND_BTN_REFRESH;
         this.applyListButton.active = layout.showApplyList;
         this.applyListLabel.string = FRIEND_BTN_APPLY_LIST;
+        this.applyListRedDot?.setRedDot(layout.showApplyList ? snapshot.applyRows.length : 0, RED_DOT_TYPE_NUMBER);
         this.searchButton.active = layout.showSearch;
         this.searchInput.node.active = layout.showSearch;
 
@@ -310,7 +339,32 @@ export class FriendPage extends PopupBase {
         this.removeCountLabel.string = layout.removeCountText;
         this.removeCountLabel.node.active = layout.showRemoveCount;
 
+        // v2 顶部统计卡：好友页两张卡，黑名单单独一张卡
+        this.statBar.active = layout.showFriendCount || layout.showSendTimes;
+        this.blackStatBar.active = layout.showBlackCount;
+
+        // v2 标签行：标题随页签 / 删除模式，人数在删除模式让位给「已选择 N 人」
+        this.tagTitleLabel.string = this.tagTitle();
+        this.tagCountLabel.string = formatText(FRIEND_TAG_COUNT_TEMPLATE, this.tagCount(snapshot));
+        this.tagCountLabel.node.active = !this.deleteMode;
+        this.removeCountPill.active = layout.showRemoveCount;
+
         this.presentRows(snapshot);
+    }
+
+    /** 标签行标题（删除模式下固定为「批量删除」）。 */
+    private tagTitle(): string {
+        if (this.deleteMode && this.tab === FriendTab.List) return FRIEND_TAG_REMOVE;
+        if (this.tab === FriendTab.Add) return FRIEND_TAG_ADD;
+        if (this.tab === FriendTab.Black) return FRIEND_TAG_BLACK;
+        return FRIEND_TAG_LIST;
+    }
+
+    /** 标签后人数：与列表同源，不再单独请求。 */
+    private tagCount(snapshot: IFriendSnapshot): number {
+        if (this.tab === FriendTab.Add) return snapshot.suggestRows.length;
+        if (this.tab === FriendTab.Black) return snapshot.blackRows.length;
+        return snapshot.friendRows.length;
     }
 
     private presentTabs(): void {
@@ -323,7 +377,7 @@ export class FriendPage extends PopupBase {
                 continue;
             }
             tabs[index].node.active = true;
-            tabs[index].render(FRIEND_TAB_LABELS[index], index === this.tab, frames?.off ?? null, frames?.on ?? null);
+            tabs[index].render(FRIEND_TAB_LABELS[index], index === this.tab, null, frames?.on ?? null);
         }
     }
 
@@ -375,7 +429,7 @@ export class FriendPage extends PopupBase {
             return;
         }
         node.active = true;
-        row.render(view);
+        row.render(view, this.rowButtonFrames);
     }
 
     /** 回调里 `index` 可能已经越界（列表刚变短）—— 取不到 id 就什么都不做。 */
@@ -448,7 +502,7 @@ export class FriendPage extends PopupBase {
 
         const node = this.rowList.getItemByIndex(index);
         const item = node.getComponent(FriendRow);
-        item.render(view);
+        item.render(view, this.rowButtonFrames);
     }
 
     // ============================================================
@@ -546,21 +600,19 @@ export class FriendPage extends PopupBase {
     // 图与文案
     // ============================================================
 
-    /** 页签两帧 + 按钮两帧；首次之后走缓存。 */
+    /** 选中页签底图 + 行主按钮三张底图；首次之后走缓存。 */
     private async loadStaticFrames(): Promise<void> {
         if (!this.tabFrames) {
-            const [on, off] = await Promise.all([
-                loadArt(FRIEND_ART_TAB_ON, FRIEND_ART_ROOT),
-                loadArt(FRIEND_ART_TAB_OFF, FRIEND_ART_ROOT),
-            ]);
-            this.tabFrames = { on, off };
+            const on = await loadArt(FRIEND_ART_TAB_ON, FRIEND_ART_TAB_ON_ROOT);
+            this.tabFrames = { on };
         }
-        if (!this.buttonFrames) {
-            const [gold, dark] = await Promise.all([
-                loadArt(friendButtonArt('gold'), FRIEND_ART_ROOT),
-                loadArt(friendButtonArt('dark'), FRIEND_ART_ROOT),
+        if (!this.rowButtonFrames) {
+            const [gold, blue, mute] = await Promise.all([
+                loadArt(FRIEND_ART_BTN_GOLD, FRIEND_ART_BTN_GOLD_ROOT),
+                loadArt(FRIEND_ART_BTN_BLUE, FRIEND_ART_BTN_BLUE_ROOT),
+                loadArt(FRIEND_ART_BTN_DARK, FRIEND_ART_ROOT),
             ]);
-            this.buttonFrames = { gold, dark };
+            this.rowButtonFrames = { gold, blue, mute };
         }
     }
 

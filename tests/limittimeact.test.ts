@@ -295,7 +295,7 @@ test('D. Item 脚本 9 个 @property 引用类型正确', () => {
     assert.equal(typeOf(item.limitLabel as { __id__: number }), 'cc.Label');
     assert.equal(typeOf(item.discountLabel as { __id__: number }), 'cc.Label');
     assert.equal(typeOf(item.priceLabel as { __id__: number }), 'cc.Label');
-    assert.equal(typeOf(item.redDot as { __id__: number }), 'cc.Node');
+    assert.equal(typeOf(item.redDot as { __id__: number }), '5fa5aSCCTRI/Y8zkguS79+z', '通用 RedDot 组件');
     assert.equal(typeOf(item.takenStamp as { __id__: number }), 'cc.Node');
 });
 

@@ -12,6 +12,8 @@ import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifier
 import {
     ZCAttackResolutionSystem, type IZCAttackResolutionContext,
 } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
+import { ZCProjectileSystem } from '../assets/script/app/zcds/model/systems/ZCProjectileSystem';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 import {
@@ -124,7 +126,7 @@ test('101303 风炮弹（V12）：三档直击/飓风倍率与设计案一致', 
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(rows.length, 3);
     assert.deepEqual(rows.map((row) => Number(row.modifierId)), [94013031, 94013032, 94013033]);
-    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [9, 18, 27], '技能 3 = 9/18/27');
+    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [5, 18, 27], '技能 3 = 5/18/27');
     for (const [index, row] of rows.entries()) {
         assert.equal(row.unitId, '68013');
         assert.equal(row.behaviorKey, ZC_WIND_BOLT_BEHAVIOR_KEY);
@@ -140,7 +142,7 @@ test('101304 连射导弹（V12）：累计 10 次普攻 / 3 枚 / 间隔 0.4 / 
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(rows.length, 3);
     assert.deepEqual(rows.map((row) => Number(row.modifierId)), [94013041, 94013042, 94013043]);
-    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36], '技能 4 = 12/24/36');
+    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [7, 24, 36], '技能 4 = 7/24/36');
     for (const [index, row] of rows.entries()) {
         assert.equal(row.unitId, '68013');
         assert.equal(row.behaviorKey, ZC_BARRAGE_BEHAVIOR_KEY);
@@ -307,7 +309,7 @@ test('castWindBolt：射一枚风弹，弹体带「命中后留飓风」的全�
     const { context, pushed } = attackContext(units, WIND_PARAMS[0], ZC_WIND_BOLT_BEHAVIOR_KEY,
         { id: enemy.id, x: 40, y: 0 });
 
-    assert.equal(ZCAttackResolutionSystem.castWindBolt(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castWindBolt(state, caster, context), true);
     assert.equal(pushed.length, 1, '一次施法只射一枚');
     const projectile = pushed[0];
     assert.equal(projectile.effectPrefabPath, ZC_WIND_BOLT_PREFAB_PATH);
@@ -335,14 +337,14 @@ test('castWindBolt：参数不全 / 射程内没人 ⇒ false 且不推弹', () 
 
     const broken = attackContext(units, { windCooldown: 12, windDamageRate: 1.5 },
         ZC_WIND_BOLT_BEHAVIOR_KEY, { id: enemy.id, x: 40, y: 0 });
-    assert.equal(ZCAttackResolutionSystem.castWindBolt(state, caster, broken.context), false,
+    assert.equal(ZCSkillResolutionSystem.castWindBolt(state, caster, broken.context), false,
         '缺 windZoneRadius / windZoneSeconds ⇒ 不出弹（否则会「命中一下、什么都不留」）');
     assert.equal(broken.pushed.length, 0);
 
     const loneUnits = [caster];
     const loneState = makeState(loneUnits);
     const lone = attackContext(loneUnits, WIND_PARAMS[0], ZC_WIND_BOLT_BEHAVIOR_KEY, null);
-    assert.equal(ZCAttackResolutionSystem.castWindBolt(loneState, caster, lone.context), false);
+    assert.equal(ZCSkillResolutionSystem.castWindBolt(loneState, caster, lone.context), false);
     assert.equal(lone.pushed.length, 0);
 });
 
@@ -502,4 +504,96 @@ test('resolveProjectileHit 的区域分支：zoneHitOnce 走 hitUnitIds 去重 +
     assert.match(source, /holdVisual: hitOnce \? true : undefined/, 'zoneHitOnce 没开 holdVisual');
     assert.match(source, /zoneEffectPrefabPath \?\? 'units\/projectiles\/普攻爆炸\/普攻爆炸'/,
         '区域美术必须允许覆盖（风弹要龙卷风），缺省仍是普攻爆炸');
+});
+
+test('resolveProjectileArrival：explodeOnArrival 弹体到点后对半径内敌军结算且中途不提前结算', () => {
+    const config = prepare();
+    const shooter = makeUnit(1, ZCOwner.Player, 0);
+    const enemyInRange = makeUnit(2, ZCOwner.Enemy, 100, '68028');
+    const enemyOutOfRange = makeUnit(3, ZCOwner.Enemy, 220, '68028');
+    const ally = makeUnit(4, ZCOwner.Player, 102, '68028');
+    const units = [shooter, enemyInRange, enemyOutOfRange, ally];
+    const state = makeState(units);
+    const unitById = new Map(units.map((u) => [u.id, u]));
+    const hits: Array<{ id: number; damage: number }> = [];
+    const context = {
+        geometry: { hexIdAt: () => 0 },
+        unitById,
+        unitsInRadius: () => units,
+        unitPosition: (unit: ZCUnitState) => ({ x: unit.freeX, y: unit.freeY }),
+        cards: perOwner(() => new Map()),
+        counters: config.counters ?? [],
+        effectiveDefinition: () => ({ attackRange: 200, attackInterval: 1, attackDuration: 0.4, attackHitTime: 0.2, moveSpeed: 50, bodyRadius: 12, attackProfile: { skillId: 30401, name: 'test', mode: 'projectile' } }),
+        statPatches: perOwner(() => new Map()),
+        skillRuntime: perOwner(() => new Map()),
+        neutralSkillRuntime: new Map(),
+        damageUnit: (target: ZCUnitState, damage: number) => {
+            target.hp -= damage;
+            hits.push({ id: target.id, damage });
+            return null;
+        },
+        applyHitStatus: () => undefined,
+        tryExecuteUnit: () => false,
+        statusSystem: { statModsOf: () => ({}) },
+    } as unknown as IZCAttackResolutionContext;
+
+    state.projectiles.push({
+        id: 1,
+        type: 'projectile',
+        owner: ZCOwner.Player,
+        sourceUnitId: shooter.id,
+        targetUnitId: enemyInRange.id,
+        skillId: 30401,
+        skillName: '连射导弹',
+        effectKey: null,
+        projectileKey: null,
+        effectPrefabPath: ZC_BARRAGE_MISSILE_PREFAB_PATH,
+        fromX: 0,
+        fromY: 0,
+        toX: 100,
+        toY: 0,
+        x: 0,
+        y: 0,
+        previousX: 0,
+        previousY: 0,
+        velocityX: 100,
+        velocityY: 0,
+        collisionRadius: 3,
+        canHitAir: true,
+        remainingPierces: 0,
+        hitUnitIds: [],
+        ignoresMidAirCollision: true,
+        explodeOnArrival: true,
+        arriveRadius: 20,
+        arriveDamage: 80,
+        startedAt: 0,
+        durationSeconds: 1,
+        sourceCardId: shooter.cardId,
+        baseDamage: 80,
+        targetKind: 'unit',
+        targetId: enemyInRange.id,
+    });
+
+    const projectileSystem = new ZCProjectileSystem();
+    const pCtx = {
+        get now() { return state.elapsedSeconds; },
+        get units() { return state.units; },
+        distanceScale: SCALE,
+        effectiveDefinition: context.effectiveDefinition,
+        structureTargets: () => undefined,
+        hit: () => { throw new Error('ignoresMidAirCollision 弹体不应触发 mid-air hit'); },
+        arrive: (p: any) => ZCSkillResolutionSystem.resolveProjectileArrival(state, p, context),
+    };
+    state.elapsedSeconds = 0.5;
+    projectileSystem.beginStep(state.units);
+    projectileSystem.update(state.projectiles, 0.5, pCtx);
+    assert.equal(hits.length, 0, '飞行中途不结算伤害');
+
+    state.elapsedSeconds = 1.0;
+    projectileSystem.beginStep(state.units);
+    projectileSystem.update(state.projectiles, 0.5, pCtx);
+    assert.equal(state.projectiles.length, 0, '到点后清理弹体');
+    assert.deepEqual(hits.map((h) => h.id), [enemyInRange.id], '只伤害到点半径内敌军');
+    assert.equal(enemyOutOfRange.hp, 1000);
+    assert.equal(ally.hp, 1000);
 });

@@ -3,7 +3,7 @@
  * 页签下标 → formationId = 下标 + 1。
  * 「没有阵型数据」(null) 与「阵型是空的」(空数组) 必须分开。
  */
-import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 import type { ZCFormation } from './FormationModel';
 
 export function presetFormationId(index: number): number {

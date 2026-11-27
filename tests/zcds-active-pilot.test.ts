@@ -25,13 +25,21 @@ import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/Z
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import type { IZCStrikeOptions } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
 import { ZCAttackResolutionSystem, type IZCAttackResolutionContext } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
+import { ZC_EFFECT_PATHS } from '../assets/script/app/zcds/model/ZCEffectCatalog';
+import { ZC_BULLET_RAIN_UNITS } from '../assets/script/app/zcds/model/ZCProjectileDropStyle';
 
 const REMOTE = 'assets/remoteRef';
 const CLIENT = 'D:/Alan/Project/POW/doc/塔防数据配置/json/client';
 
 function remoteRows(name: string): Array<Record<string, unknown>> {
-    const source = JSON.parse(readFileSync(`${REMOTE}/${name}.json`, 'utf8')) as { k: string[]; v: unknown[][] };
+    //  两种落盘形态都要吃：`armySkillLevelUp` 是列存 `{k,v}`，`pvpSkillPlan`
+    //  2026-11 的表更新后是**行对象数组**（`[{...},...]`）—— 只按列存解析会让整组用例
+    //  一起报 `Cannot read properties of undefined (reading 'map')`，看着像数据错。
+    const raw = readFileSync(`${REMOTE}/${name}.json`, 'utf8');
+    const source = JSON.parse(raw) as Array<Record<string, unknown>> | { k: string[]; v: unknown[][] };
+    if (Array.isArray(source)) return source;
     return source.v.map((row) => Object.fromEntries(source.k.map((key, index) => [key, row[index]])));
 }
 
@@ -65,7 +73,7 @@ test('101702 噬血蔓延：主链是 unit 域吸血绝对值（add），不是�
             //  🔴 没有基础值 ⇒ 只能 add；addRate 会乘 baseValue(0) 变 0 且不报错。
             assert.equal(row.operation, 'add', `L${index + 1} 必须 add`);
             assert.ok(Math.abs(Number(row.value) - tiers[index]) < 1e-9, `L${index + 1} 吸血 ${tiers[index]}`);
-            assert.equal(Number(row.unlockHeroLevel), [6, 16, 26][index], `L${index + 1} 解锁档位`);
+            assert.equal(Number(row.unlockHeroLevel), [3, 16, 26][index], `L${index + 1} 解锁档位`);
             assert.ok(!params(row).splashDamageRate || true);
             assert.equal(params(row).attackSpeed, undefined, '旧的攻速尾巴必须整条清掉');
         }
@@ -98,7 +106,7 @@ test('101702 噬血蔓延：伤害尾巴落在子链 191702（三档同 12%）�
             assert.equal(row.statId, 'damageRate');
             assert.equal(row.operation, 'addRate');
             assert.ok(Math.abs(Number(row.value) - 0.12) < 1e-9, `L${index + 1} 三档同值 12%`);
-            assert.equal(Number(row.unlockHeroLevel), [6, 16, 26][index]);
+            assert.equal(Number(row.unlockHeroLevel), [3, 16, 26][index]);
         }
     }
 });
@@ -107,7 +115,7 @@ test('102403 冰山陨落 / 102404 急冻光线：两条主动的行为、触发
     const specs = [
         {
             chain: 102403, name: '冰山陨落', kind: 'active_cd', behavior: 'self_aura',
-            levels: [9, 18, 27], modifierId: [94024031, 94024032, 94024033],
+            levels: [5, 18, 27], modifierId: [94024031, 94024032, 94024033],
             damage: [0.55, 0.65, 0.75],
             check: (param: Record<string, number>, tier: number) => {
                 assert.equal(param.auraCooldown, 14, '冷却 14 秒（设计案触发参数）');
@@ -123,7 +131,7 @@ test('102403 冰山陨落 / 102404 急冻光线：两条主动的行为、触发
         },
         {
             chain: 102404, name: '急冻光线', kind: 'active_attack', behavior: 'random_strike',
-            levels: [12, 24, 36], modifierId: [94024041, 94024042, 94024043],
+            levels: [7, 24, 36], modifierId: [94024041, 94024042, 94024043],
             damage: [0.8, 0.95, 1.1],
             check: (param: Record<string, number>, tier: number) => {
                 assert.equal(param.strikeEvery, 9, '累计 9 次普攻（设计案触发参数）');
@@ -180,13 +188,13 @@ test('K 表三条链：名称 / 描述 / 修改器引用都跟计划行同档', 
             .sort((left, right) => Number(left.skilllevel) - Number(right.skilllevel));
         for (const [tier, row] of blood.entries()) {
             assert.equal(String(row.name), '噬血蔓延');
-            assert.equal(Number(row.unlockarmylevel), [6, 16, 26][tier]);
+            assert.equal(Number(row.unlockarmylevel), [3, 16, 26][tier]);
             assert.deepEqual(row.modfiy, [94017021 + tier, 94917021 + tier], `L${tier + 1} 主链 + 子链两段引用`);
             assert.match(String(row.desc), /扩散段按50%折算/, `L${tier + 1} 文案要写清扩散段折算`);
         }
         const actives = [
-            { chain: 102403, name: '冰山陨落', levels: [9, 18, 27], base: 94024030 },
-            { chain: 102404, name: '急冻光线', levels: [12, 24, 36], base: 94024040 },
+            { chain: 102403, name: '冰山陨落', levels: [5, 18, 27], base: 94024030 },
+            { chain: 102404, name: '急冻光线', levels: [7, 24, 36], base: 94024040 },
         ];
         for (const spec of actives) {
             const hits = rows.filter((row) => Number(row.id) === spec.chain)
@@ -317,7 +325,7 @@ function makeHarness(options: IHarnessOptions = {}) {
         castSecondary: () => false,
         //  必须用回调传进来的 `u`：夹具里敌我双方都是 68024，写死 `source` 会把两片区域
         //  都落在自己脚下、`sourceUnitId` 也都是自己 —— 看着像「一次放了两片」。
-        castSelfAura: (u: ZCUnitState) => ZCAttackResolutionSystem.castSelfAura(state, u, context),
+        castSelfAura: (u: ZCUnitState) => ZCSkillResolutionSystem.castSelfAura(state, u, context),
         castBolt: () => false,
         castTrap: () => false,
         strike: (_unit: ZCUnitState, strikeOptions: IZCStrikeOptions) => {
@@ -415,21 +423,43 @@ test('冰山陨落：auraAtTarget 把圆心搬到受击目标，冰锥同点落�
     assert.equal(zones[0].followUnitId, undefined,
         '🔴 不许跟随本体：跟了会被每帧拽回施法者，看着像「没生效」');
 
-    const cones = (harness.state.combatEvents as Array<Record<string, unknown>>)
-        .filter((event) => Number(event.sourceUnitId) === harness.source.id
-            && String(event.effectPrefabPath ?? '').includes('冰法师_冰锥'));
-    assert.equal(cones.length, 1, '落地那一击要真的插一条表现事件（漏了就是「天上什么都不砸」）');
-    assert.equal(cones[0].fromX, 60, '冰锥与区域同点：受击目标');
-    assert.equal(cones[0].toX, 60);
-    assert.equal(cones[0].fromY, 0);
-    assert.equal(cones[0].angleDegrees, -90, '设计案原话「旋转 -90°」：弹体朝向改成垂落');
-    assert.equal(Number(cones[0].damage), 0, '落地那一击只是表现，伤害由区域波次结算');
+    //  第 55 批起改成**弹道雨**：一批冰锥从施法者抛向圈内各自的落点，
+    //  所以这里要按 `flyToX !== undefined` 把「飞的那批」从区域/命中事件里筛出来。
+    //  ⚠️ 别用 `includes('冰法师_冰锥')` 筛 —— 命中特效 `冰法师通用子弹命中` 也会被一起吃进来。
+    const events = harness.state.combatEvents as Array<Record<string, unknown>>;
+    const cones = events.filter((event) => Number(event.sourceUnitId) === harness.source.id
+        && event.flyToX !== undefined);
+    const expected = ZC_BULLET_RAIN_UNITS['68024']!.count;
+    //  落点半径上限 = 圈的世界半径 × `spreadRatio`（事件上的 `radius: 1` 只是表现占位，不是半径）。
+    const spread = Number(zones[0].radius) * ZC_BULLET_RAIN_UNITS['68024']!.spreadRatio;
+    assert.equal(cones.length, expected, `落地那一击要真的插 ${expected} 条表现事件（漏了就是「天上什么都不砸」）`);
+    //  圆心搬到受击目标（x=60）⇒ 每颗都飞进以 (60, 0) 为心、`spread` 为半径的圈里。
+    for (const cone of cones) {
+        assert.equal(cone.effectPrefabPath, ZC_EFFECT_PATHS.iceMageBullet, '冰锥弹体（与资源清单同一份口径）');
+        assert.equal(Number(cone.damage), 0, '落地那一击只是表现，伤害由区域波次结算');
+        assert.equal(cone.angleDegrees, undefined, '这批走贝塞尔弧线，不写死 −90° 朝向');
+        assert.equal(cone.durationSeconds, cone.flyInSeconds, '到点即摘：时长就是飞行时长');
+        const reach = Math.hypot(Number(cone.flyToX) - 60, Number(cone.flyToY) - 0);
+        assert.ok(reach <= spread + 1e-6, `落点 ${cone.flyToX},${cone.flyToY} 距圆心 ${reach} 超出 ${spread}`);
+    }
+    //  三颗不能同点：同点就等于又退回「原地摆一根」。
+    const lands = cones.map((cone) => `${cone.flyToX},${cone.flyToY}`);
+    assert.equal(new Set(lands).size, lands.length, '落点两两不同');
+    //  每颗配一条命中原事件，`startedAt` = 起手 + 自己的飞行时长。
+    const impacts = events.filter((event) => Number(event.sourceUnitId) === harness.source.id
+        && event.flyToX === undefined && event.effectPrefabPath === ZC_EFFECT_PATHS.iceMageBulletImpact);
+    for (const cone of cones) {
+        const impact = impacts.find((item) => item.toX === cone.flyToX && item.toY === cone.flyToY);
+        assert.ok(impact, `落点 ${cone.flyToX},${cone.flyToY} 没有命中特效`);
+        assert.ok(Math.abs(Number(impact.startedAt) - (Number(cone.startedAt) + Number(cone.flyInSeconds))) < 1e-6,
+            '命中原事件的时刻 = 起手 + 飞行时长');
+    }
 
     //  目标没了 ⇒ 拒放、不消费 CD（`castSelfAura` 返回 false，调用方据此不推 `auraReadyAt`）。
     const lost = makeHarness({ parameters });
     lost.context.currentTarget = () => null;
     assert.equal(
-        ZCAttackResolutionSystem.castSelfAura(lost.state, lost.source, lost.context), false,
+        ZCSkillResolutionSystem.castSelfAura(lost.state, lost.source, lost.context), false,
         '没有受击目标时不许在原地炸一片空冰域');
     assert.equal(lost.state.groundZones.length, 0);
 });
@@ -462,16 +492,16 @@ test('前置矩形喷火保留350表值长度，All圆形光环无实际命中�
     };
     const h = makeHarness({ parameters: flame });
     h.target.freeX = 80;
-    assert.equal(ZCAttackResolutionSystem.castSelfAura(h.state, h.source, h.context), true);
+    assert.equal(ZCSkillResolutionSystem.castSelfAura(h.state, h.source, h.context), true);
     assert.equal(h.state.groundZones[0].x, 52.5);
     assert.equal(h.state.groundZones[0].rectHalfLength, 52.5);
     const outside = makeHarness({ parameters: flame });
     outside.target.freeX = 106;
-    assert.equal(ZCAttackResolutionSystem.castSelfAura(outside.state, outside.source, outside.context), false);
+    assert.equal(ZCSkillResolutionSystem.castSelfAura(outside.state, outside.source, outside.context), false);
     assert.equal(outside.state.groundZones.length, 0);
     const circle = makeHarness({ parameters: { auraRadius: 100, auraSeconds: 2, auraDamageRate: 1, auraTargetMode: 2 } });
     circle.target.freeX = 60;
-    assert.equal(ZCAttackResolutionSystem.castSelfAura(circle.state, circle.source, circle.context), false);
+    assert.equal(ZCSkillResolutionSystem.castSelfAura(circle.state, circle.source, circle.context), false);
     assert.equal(circle.state.groundZones.length, 0);
 });
 

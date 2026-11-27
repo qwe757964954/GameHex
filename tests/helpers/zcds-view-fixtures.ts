@@ -64,6 +64,8 @@ export function loadViews() {
             return {
                 // 视图层按「本节点 UITransform 的 contentSize」决定绘制尺寸（吐司底 / 选点确认按钮
                 // 的圆角矩形都不存宽高，改 prefab 就生效），所以桩必须把 size 读出去。
+                get width() { return node.size.width; },
+                get height() { return node.size.height; },
                 get contentSize() { return node.size; },
                 setContentSize: (width: number, height: number) => { this.size = { width, height }; },
             };
@@ -169,7 +171,7 @@ export function loadViews() {
     }
     const cc = {
         _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {}, disallowMultiple: (value: unknown) => value },
-        Color, Component: class { node = new FakeNode(); }, Animation: class {}, sp: { Skeleton: class {} }, Graphics, ProgressBar: class {},
+        Color, Component: class { node = new FakeNode(); }, Animation: class {}, sp: { Skeleton: class {}, SkeletonData: class {} }, Graphics, ProgressBar: class {},
         Sprite: class { static SizeMode = { CUSTOM: 0, TRIMMED: 1, RAW: 2 }; static Type = { SLICED: 0, TILED: 1, FILLED: 2, SIMPLE: 3 }; },
         Button: class { static EventType = { CLICK: 'click' }; },
         SpriteFrame: class {}, Label: class {}, Material, Prefab: class {}, Node: FakeNode, Vec4, Vec2,
@@ -178,7 +180,12 @@ export function loadViews() {
          * 运行时新挂节点时会 `setContentSize` 定绘制范围 —— 桩必须接得住，否则新挂画布的
          * 代码路径在用例里会直接抛。
          */
-        UITransform: class { contentSize = { width: 100, height: 100 }; setContentSize(width: number, height: number) { this.contentSize = { width, height }; } },
+        UITransform: class {
+            contentSize = { width: 100, height: 100 };
+            get width() { return this.contentSize.width; }
+            get height() { return this.contentSize.height; }
+            setContentSize(width: number, height: number) { this.contentSize = { width, height }; }
+        },
         /** 局部透明度（卡牌评语延迟出现 / 金币图标淡出都会懒挂它）。 */
         UIOpacity: class { opacity = 255; },
         Vec3: class {
@@ -279,6 +286,7 @@ export function loadViews() {
             '../math/Scalar': 'assets/script/core/math/Scalar.ts',
             // 统计行 / 纯函数组件会从 ui 值导入 model 的伤害格式化模块，后者再取 ZCOwner。
             './ZCMapConfig': 'assets/script/app/zcds/model/ZCMapConfig.ts',
+            '../model/ZCSkillAnnounceStyle': 'assets/script/app/zcds/model/ZCSkillAnnounceStyle.ts',
         };
         const relative = name.replace(/^\.\//, '');
         const viewPath = join('assets/script/app/zcds/view', `${relative}.ts`);

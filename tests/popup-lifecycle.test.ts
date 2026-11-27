@@ -305,6 +305,193 @@ test('PopupManager 默认合并同类打开，打开中关闭后仍可重新打�
     assert.equal(releasedAssets, 2, '管理器销毁时释放其持有的 prefab 资源引用');
 });
 
+test('PopupManager 支持 params.scope 取消在途打开、关闭已开弹窗并在正常关闭后解绑', async () => {
+    class Prefab {
+        constructor(readonly factory: () => Node) {}
+    }
+    class Canvas {}
+    class UITransform {
+        setContentSize(): void {}
+    }
+    class Node {
+        isValid = true;
+        active = true;
+        activeInHierarchy = true;
+        layer = 1;
+        parent: Node | null = null;
+        children: Node[] = [];
+        private components: any[] = [];
+
+        constructor(public name = '') {}
+
+        attach(component: any): void {
+            component.node = this;
+            this.components.push(component);
+        }
+
+        getComponent<T>(cls: new (...args: any[]) => T): T | null {
+            return this.components.find((component) => component instanceof cls) ?? null;
+        }
+
+        addComponent<T>(cls: new () => T): T {
+            const component = new cls();
+            this.attach(component);
+            return component;
+        }
+
+        setParent(parent: Node): void {
+            this.parent?.removeChild(this);
+            this.parent = parent;
+            parent.children.push(this);
+        }
+
+        removeChild(child: Node): void {
+            const index = this.children.indexOf(child);
+            if (index >= 0) this.children.splice(index, 1);
+            child.parent = null;
+        }
+
+        removeFromParent(): void {
+            this.parent?.removeChild(this);
+        }
+
+        setPosition(): void {}
+        setSiblingIndex(): void {}
+
+        destroy(): void {
+            this.isValid = false;
+            this.removeFromParent();
+        }
+    }
+    class Component {
+        node!: Node;
+    }
+
+    const cc = {
+        _decorator: { ccclass: classDecorator },
+        Canvas,
+        Component,
+        director: { getScene: () => null },
+        instantiate: (prefab: Prefab) => prefab.factory(),
+        Layers: { Enum: { DEFAULT: 0, UI_2D: 1 } },
+        Node,
+        Prefab,
+        UITransform,
+    };
+    const { PopupManager } = loadModule('assets/script/framework/ui/PopupManager.ts', {
+        cc,
+        './PopupDef': PopupDef,
+        '../../core/asset/ResourceScope': { ResourceScope },
+    });
+
+    const closeReasons: number[] = [];
+    const createdNodes: Node[] = [];
+    let nextId = 0;
+    let resolvePendingLoad!: (prefab: Prefab) => void;
+    let loadCount = 0;
+    let gatePendingOpen = false;
+    let resolvePendingOpen!: () => void;
+
+    class ScopedPopup {
+        static prefabPath = 'ui/test/ScopedPopup';
+        popupLayer = PopupDef.PopupLayer.NORMAL;
+        node!: Node;
+        className = 'ScopedPopup';
+
+        _internalOpen(): Promise<void> {
+            if (!gatePendingOpen) return Promise.resolve();
+            return new Promise<void>((resolve) => {
+                resolvePendingOpen = resolve;
+            });
+        }
+        _bindCallbackOwners(): void {}
+        _internalClose(reason: number): void {
+            closeReasons.push(reason);
+            resolvePendingOpen?.();
+        }
+        _internalReleaseResources(): void {}
+        _internalDepthChanged(): void {}
+        _internalCover(): void {}
+        _internalReveal(): void {}
+    }
+
+    const makePrefab = () => new Prefab(() => {
+        nextId += 1;
+        const node = new Node(`scoped-${nextId}`);
+        node.attach(new ScopedPopup());
+        createdNodes.push(node);
+        return node;
+    });
+
+    const manager = new PopupManager();
+    manager.node = new Node('Popup');
+    manager.node.layer = 1;
+    manager.initialize({
+        load: async () => {
+            loadCount += 1;
+            if (loadCount === 1) {
+                return new Promise<Prefab>((resolve) => {
+                    resolvePendingLoad = resolve;
+                });
+            }
+            return makePrefab();
+        },
+    });
+
+    // 1) 已释放 scope 直接返回 null，不发起资源加载
+    const disposedScope = new ResourceScope('already-disposed');
+    disposedScope.dispose();
+    assert.equal(await manager.openAsync(ScopedPopup, { scope: disposedScope }), null);
+    assert.equal(loadCount, 0);
+
+    // 2) prefab 加载途中释放 scope：立即清理在途去重槽，新 scope 可立刻重开，迟到节点自毁并返回 null
+    const runtimeScope = new ResourceScope('runtime');
+    const cancelledDuringLoad = manager.openAsync(ScopedPopup, { scope: runtimeScope });
+    runtimeScope.dispose();
+
+    const settlementScope = new ResourceScope('settlement');
+    const reopened = await manager.openAsync(ScopedPopup, { scope: settlementScope });
+    assert.ok(reopened, '旧 scope 取消后新 scope 可立即重新打开同名弹窗');
+    assert.equal(loadCount, 2);
+
+    resolvePendingLoad(makePrefab());
+    assert.equal(await cancelledDuringLoad, null, '迟到 prefab 不得挂载，返回 null');
+    assert.equal(createdNodes.length, 2);
+    assert.equal(createdNodes[1].isValid, false, '迟到实例化的节点应立即销毁');
+    assert.equal(reopened!.node.isValid, true, '新作用域打开的弹窗节点保持有效');
+    assert.equal(manager.get(ScopedPopup), reopened, '新弹窗不受迟到取消影响');
+
+    // 3) 正常手动关闭后，再释放原 scope 不误伤后续同弹窗
+    manager.close(reopened!, PopupDef.PopupCloseReason.Manual);
+    const unscoped = await manager.openAsync(ScopedPopup);
+    settlementScope.dispose();
+    assert.equal(manager.get(ScopedPopup), unscoped, '手动关闭应已从原 scope 解绑');
+    manager.close(unscoped!, PopupDef.PopupCloseReason.Manual);
+
+    // 4) 已打开弹窗随 scope.dispose 强制关闭
+    const openScope = new ResourceScope('mounted');
+    const mounted = await manager.openAsync(ScopedPopup, { scope: openScope });
+    assert.ok(mounted);
+    closeReasons.length = 0;
+    openScope.dispose();
+    assert.deepEqual(closeReasons, [PopupDef.PopupCloseReason.Force]);
+    assert.equal(manager.get(ScopedPopup), null);
+
+    // 5) onOpen 等待途中释放 scope 立即 Force 关闭并返回 null
+    gatePendingOpen = true;
+    const onOpenScope = new ResourceScope('during-onOpen');
+    const openingDuringOnOpen = manager.openAsync(ScopedPopup, { scope: onOpenScope });
+    await flushMicrotasks();
+    assert.ok(manager.get(ScopedPopup));
+    closeReasons.length = 0;
+    onOpenScope.dispose();
+    assert.deepEqual(closeReasons, [PopupDef.PopupCloseReason.Force]);
+    assert.equal(await openingDuringOnOpen, null);
+    assert.equal(manager.get(ScopedPopup), null);
+
+    manager.onDestroy();
+});
+
 test('PopupManager 缓存实例时保留 prefab 资源到缓存节点销毁', async () => {
     class Prefab { constructor(readonly factory: () => Node) {} }
     class Node {

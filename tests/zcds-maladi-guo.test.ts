@@ -23,7 +23,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { zcSelfAuraEffectPath, ZC_SELF_AURA_BEHAVIOR_KEY } from '../assets/script/app/zcds/model/ZCSelfAuraFx';
+import { ZC_EFFECT_BEHAVIOR_KEYS, zcSelfAuraEffectPath } from '../assets/script/app/zcds/model/ZCEffectCatalog';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 import { zcGroundZoneBroadRadius, zcGroundZoneReaches } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 
@@ -120,8 +120,8 @@ test('102601 孢群弹幕：弹数固定 2 道额外（共 3 颗），张角 25�
             assert.equal(row.operation, 'add');
             assert.equal(Number(row.pvpSkillId), PVP_SKILL_ID);
         }
-        assert.deepEqual(angle.map((row) => Number(row.unlockHeroLevel ?? 0)), [0, 14, 22],
-            '解锁等级必须与 K 表 102601 一致');
+        assert.deepEqual(angle.map((row) => Number(row.unlockHeroLevel ?? 0)), [2, 10, 22],
+            '解锁等级必须与 K 表 102601 一致（2026-11-26 定稿：技能 1 = 2/10/22）');
     }
 });
 
@@ -180,8 +180,8 @@ test('102603 喷射火焰：矩形 0~350（宽 140）+ 触发距离 350 + 持续
     for (const rows of [readTable('pvpSkillPlan'), readClientTable('pvpSkillPlan')]) {
         const spray = planOf(rows, 102603);
         assert.equal(spray.length, 3);
-        //  2026-11-17 统一档位：102603 第 3 格 → 9/18/27，102604 第 4 格 → 12/24/36。
-        assert.deepEqual(spray.map((row) => Number(row.unlockHeroLevel ?? 0)), [9, 18, 27]);
+        //  2026-11-26 设计案定稿：技能 3 = 5/18/27、技能 4 = 7/24/36（旧口径作废）。
+        assert.deepEqual(spray.map((row) => Number(row.unlockHeroLevel ?? 0)), [5, 18, 27]);
         assert.deepEqual(spray.map((row) => paramsOf(row).auraDamageRate), [1.2, 1.5, 2]);
 
         for (const row of spray) {
@@ -227,7 +227,7 @@ test('102604 凤凰降临：固定 4 颗 90° + 三段伤害（直击 / 爆炸 /
     for (const rows of [readTable('pvpSkillPlan'), readClientTable('pvpSkillPlan')]) {
         const phoenix = planOf(rows, 102604);
         assert.equal(phoenix.length, 3);
-        assert.deepEqual(phoenix.map((row) => Number(row.unlockHeroLevel ?? 0)), [12, 24, 36]);
+        assert.deepEqual(phoenix.map((row) => Number(row.unlockHeroLevel ?? 0)), [7, 24, 36]);
         assert.deepEqual(phoenix.map((row) => paramsOf(row).damageRate), [2.2, 2.8, 3]);
         assert.deepEqual(phoenix.map((row) => paramsOf(row).impactBurstDamageRate), [1.5, 2, 2.5]);
         assert.deepEqual(phoenix.map((row) => paramsOf(row).impactBurstSecondRate), [1.5, 1.8, 2]);
@@ -292,11 +292,11 @@ test('K 表转表产物：102603 / 102604 六行的名字、描述、修改器�
             const expected = 94026000 + (chainId === 102603 ? 30 : 40) + Number(row.skilllevel);
             assert.deepEqual(row.modfiy, [expected]);
         }
-        //  解锁等级以 K 表为唯一真源（102603 = 9/18/27、102604 = 12/24/36）
+        //  解锁等级以 K 表为唯一真源（2026-11-26 定稿：102603 = 5/18/27、102604 = 7/24/36）
         assert.deepEqual(six.filter((row) => Number(row.id) === 102603)
-            .map((row) => Number(row.unlockarmylevel)), [9, 18, 27]);
+            .map((row) => Number(row.unlockarmylevel)), [5, 18, 27]);
         assert.deepEqual(six.filter((row) => Number(row.id) === 102604)
-            .map((row) => Number(row.unlockarmylevel)), [12, 24, 36]);
+            .map((row) => Number(row.unlockarmylevel)), [7, 24, 36]);
     }
 });
 
@@ -473,9 +473,12 @@ test('凤凰弹：火船的 1.5 倍派生副本，复用同一份 clip 与散图
     const phoenix = prefabParts(fxDir('麻辣铁锅_凤凰弹'), '麻辣铁锅_凤凰弹');
     const battleship = prefabParts(fxDir('火法师_火船'), '火法师_火船');
     //  原 1.733333 × 1.5 = 2.6；2026-11-11 第三轮用户口径「体型缩小成 25%」⇒ 2.6 × 0.25 = 0.65
-    assert.ok(Math.abs(phoenix.node._lscale.x - battleship.node._lscale.x * 1.5 * 0.25) < 1e-6,
-        '派生倍率 = 火船 × 1.5（派生）× 0.25（第三轮缩小）');
-    assert.ok(Math.abs(phoenix.node._lscale.x - 0.65) < 1e-6, '凤凰弹体型 = 原来的 25%');
+    //  2026-11-26 火船重烘成「贴图即屏上」（基准 1.733333 → 1）后，凤凰弹保留**绝对** 0.65
+    //  —— 不跟着基准走（0.375），否则 102604 那 4 颗子弹会比用户拍板的再小 1.73 倍。
+    assert.equal(battleship.node._lscale.x, 1,
+        '火船已裁空边并按屏上尺寸重烘：根 `_lscale` 必须是 1');
+    assert.ok(Math.abs(phoenix.node._lscale.x - 0.65) < 1e-6,
+        '凤凰弹体型锁死绝对 0.65（= 旧基准 1.733333 × 1.5 × 0.25）');
     //  复用同一份动画（不复制图集）
     assert.deepEqual(phoenix.anim._clips[0].__uuid__, battleship.anim._clips[0].__uuid__);
     assert.deepEqual(phoenix.sprite._spriteFrame.__uuid__, battleship.sprite._spriteFrame.__uuid__);
@@ -511,17 +514,17 @@ test('🔴 每个散图 meta 都要有 f9941 子资源（type 必须是 sprite-f
 // ────────────────────────────────────────────── 三、资源计划与代码接线
 
 test('喷射火焰按单位覆盖自身光环造型，且被收进本局特效清单', () => {
-    const sprayPath = zcSelfAuraEffectPath(ZC_SELF_AURA_BEHAVIOR_KEY, UNIT_ID);
+    const sprayPath = zcSelfAuraEffectPath(ZC_EFFECT_BEHAVIOR_KEYS.selfAura, UNIT_ID);
     assert.equal(sprayPath, 'units/projectiles/麻辣铁锅_喷射火焰/麻辣铁锅_喷射火焰');
     //  68016 的磁电冲击不受影响
-    assert.equal(zcSelfAuraEffectPath(ZC_SELF_AURA_BEHAVIOR_KEY, '68016'),
+    assert.equal(zcSelfAuraEffectPath(ZC_EFFECT_BEHAVIOR_KEYS.selfAura, '68016'),
         'units/projectiles/雷电冲击/雷电冲击');
     //  ⚠️ 2026-11-17：68025 也换了自己的造型（大威天芦_火焰光环）⇒ 三家各走各的，
     //  兜底光柱不再有单位落在上面。
-    assert.equal(zcSelfAuraEffectPath(ZC_SELF_AURA_BEHAVIOR_KEY, '68025'),
+    assert.equal(zcSelfAuraEffectPath(ZC_EFFECT_BEHAVIOR_KEYS.selfAura, '68025'),
         'units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环');
     //  真的没人用兜底时，查一个不存在的单位才回落到老光柱
-    assert.equal(zcSelfAuraEffectPath(ZC_SELF_AURA_BEHAVIOR_KEY, '68999'),
+    assert.equal(zcSelfAuraEffectPath(ZC_EFFECT_BEHAVIOR_KEYS.selfAura, '68999'),
         'units/projectiles/持续光环伤害效果/持续光环伤害效果', '未知单位退回兜底造型');
     assert.equal(zcSelfAuraEffectPath('bolt_strike', UNIT_ID), null);
 
@@ -549,8 +552,12 @@ test('喷射火焰按单位覆盖自身光环造型，且被收进本局特效�
 test('代码接线：悬空高度 / 二段爆炸 / 帧序常量都在正确的地方被读', () => {
     const attack = readFileSync(
         join(ROOT, 'assets', 'script', 'app', 'zcds', 'model', 'systems', 'ZCAttackResolutionSystem.ts'), 'utf8');
-    //  施法者悬空：从区域参数读，写进区域状态
-    assert.match(attack, /casterLiftPx/, 'castSelfAura 没读 casterLiftPx ⇒ 102603 不会跳起来');
+    //  施法者悬空：从区域参数读，写进区域状态。
+    //  🔴 `castSelfAura` 已整体搬到 `ZCSkillResolutionSystem`（`ZCAttackResolutionSystem` 只留同名门面转发），
+    //  所以这条断言要指真源；指门面文件恒不命中，是那次重构漏改的假红。
+    const skill = readFileSync(
+        join(ROOT, 'assets', 'script', 'app', 'zcds', 'model', 'systems', 'ZCSkillResolutionSystem.ts'), 'utf8');
+    assert.match(skill, /casterLiftPx/, 'castSelfAura 没读 casterLiftPx ⇒ 102603 不会跳起来');
     //  命中爆炸：四个新键都要被读
     for (const key of ['impactBurstRadius', 'impactBurstDamageRate', 'impactBurstSecondRate', 'impactBurstSecondDelay']) {
         assert.match(attack, new RegExp(key), `sendAttack 没读 ${key}`);

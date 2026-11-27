@@ -53,8 +53,8 @@ test('英雄等级自动选择 accumulate/replace 技能升级档并编译被动
     const selected = withoutLineupCrit(selectZCSkillPlans('68001', 30, catalogs));
     //  100101「超视孢子」自 2026-11-16 起改成 `replace` 三档递进 14/18/24%：
     //  只取命中的最高档（91001013）。此前是 accumulate 三档同值 10%，会一次性选中三行。
-    //  解锁等级自 2026-11-17 统一为「技能1 3/10/22、技能2 6/16/26、技能3 9/18/27、
-    //  技能4 12/24/36」⇒ 要三条成长技能全到 III 档需 ≥27 级（100104 的 III 要 36，
+    //  解锁等级自 2026-11-17 统一为「技能1 2/10/22、技能2 3/16/26、技能3 5/18/27、
+    //  技能4 7/24/36」⇒ 要三条成长技能全到 III 档需 ≥27 级（100104 的 III 要 36，
     //  所以它停在 II）。这里取 30 级，正是「四格同时接近满档」的典型档位。
     assert.deepEqual(selected.map((row) => row.modifierId), [
         91001013,
@@ -95,20 +95,20 @@ test('英雄等级自动选择 accumulate/replace 技能升级档并编译被动
 
 test('未达到解锁等级时不提前下发技能计划', () => {
     prepare();
-    //  68001 的技能链首档要 3 级；「全队暴击伤害增幅」（109001）从 1 级起就按级累加，
-    //  不属这条用例的语义，先剔掉。
-    assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68001', 2)), []);
+    //  68001 的技能链首档（100101）2026-11-26 起要 2 级（设计案口径 2/10/22）；
+    //  「全队暴击伤害增幅」（109001）从 1 级起就按级累加，不属这条用例的语义，先剔掉。
+    assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68001', 1)), []);
 });
 
 test('首档要解锁等级，未到等级不下发；到档才逐格推进', () => {
     prepare();
     const catalogs = getZCModifierCatalogs();
-    // 解锁等级自 2026-11-17 统一后，101301（槽 1）首档要 3 级、101302（槽 2）首档要 6 级，
+    // 解锁等级按设计案（2026-11-26）统一后，101301（槽 1）首档要 2 级、101302（槽 2）首档要 3 级，
     // 全表已经没有 unlock=0 的技能档 ⇒ 1 级一个技能都拿不到。
     assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68013', 1, catalogs)).map((row) => row.modifierId), []);
     // 14 级：101301 够 II 档（10），101302 还停在 L1（它的 II 档要 16），
-    // 101303「孢爆箭」首档 9 级、II 档 18 ⇒ 停在 L1（2026-11-17 第 12 批落地）；
-    // 101304「连射导弹」首档 12 级、II 档 24 ⇒ 也停在 L1（2026-11-18 第 16 批落地，
+    // 101303「孢爆箭」首档 5 级、II 档 18 ⇒ 停在 L1（2026-11-17 第 12 批落地）；
+    // 101304「连射导弹」首档 7 级、II 档 24 ⇒ 也停在 L1（2026-11-18 第 16 批落地，
     // 它此前只有 K 表占位行，本批才进 J 表 ⇒ 这张期望表必须同步多一格）。
     assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68013', 14, catalogs)).map((row) => row.modifierId), [
         94013012, 94013021, 94013031, 94013041,
@@ -162,7 +162,7 @@ test('mix 键写错 statId 时直接抛错，不静默忽略', () => {
 //  施放与否只看基表 `pvpSkill.empoweredEvery` / `empoweredSkillId`，与等级完全无关；
 //  「几级解锁」只写在 `pvpSkillPlan` 上 ⇒ 没解锁的技能照样放，缺的只是参数。
 //  规则：主链（`100000~109999`）里只要还有一条没解锁，这个单位的强化那一击就不许放。
-//  实测依据：每卡最后一条主链是 `100x04`（解锁 12/24/36），它的参数正是那个武将技的行为参数。
+//  实测依据：每卡最后一条主链是 `100x04`（解锁 7/24/36），它的参数正是那个武将技的行为参数。
 
 /** 主链 id 区间，与 `ZCModifierRuntime.ZC_MAIN_CHAIN_*` 同口径 —— 这里从原始表独立算一遍。 */
 function mainChainRows(unitId: string): Array<Record<string, unknown>> {
@@ -220,17 +220,15 @@ test('武将技解锁门控：椰蛋战士 12 级前锁、12 级起放；雷蕉�
         { unitId, heroLevel }, config.units, catalogs,
     ).find((item) => item.empoweredBagKey)?.empoweredLocked === true;
 
-    //  68005 椰蛋战士：暴风 100504 是 12 / 24 / 36 ⇒ 12 级前锁。
-    assert.equal(lockedAt('68005', 8), true, '8 级不该放暴风');
-    assert.equal(lockedAt('68005', 11), true, '11 级仍不该放暴风');
-    assert.equal(lockedAt('68005', 12), false, '12 级解锁暴风');
+    //  68005 椰蛋战士：暴风 100504 是 7 / 24 / 36 ⇒ 7 级前锁。
+    assert.equal(lockedAt('68005', 6), true, '6 级不该放暴风');
+    assert.equal(lockedAt('68005', 7), false, '7 级解锁暴风');
     //  门控挂在该单位的普攻袋上（不是随便一条链的袋）。
     const bagKey = compileZCCombatBuild({ unitId: '68005', heroLevel: 8 }, config.units, catalogs)
         .find((item) => item.empoweredBagKey)?.empoweredBagKey;
     assert.equal(bagKey, '68005:30707', '门控写进椰蛋战士普攻袋');
 
-    //  68022 雷蕉：主链 102201(3) / 102202(6) / 102203(9) / 102204(12) ⇒ 12 级起才放武将技。
-    assert.equal(lockedAt('68022', 8), true, '8 级不该放武将技');
-    assert.equal(lockedAt('68022', 11), true, '11 级仍锁（102204 要 12 级）');
-    assert.equal(lockedAt('68022', 12), false, '12 级起放');
+    //  68022 雷蕉：主链 102201(2) / 102202(3) / 102203(5) / 102204(7) ⇒ 7 级起才放武将技。
+    assert.equal(lockedAt('68022', 6), true, '6 级不该放武将技');
+    assert.equal(lockedAt('68022', 7), false, '7 级起放');
 });

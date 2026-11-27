@@ -38,8 +38,6 @@ export const MT_ART_NAMES: Readonly<Record<string, string>> = {
      * 与物品详情的 `btn2Gray` **是同一张图** ⇒ 指同一份文件，别拷第二个副本。
      */
     btn2Gray: 'common/cu_ty_btn10',
-    /** 可领取红点 29×28（`公用_图标_红点`，与物品详情 / 庆典 / 10级领取同款，指同一张 `common/cm_red_dot`）。 */
-    redDot: 'common/cm_red_dot',
 };
 
 /**

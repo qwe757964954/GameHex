@@ -12,7 +12,7 @@ import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGr
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
 import { ZCCombatEventType, type ZCAttackProfile, type ZCUnitDefinition } from '../assets/script/app/zcds/model/ZCCombatCatalog';
-import { ZC_BLINK_CAST_EFFECT_PREFAB_PATH } from '../assets/script/app/zcds/model/ZCBlinkCastFx';
+import { ZC_EFFECT_PATHS } from '../assets/script/app/zcds/model/ZCEffectCatalog';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 import { zcCombatEffectNodeScaleOf } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
 import { zcCombatEffectOverlayChild } from '../assets/script/app/zcds/view/ZCCombatEffectPlacement';
@@ -146,8 +146,9 @@ test('鹿神守护：走强化槽的移动区域，伤害按 600/700/800 ÷ 面�
     //  成长链也要有，否则界面上点不出这一级。
     const growth = readRows('armySkillLevelUp').filter((row) => Number(row.id) === 103405);
     assert.equal(growth.length, 3);
-    //  103405 是 68034 的第 4 格（第 3 格是 103404）⇒ 12 / 24 / 36（2026-11-17 统一档位）。
-    assert.deepEqual(growth.map((row) => Number(row.unlockarmylevel)), [12, 24, 36]);
+    //  103405 是设计案里与 103404 拆开的独立行（两条都写成 103404），设计案给它的是
+    //  **专属档位 5 / 24 / 36**（不是第 4 格通用的 7/24/36）⇒ 按设计案取值。
+    assert.deepEqual(growth.map((row) => Number(row.unlockarmylevel)), [5, 24, 36]);
     assert.equal(readRows('armySkillLevelUp').some((row) => Number(row.id) === 103403), false);
 });
 
@@ -498,7 +499,7 @@ test('移形换影：闪走的一瞬在**本体位置**闪一次「瞬间移动�
 
     harness.tick(13);
     const flashes = harness.state.combatEvents
-        .filter((event) => event.effectPrefabPath === ZC_BLINK_CAST_EFFECT_PREFAB_PATH);
+        .filter((event) => event.effectPrefabPath === ZC_EFFECT_PATHS.blink);
     assert.equal(flashes.length, 1, '往返（去 + 回）是同一个动作，只闪一次');
     const flash = flashes[0];
     assert.deepEqual([flash.fromX, flash.fromY, flash.toX, flash.toY], [0, 0, 0, 0],
@@ -529,10 +530,14 @@ test('瞬间移动特效：单节点 18 帧动画，可见峰值缩到 80px', ()
     assert.ok(components.some((component) => component.__type__ === 'cc.Sprite'));
     assert.ok(components.some((component) => component.__type__ === 'cc.Animation'), '18 帧靠 Animation 播');
 
-    //  80 / 1166（第 15 帧可见峰值，alpha ≥ 8 的 bbox）= 0.06861。
-    //  分母取可见内容而不是 1296 的画布（见 `tools/build_blink_fx.py` 文件头）。
-    assert.ok(Math.abs(node._lscale.x - 80 / 1166) < 1e-4,
-        `烘焙缩放应为 80/1166 ≈ 0.0686，实际 ${node._lscale.x}`);
+    //  贴图已按 80px 峰值重烘（2026-11-26）：帧图 80×80 + 缩放 1 ⇒ 屏上 80px。
+    //  旧做法是 1296×1228 画布 + `_lscale = 80/1166 = 0.06861`，18 帧各占一页 auto-atlas。
+    const uiTransform = components.find((component) => component.__type__ === 'cc.UITransform') as
+        { _contentSize: { width: number; height: number } } | undefined;
+    assert.ok(uiTransform, '节点上必须有 UITransform');
+    assert.equal(uiTransform._contentSize.width, 80, '帧图 80×80，contentSize 要与贴图一致');
+    assert.equal(uiTransform._contentSize.height, 80);
+    assert.equal(node._lscale.x, 1, '尺寸烘进贴图后根节点必须归 1，别再靠 0.0686 去缩画布');
 
     const clip = JSON.parse(readFileSync(assetPath(
         'units/projectiles/瞬间移动特效/anim/瞬间移动特效.anim'), 'utf8',
@@ -562,12 +567,12 @@ test('瞬间移动特效进本局特效清单：只有带 blink_strike 计划的
         textOverrides: new Map(),
     };
     const withBlink = buildZCVisualResourcePlan([unit('68034'), unit('68028')] as never, adapters as never);
-    assert.ok(withBlink.effectPaths.includes(ZC_BLINK_CAST_EFFECT_PREFAB_PATH),
+    assert.ok(withBlink.effectPaths.includes(ZC_EFFECT_PATHS.blink),
         '有移形换影的局必须加载这张图，否则技能结算了但一次都不闪');
 
     const withoutBlink = buildZCVisualResourcePlan([unit('68028')] as never, adapters as never);
-    assert.equal(withoutBlink.effectPaths.includes(ZC_BLINK_CAST_EFFECT_PREFAB_PATH), false,
-        '没带这条行为的兵不该吃这份加载（18 帧 1296×1228 的图不小）');
+    assert.equal(withoutBlink.effectPaths.includes(ZC_EFFECT_PATHS.blink), false,
+        '没带这条行为的兵不该吃这份加载（18 帧序列帧不该白加载）');
     assert.equal(withoutBlink.effectPaths.includes('units/projectiles/68099_普攻/68099_普攻'), false,
         'enabled=false 的计划不参与');
 });

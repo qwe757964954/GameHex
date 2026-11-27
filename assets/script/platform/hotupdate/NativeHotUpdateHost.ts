@@ -1,9 +1,9 @@
 import { game, native, sys } from 'cc';
 
 /** 与 localStorage 键名一致；main.js 的注入片段读同一个键，改名会直接导致热更不生效。 */
-export const HOT_UPDATE_SEARCH_PATHS_KEY = 'HotUpdateSearchPaths';
+const HOT_UPDATE_SEARCH_PATHS_KEY = 'HotUpdateSearchPaths';
 /** 记录上次启动时的客户端版本，用于大版本升级时清理旧缓存。 */
-export const HOT_UPDATE_CLIENT_VERSION_KEY = 'hotupdate.clientVersion';
+const HOT_UPDATE_CLIENT_VERSION_KEY = 'hotupdate.clientVersion';
 
 /** AssetsManager 事件（只列本模块用得到的字段，避免依赖引擎类型定义）。 */
 export interface INativeAssetsManagerEvent {

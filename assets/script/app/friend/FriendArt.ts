@@ -15,51 +15,48 @@
  * 必须写 1 才用得上它。漏写的症状是图照样显示、不报错，只是整张被拉伸 ——
  * 底板从 394×307 拉到 626×882 时四角会被拉成细长条。
  *
- * `fd_input_bg` 是新端自己留的一份输入框底图，不复用 `login/input_box`：登录界面已把那张
- * 30×30 的图当 `_type = 1` 且边框为 0 用着，给它配边框会顺手改掉登录界面。
+ * `fd_input_v2` 是 v2 好友搜索框自己的主题底图（米黄底 + 深棕描边），不复用 `login/input_box`：
+ * 登录界面已把那张 30×30 的图当 `_type = 1` 且边框为 0 用着，给它配边框会顺手改掉登录界面。
  */
 
 import {
-    COMMON_ART_ROOT,
-    FRIEND_ART_ROOT as ART_FRIEND_ROOT,
-    LOGIN_ART_ROOT,
-    SEVEN_DAY_ART_ROOT,
+    FRIEND_ART_ROOT,
+    MAIN_CHEST_ART_ROOT,
+    MAIN_HUD_ART_ROOT,
+    MAIN_POPUP_ART_ROOT,
+    ROLE_ART_ROOT,
 } from '../ArtPaths';
 
-/** 好友自有图目录（`loadArt(name, FRIEND_ART_ROOT)` 用；不带 `resources/` 前缀）。 */
-export const FRIEND_ART_ROOT = ART_FRIEND_ROOT;
-
 /** 静态图名（`FRIEND_ART_ROOT` 下）。 */
-export const FRIEND_ART_ROW_BG = 'fd_row_bg';
-export const FRIEND_ART_HEAD_FRAME = 'fd_head_frame';
-export const FRIEND_ART_LV_TAG = 'fd_lv_tag';
-export const FRIEND_ART_PANEL_BG = 'fd_panel_bg';
-export const FRIEND_ART_TITLE_BG = 'fd_title_bg';
-/** 主按钮底图（FGUI `颜色` 控制器的 `Orange` = 金色）。 */
-export const FRIEND_ART_BTN_GOLD = 'fd_btn_gold';
-/** 次按钮底图（FGUI `颜色` 控制器的 `Bule` —— 原文拼写如此 = 深色）。 */
+const FRIEND_ART_ROW_BG = 'fd_row_v2';
+const FRIEND_ART_HEAD_FRAME = 'hud_avatar_frame';
+export const FRIEND_ART_HEAD_FRAME_ROOT = MAIN_HUD_ART_ROOT;
+const FRIEND_ART_LV_TAG = 'hud_level_bg';
+export const FRIEND_ART_LV_TAG_ROOT = MAIN_HUD_ART_ROOT;
+export const FRIEND_ART_PANEL_BG = 'bg';
+export const FRIEND_ART_PANEL_BG_ROOT = MAIN_POPUP_ART_ROOT;
+export const FRIEND_ART_TITLE_BG = 'title';
+export const FRIEND_ART_TITLE_BG_ROOT = MAIN_POPUP_ART_ROOT;
+/** 主按钮底图（main 图集金色小按钮）。 */
+export const FRIEND_ART_BTN_GOLD = 'chest_btn_gold';
+export const FRIEND_ART_BTN_GOLD_ROOT = MAIN_CHEST_ART_ROOT;
+/** 次按钮底图（main 图集蓝色小按钮）。 */
+export const FRIEND_ART_BTN_BLUE = 'chest_btn_blue';
+export const FRIEND_ART_BTN_BLUE_ROOT = MAIN_CHEST_ART_ROOT;
+/** 置灰主按钮（沿用旧深色图，避免运行时再生成灰度材质）。 */
 export const FRIEND_ART_BTN_DARK = 'fd_btn_dark';
-export const FRIEND_ART_TAB_ON = 'fd_tab_on';
-export const FRIEND_ART_TAB_OFF = 'fd_tab_off';
-export const FRIEND_ART_TAB_OVER = 'fd_tab_over';
-/** 勾选框底框（对勾图复用 `FRIEND_SHARED_CHECK_*`）。 */
-export const FRIEND_ART_CHECK_BG = 'fd_check_bg';
-export const FRIEND_ART_INPUT_BG = 'fd_input_bg';
-
-/** 复用新端现有路径的 3 张（各自所在的目录 + 图名）。 */
-export const FRIEND_SHARED_CLOSE_ROOT = LOGIN_ART_ROOT;
-export const FRIEND_SHARED_CLOSE_NAME = '公用_按钮_关闭01';
-export const FRIEND_SHARED_CHECK_ROOT = SEVEN_DAY_ART_ROOT;
-export const FRIEND_SHARED_CHECK_NAME = 'sd_check';
-export const FRIEND_SHARED_RED_DOT_ROOT = COMMON_ART_ROOT;
-export const FRIEND_SHARED_RED_DOT_NAME = 'cm_red_dot';
+export const FRIEND_ART_TAB_ON = 'btn_04';
+export const FRIEND_ART_TAB_ON_ROOT = ROLE_ART_ROOT;
+export const FRIEND_ART_TAB_OFF = '';
+/** 勾选框底框。 */
+const FRIEND_ART_CHECK_BG = 'fd_check_bg';
+const FRIEND_ART_INPUT_BG = 'fd_input_v2';
 
 /**
  * 需要九宫格渲染的图（prefab 里挂 `cc.Sprite` 且 `_type` 必须 = 1）。
  * 与 FGUI `package.xml` 里带 `scale="9grid"` 的图一一对应。
  */
 export const FRIEND_ART_SLICED: ReadonlySet<string> = new Set<string>([
-    FRIEND_ART_PANEL_BG,
     FRIEND_ART_ROW_BG,
     FRIEND_ART_BTN_GOLD,
     FRIEND_ART_BTN_DARK,
@@ -76,9 +73,9 @@ export const FRIEND_ROW_ART = {
 
 /** 按钮两态底图（FGUI `按钮_公用_9Gone` 的 `颜色` controller：0 = Bule / 1 = Orange）。 */
 export const FRIEND_BUTTON_ART = {
-    /** `颜色,0`（FGUI 拼作 `Bule`）—— 深色，次按钮：一键赠送 / 换一批 / 搜索 / 私聊 / 拒绝。 */
-    dark: FRIEND_ART_BTN_DARK,
-    /** `颜色,1`（FGUI 写 `Orange`）—— 金色，主按钮：批量删除 / 领取体力 / 好友申请 / 一键删除。 */
+    /** 次要按钮：蓝底（一键赠送 / 换一批 / 搜索）。 */
+    dark: FRIEND_ART_BTN_BLUE,
+    /** 主按钮：金底（领取体力 / 好友申请 / 一键删除）。 */
     gold: FRIEND_ART_BTN_GOLD,
 } as const;
 
@@ -91,7 +88,7 @@ export const FRIEND_BUTTON_ART = {
 export type FriendButtonColor = 'dark' | 'gold';
 
 export function friendButtonArt(color: FriendButtonColor): string {
-    return color === 'gold' ? FRIEND_ART_BTN_GOLD : FRIEND_ART_BTN_DARK;
+    return color === 'gold' ? FRIEND_ART_BTN_GOLD : FRIEND_ART_BTN_BLUE;
 }
 
 /**

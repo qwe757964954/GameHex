@@ -1,7 +1,14 @@
 import { ZCCardType, ZC_CARD_RARITIES } from '../zcds/model/ZCCombatCatalog';
-import type { ZCCardRarity, ZCDeckBonuses, ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type {
+    ZCAttackTrait, ZCBondRule, ZCCampTrait, ZCCardRarity, ZCCardRarityMeta, ZCCardTraits, ZCDeckBonuses, ZCDeckCard,
+} from '../zcds/model/ZCCombatCatalog';
 import type { ICardLineupCatalog } from './CardArtConfig';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
+
+export { ZCCardType };
+export type {
+    ZCAttackTrait, ZCBondRule, ZCCampTrait, ZCCardRarity, ZCCardRarityMeta, ZCCardTraits, ZCDeckBonuses, ZCDeckCard,
+};
 
 /**
  * 阵容页的视图契约和美术名映射。

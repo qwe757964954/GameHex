@@ -50,16 +50,17 @@
 🔴 **横向裁切不「紧贴内容」，而是以环中心对称铺开、宽度正好等于环外径**。这不是为了省事，
 而是为了让「看着多大就打多大」变成一条**可读的算术**：
 
-    _contentSize.width(340) × _lscale(0.904412) = 307.5 = 判定直径
+    _contentSize.width(308) × _lscale(1) = 308 ≈ 307.5 = 判定直径（差 0.5 px = 取整误差）
 
 用例（`tests/zcds-dawtianlu-skills.test.ts` 的尺寸那条）就是直接读 prefab 验这个等式，
 不需要在别处再抄一个「可见宽」魔数。代价是环两侧各有一点点透明边（环外的火星），
 可以忽略。
 
-🔴 **尺寸烘在 prefab 的 `_lscale` 里，`ZCCombatEffectScale.NODE_SCALE_BY_PREFAB_PATH` 不登记**
-（未登记 = 宿主倍率 1）。理由与麻辣铁锅喷射火焰相同：这条 prefab 只服务 102503 一个技能，
-没有别的技能共用同一个路径，所以没有「挂宿主倍率会误伤别人」的问题，也就不需要在两个文件里
-各写一半数。反过来说，**以后要改半径就重跑本脚本**，别去 `ZCCombatEffectScale` 里找。
+🔴 **画布就是屏上尺寸，`_lscale` 恒为 1**（2026-11-26 改口径，之前是画布 340 + 缩放
+0.904412）。`ZCCombatEffectScale.NODE_SCALE_BY_PREFAB_PATH` 也不登记（未登记 = 宿主倍率 1）：
+这条 prefab 只服务 102503 一个技能，没有共用方，所以倍率一处都不该有。
+反过来说，**以后要改半径就重跑本脚本**（画布会跟着 `JUDGE_DIAMETER_SCREEN` 一起变），
+别去 prefab 里手改 `_lscale`，也别去 `ZCCombatEffectScale` 里找。
 
 高度不设约束：3/4 视角下地面圆的竖向投影本来就是压扁的（本套扁率约 0.365），
 火焰墙往上多高由美术决定，判定只看地面那个圆。
@@ -67,8 +68,9 @@
 ## 3) `_lpos` 补偿：把环中心挪到节点原点
 
 横向因为「画布宽 = 环外径」已经对称，`_lpos.x` 只剩取整误差（本套 −0.226）；
-纵向还要补 —— 环中心在画布中心**下方** 79.5 画布 px（火焰墙全在环上方），
-`_lpos.y` 把这个差值补回来，让「环中心 = 节点原点 = 区域圆心 = 施法者脚点」。
+纵向还要补 —— 环中心在画布中心**下方**约 72 画布 px（火焰墙全在环上方），
+`_lpos.y` 把这个差值补回来，让「环中心 = 节点原点 = 区域圆心 = 施法者脚点」
+（本套 71.9284；缩图前 340 画布上是 79.5 × 0.904412 ≈ 71.9，屏上位移没变）。
 
 🔴 这条成立的前提是**宿主节点不旋转**：`castSelfAura` 只有在配了 `auraFaceTarget` 时才写
 `angleDegrees`，102503 没配 ⇒ 宿主保持 0° ⇒ `_lpos.y` 是纯竖直位移。
@@ -104,7 +106,6 @@ NAME = '大威天芦_火焰光环'
 #  屏上 px / 逻辑 px（docs §1.11）：0.3(combatDistanceScale) × 2.5625(view/logical)
 SCREEN_PX_PER_LOGIC = 0.3 * 2.5625
 
-DOWNSCALE = 2
 CROP_MARGIN = 12
 
 LAYER_UI_2D = 33554432  # 1 << 25
@@ -473,15 +474,16 @@ def main():
     crop_left = max(0, crop_right - ring_src)          # 贴到右边界时把左边补回来
     crop_top = max(0, top - CROP_MARGIN)
     crop_bottom = min(src_h, bottom + CROP_MARGIN)
-    #  DOWNSCALE 取偶数，画布才是整数、逐帧不抖
-    crop_w = (crop_right - crop_left) // DOWNSCALE * DOWNSCALE
-    crop_h = (crop_bottom - crop_top) // DOWNSCALE * DOWNSCALE
-    canvas_w = crop_w // DOWNSCALE
-    canvas_h = crop_h // DOWNSCALE
+    crop_w = crop_right - crop_left
+    crop_h = crop_bottom - crop_top
+    #  🔴 画布 = 判定直径（屏上 px 取整）：贴图本身就是屏上尺寸，`_lscale` 恒为 1。
+    #  307.5 取整成 308，差 0.5 px（0.16%），用例按相对误差 <0.5% 校验。
+    canvas_w = int(round(JUDGE_DIAMETER_SCREEN))
+    canvas_h = int(round(crop_h * canvas_w / float(crop_w)))
     canvas_scale = canvas_w / float(crop_w)  # 源 px → 画布 px
 
-    # 3) 反算缩放：环外径（= 画布宽）→ 判定直径
-    scale = JUDGE_DIAMETER_SCREEN / float(canvas_w)
+    # 3) 尺寸已经烘进画布，prefab 不再乘任何倍率
+    scale = 1.0
 
     # 4) 摆位：把环中心挪到节点原点（`_lpos` 补偿画布中心与环中心的差）
     ax = (center_x - crop_left) * canvas_scale
@@ -546,7 +548,7 @@ def main():
         NAME, len(FRAMES), SAMPLE, WRAP_LOOP, clip['_duration']))
     print('  源 %dx%d → 裁 %dx%d @(%d,%d) → 画布 %dx%d' % (
         src_w, src_h, crop_w, crop_h, crop_left, crop_top, canvas_w, canvas_h))
-    print('  环外径 %d 源 px = 画布宽 %d px ⇒ 缩放 %.6f（目标 307.5 屏上 px）' % (
+    print('  环外径 %d 源 px → 画布宽 %d px ⇒ 缩放 %.6f（目标 307.5 屏上 px，贴图即屏上尺寸）' % (
         ring_src, canvas_w, scale))
     print('  根节点 _lpos = (%.6f, %.6f)' % pos)
     print('  环中心画布坐标 (%.2f, %.2f)（画布中心 %.1f, %.1f）' % (

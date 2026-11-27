@@ -1,6 +1,5 @@
-import type { ZCCardRarity, ZCCardRarityMeta } from '../zcds/model/ZCCombatCatalog';
 import { createIconArtResolver, type IconArtResolver, type IconRow } from '../HeadArtModel';
-import { ZC_CARD_CAMPS, ZC_CARD_CLASSES, ZC_CARD_RARITIES, type ZCCardCamp, type ZCCardClass } from './CardLineupTypes';
+import { ZC_CARD_CAMPS, ZC_CARD_CLASSES, ZC_CARD_RARITIES, type ZCCardCamp, type ZCCardClass, type ZCCardRarity, type ZCCardRarityMeta } from './CardLineupTypes';
 
 const RARITY_ART_FIELDS = ['face', 'disc', 'frame', 'diamond'] as const;
 const CLASS_ART_FIELDS = ['badge', 'boardHero'] as const;

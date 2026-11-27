@@ -11,7 +11,7 @@ import {
 import { captureZCMatchConfig, type ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRuntimeCompiler';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
-import { ZC_SELF_AURA_EFFECT_PREFAB_PATH } from '../assets/script/app/zcds/model/ZCSelfAuraFx';
+import { ZC_EFFECT_PATHS } from '../assets/script/app/zcds/model/ZCEffectCatalog';
 import { zcCombatEffectNodeScaleOf } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
 import type { ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { assetPath } from './helpers/asset-paths';
@@ -108,7 +108,7 @@ test('天降神拳：三档参数 = 300%/500%/700% 普通伤害，命中 5/7/9 �
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(tiers.length, 3, '102504 必须三档齐备');
     //  102504 是 68025 的**第 4 格** ⇒ 按「技能4 = 12 / 24 / 36」统一档位（2026-11-17）。
-    assert.deepEqual(tiers.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36]);
+    assert.deepEqual(tiers.map((row) => Number(row.unlockHeroLevel)), [7, 24, 36]);
     assert.deepEqual(tiers.map((row) => row.skillKind), ['active_attack', 'active_attack', 'active_attack']);
 
     const params = tiers.map((row) => JSON.parse(String(row.skillParamJson)) as Record<string, number>);
@@ -126,7 +126,7 @@ test('天降神拳：升级描述与修改器引用（K 表）齐备', () => {
     assert.equal(rows.length, 3, '102504 三档');
     const byLevel = rows.sort((a, b) => Number(a.skilllevel) - Number(b.skilllevel));
     assert.deepEqual(byLevel.map((row) => row.name), ['天降神拳', '天降神拳', '天降神拳']);
-    assert.deepEqual(byLevel.map((row) => Number(row.unlockarmylevel)), [12, 24, 36]);
+    assert.deepEqual(byLevel.map((row) => Number(row.unlockarmylevel)), [7, 24, 36]);
     // modfiy 由 pvpSkillPlan.modifierId 回填 —— 三档必须各自对上，否则卡牌详情页的
     // 「升级提升」列表读不到这一档。
     assert.deepEqual(byLevel.map((row) => (row.modfiy as number[])[0]), [94025041, 94025042, 94025043]);
@@ -277,7 +277,7 @@ test('无尘禁土：三档 = 冷却 15 秒 / 持续 4·6·8 / 每秒 30·40·55
         .filter((row) => Number(row.skillChainId) === 102503)
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(tiers.length, 3, '102503 必须三档齐备');
-    assert.deepEqual(tiers.map((row) => Number(row.unlockHeroLevel)), [9, 18, 27], '兵种 9 / 18 / 27 级解锁（第 3 格）');
+    assert.deepEqual(tiers.map((row) => Number(row.unlockHeroLevel)), [5, 18, 27], '兵种 9 / 18 / 27 级解锁（第 3 格）');
     assert.deepEqual(tiers.map((row) => row.skillKind), ['active_cd', 'active_cd', 'active_cd'], '主动-冷却');
     assert.deepEqual(tiers.map((row) => row.behaviorKey), ['self_aura', 'self_aura', 'self_aura']);
     // 必须挂 30858（该单位当前普攻行）：计划行的 `pvpSkillId` 与 `pvpCard.unitSkillId` 不一致时
@@ -298,7 +298,7 @@ test('无尘禁土：三档 = 冷却 15 秒 / 持续 4·6·8 / 每秒 30·40·55
         .filter((row) => Number(row.id) === 102503)
         .sort((a, b) => Number(a.skilllevel) - Number(b.skilllevel));
     assert.deepEqual(kRows.map((row) => row.name), ['无尘禁土', '无尘禁土', '无尘禁土']);
-    assert.deepEqual(kRows.map((row) => Number(row.unlockarmylevel)), [9, 18, 27]);
+    assert.deepEqual(kRows.map((row) => Number(row.unlockarmylevel)), [5, 18, 27]);
     assert.deepEqual(kRows.map((row) => (row.modfiy as number[])[0]), [94025051, 94025052, 94025053]);
 });
 
@@ -371,7 +371,7 @@ test('无尘禁土：光环特效路径进得了本局加载清单，没带这�
     const withAura = buildZCVisualResourcePlan([unit('68025')] as never, adapters as never);
     assert.ok(withAura.effectPaths.includes(FLAME_AURA),
         '带无尘禁土的局必须加载火焰光环这条');
-    assert.equal(withAura.effectPaths.includes(ZC_SELF_AURA_EFFECT_PREFAB_PATH), false,
+    assert.equal(withAura.effectPaths.includes(ZC_EFFECT_PATHS.sustainedAura), false,
         '老光柱已经不该再被打包加载（除非有单位退回兜底）');
 
     const withoutAura = buildZCVisualResourcePlan([unit('68026')] as never, adapters as never);
@@ -489,7 +489,7 @@ test('成长表补齐：68025 的 1~50 级按 cardLevelUp 反推，且真的进�
  * （椰蛋战士·暴风、三叶小丑·飓风），所以这里按屏上 px 做交叉校验。
  *
  * ⚠️ 2026-11-17 换美术后，这条从「查宿主倍率表」改成「读 prefab 本体」：
- * 火焰光环的尺寸烘在 prefab 的 `_lscale` 里，画布宽被生成器钉成环外径
+ * 火焰光环的画布宽被生成器钉成环外径（307.5 → 308），`_lscale` 恒为 1
  * ⇒ `width × scale` 直接等于判定直径，等式在测试里可读。
  */
 test('无尘禁土 200px：判定半径与火焰光环视觉同尺寸；天降神拳子弹 ×2.5', () => {
@@ -514,6 +514,7 @@ test('无尘禁土 200px：判定半径与火焰光环视觉同尺寸；天降�
     const root = prefab.find((item) => item.__type__ === 'cc.Node')!;
     const ui = prefab.find((item) => item.__type__ === 'cc.UITransform')!;
     assert.equal(root._lscale.x, root._lscale.y, '等比缩放');
+    assert.equal(root._lscale.x, 1, '画布就是屏上尺寸，_lscale 必须是 1');
     const auraScreen = ui._contentSize.width * root._lscale.x;
     assert.ok(Math.abs(auraScreen - judgeDiameter) / judgeDiameter < 0.005,
         `火焰环屏上宽 ${auraScreen.toFixed(2)}px 必须等于判定直径 ${judgeDiameter.toFixed(1)}px`

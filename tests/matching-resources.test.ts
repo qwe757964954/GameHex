@@ -17,6 +17,8 @@ const TABLE_NAMES_STUB = {
     HEAD_TABLE: 'head',
     ICON_TABLE: 'icon',
     OPEN_TABLE: 'open',
+    PVP_ARTIFACT_TABLE: 'pvpArtifact',
+    PVP_CARD_TABLE: 'pvpCard',
 };
 
 function load<T>(file: string, dependencies: Record<string, unknown>): T {

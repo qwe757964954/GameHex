@@ -1,10 +1,9 @@
 import { buildCardLevelUpTable, evaluateUpgrade, type ZCCardLevelUpTable } from '../../card/CardUpgradeCost';
 import { loadCardLevelUpRows } from '../../card/CardLineupDecks';
-import { sortLineupCards, visibleLineupCards } from '../../card/CardLineupTypes';
+import { sortLineupCards, visibleLineupCards, type ZCDeckCard } from '../../card/CardLineupTypes';
 import type { ICardArtConfig } from '../../card/CardArtConfig';
 import { cardRepository } from '../../card/CardRepository';
 import { createItemCounter } from '../../card/ItemBag';
-import type { ZCDeckCard } from '../../zcds/model/ZCCombatCatalog';
 import {
     detectTerritoryHeroBadges,
     type ITerritoryHeroBadgeItem,

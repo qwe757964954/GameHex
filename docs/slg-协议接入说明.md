@@ -60,7 +60,7 @@
 - `nextRevertTime` 是剩余秒数，只计算恢复倒计时，不推算行动力总量。
 - r826 起，`CmdSlgGameInfoRspMsg`、`CmdSlgGameInfoBroMsg` 必填 `info`，其中 `SlgGameInfo.maxMonsterLevel` 表示最大击杀野怪等级；`CmdSlgBuildInfoBroMsg` 仍无字段。当前广播处理继续作为失效通知重拉；写操作期间收到广播，会延后全量刷新。`BigMapSlgRepository.tick()` 的 5 秒节流只留给 `CmdSlgActionUpdateReqMsg` 行动力轮询。
 - 🔴 `CmdSlgBuildInfoBroMsg` 当前是**空消息**（无任何字段），所以它只能当失效通知，收到后仍会打一次 `CmdSlgBuildInfoReqMsg` 全量重拉。若后端要在这条广播里直接下发「单个建筑信息」`SlgBuildInfo` 做增量，需要先给 proto 加字段并重新生成随包静态模块，客户端再接单条 apply（`applyBuildResponse` / `replaceBuild` 已具备单条合并能力）—— 协议是跨端契约，不单侧修改。
-- 同页写操作串行且不乐观更新。SLG 写请求关闭网络超时重发和重连恢复；未确认的写操作不重发，只重拉建筑事实。通用请求默认保留已有重试行为。
+- 同页写操作串行且不乐观更新。SLG 写请求关闭网络超时重发和重连恢复；未确认的写操作不重发，只重拉建筑事实。网关按四态上报：服务端以 `CmdTips` 明确拒绝（`server_error`）时原因已由网络层提示，不置脏、不重拉，也不补第二条提示；请求没发出（未连接 / 关页 / 切号）同样不置脏。通用请求默认保留已有重试行为。
 - 联机模式不读取、写入或结算离线基地存档；未登录预览继续使用已有本地规则。
 
 ## 当前协议限制

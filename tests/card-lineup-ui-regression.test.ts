@@ -658,7 +658,14 @@ test('站台按新版设计：151×204、台座/光效/角标/等级各就位', 
     assert.equal(spriteOf(slotPrefab, stage!)!._spriteFrame?.__uuid__, '5729b272-2fb2-490b-8721-51593fde7dbe@f9941');
     assert.equal(hero!._lscale.x, 0.65);
     assert.equal(disc!._lpos.y, -59.5, '光效中心：台座顶 +5');
-    assert.equal(hero!._lpos.y, -70.5, '立绘脚点对齐台座中心');
+    assert.equal(hero!._lpos.y, -70.5, '立绘底边落在台座中心');
+    // 全身立绘在 256 画布里自带透明留白（`icons/cardHead` 35 张的 trimY 是 1~49px，逐张不同），
+    // 用 RAW 会把留白算进高度 ⇒ 整只浮在台面上；TRIMMED 让节点高度 = 不透明区高度，
+    // 底边才真的压在台座中心。统一加一个 Y 偏移必然是「有的沉、有的浮」
+    //（2026-11-25 用户：「没有以角色的底位置去对齐底座的中心位置」）。
+    const heroSprite = spriteOf(slotPrefab, hero!);
+    assert.equal(heroSprite!._sizeMode, 1, 'Hero 必须用 TRIMMED，RAW 会把透明留白一起算进高度');
+    assert.equal(heroSprite!._isTrimmedMode, true);
 
     const badge = nodeOf(slotPrefab, 'ClassBadge');
     const level = nodeOf(slotPrefab, 'LevelLabel');

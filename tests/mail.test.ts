@@ -495,7 +495,7 @@ test('B4 行底图 `mailRowArt` 三态两张 + 状态文本 / 印章的显隐口
         const art = mailRowArt(state);
         return `${art.root}/${art.name}`;
     };
-    assert.equal(ref(MAIL_STATE_UNREAD), `image/friend/${MAIL_ROW_BG_UNREAD_NAME}`, '未读复用好友那张');
+    assert.equal(ref(MAIL_STATE_UNREAD), `image/mail/${MAIL_ROW_BG_UNREAD_NAME}`, 'v2 未读用邮件自己的九宫行卡');
     assert.equal(ref(MAIL_STATE_READ), `image/mail/${MAIL_ROW_BG_READ_NAME}`);
     assert.equal(ref(MAIL_STATE_TAKEN), `image/mail/${MAIL_ROW_BG_READ_NAME}`, '已领取与已读共用 `_b` 版底图');
     // 两个分支必须是同一种形状（`{root, name}` 可直接喂 `loadArt`），
@@ -535,7 +535,7 @@ test('C1 两个 prefab 都在，且根节点子序 = 渲染序（`RowView` 必�
     for (const file of [PREFAB_MAIN, PREFAB_DETAIL]) assert.ok(existsSync(file), `缺 ${file}`);
     const M = loadPrefab(PREFAB_MAIN);
     const order = (M.root._children as any[]).map((c) => M.byId(c.__id__)._name);
-    assert.deepEqual(order, ['PanelBg', 'TitleBg', 'Title', 'CloseBtn', 'RowView',
+    assert.deepEqual(order, ['PanelBg', 'TitleBg', 'Title', 'CloseBtn', 'MailBanner', 'TagRow', 'RowView',
         'BatchRemoveBtn', 'GetOneKeyBtn', 'EmptyLabel', 'AutoDeleteLabel']);
     // Mask 会裁掉排在它之后的兄弟 ⇒ 按钮收不到触摸
     assert.ok(order.indexOf('RowView') < order.indexOf('BatchRemoveBtn'),
@@ -568,7 +568,7 @@ test('C3 ⚠️ 脚本组件的 `__type__` 都能从对应 `.ts.meta` 的 uuid �
     const cids = new Set<string>();
     for (const file of [PREFAB_MAIN, PREFAB_DETAIL]) {
         for (const o of loadPrefab(file).objs) {
-            if (o && typeof o.__type__ === 'string' && !o.__type__.startsWith('cc.')) cids.add(o.__type__);
+            if (o && typeof o.__type__ === 'string' && !o.__type__.startsWith('cc.') && !o.__type__.startsWith('sp.')) cids.add(o.__type__);
         }
     }
     /**
@@ -602,6 +602,7 @@ test('C3 ⚠️ 脚本组件的 `__type__` 都能从对应 `.ts.meta` 的 uuid �
         'assets/script/app/mail/MailDetailPage.ts',
         'assets/script/app/mail/MailRow.ts',
         'assets/script/app/mail/MailRewardSlot.ts',
+        'assets/script/app/common/RedDot.ts',
     );
     // VScrollView 是工程内的公共类，单独放行
     known.add(JSON.parse(readFileSync('assets/script/vscrollview/VScrollView.ts.meta', 'utf8')).uuid as string);
@@ -612,21 +613,18 @@ test('C3 ⚠️ 脚本组件的 `__type__` 都能从对应 `.ts.meta` 的 uuid �
 
 test('C4 ⚠️ 几何：反解回画布像素后必须等于 FGUI XML 原值（差分 0.5px，**不加整体偏移**）', () => {
     const P = loadPrefab(PREFAB_MAIN);
-    // popBg `13,128 size 680,946`（无 pivot ⇒ 左上角）
-    assertCanvas(P, 'PanelBg', { left: 13, top: 128, w: 680, h: 946 });
-    // 弹窗组件的三个子件由 relation 定位：n6 `center-center`、title `center-center,top-top`、
-    // 按钮_关闭 `right-right,top-top`（右边距 2 ⇒ 右边 678）
-    assertCanvas(P, 'TitleBg', { cx: 353, cy: 140.5, w: 344, h: 81 });
-    assertCanvas(P, 'Title', { cx: 353, cy: 138, w: 240, h: 42 });
-    assertCanvas(P, 'CloseBtn', { cx: 661, cy: 138, w: 60, h: 60 });
-    // 列表 `351,195 pivot .5,0 size 575,666`
-    assertCanvas(P, 'RowView', { cx: 351, top: 195, w: 575, h: 666 });
-    // 两个按钮（无 pivot ⇒ 左上角）
-    assertCanvas(P, 'BatchRemoveBtn', { left: 114, top: 877, w: 210, h: 82 });
-    assertCanvas(P, 'GetOneKeyBtn', { left: 377, top: 877, w: 210, h: 82 });
-    // 两个提示（pivot .5,.5 ⇒ 中心）
-    assertCanvas(P, 'EmptyLabel', { cx: 351, cy: 559, w: 202, h: 32 });
-    assertCanvas(P, 'AutoDeleteLabel', { cx: 351, cy: 986, w: 491, h: 32 });
+    // v2 弹窗框：652×970 @ (34,155)，标题/关闭对齐巡逻宝箱
+    assertCanvas(P, 'PanelBg', { left: 34, top: 155, w: 652, h: 970 });
+    assertCanvas(P, 'TitleBg', { cx: 360, cy: 178, w: 420, h: 122 });
+    assertCanvas(P, 'Title', { cx: 360, cy: 180, w: 262, h: 54 });
+    assertCanvas(P, 'CloseBtn', { cx: 658, cy: 193, w: 92, h: 91 });
+    assertCanvas(P, 'MailBanner', { left: 80, top: 246, w: 560, h: 106 });
+    assertCanvas(P, 'TagRow', { left: 80, top: 362, w: 560, h: 70 });
+    assertCanvas(P, 'RowView', { cx: 360, top: 442, w: 560, h: 456 });
+    assertCanvas(P, 'BatchRemoveBtn', { left: 80, top: 946, w: 231, h: 108 });
+    assertCanvas(P, 'GetOneKeyBtn', { left: 319, top: 946, w: 321, h: 108 });
+    assertCanvas(P, 'EmptyLabel', { cx: 360, cy: 570, w: 300, h: 40 });
+    assertCanvas(P, 'AutoDeleteLabel', { cx: 360, cy: 925, w: 560, h: 28 });
 
     const D = loadPrefab(PREFAB_DETAIL);
     assertCanvas(D, 'PanelBg', { left: 47, top: 243, w: 626, h: 791 });        // popBg `360,243 pivot .5,0`
@@ -638,7 +636,7 @@ test('C4 ⚠️ 几何：反解回画布像素后必须等于 FGUI XML 原值（
     assertCanvas(D, 'ContentView', { left: 98, top: 361, w: 524, h: 400 });
     assertCanvas(D, 'RewardBox', { left: 83, top: 775, w: 554, h: 102 });
     assertCanvas(D, 'TakeBtn', { cx: 360, cy: 923, w: 170, h: 82 });
-    assertCanvas(D, 'TakenStamp', { cx: 558.5, cy: 689, w: 119, h: 74 });
+    assertCanvas(D, 'TakenStamp', { cx: 538.5, cy: 689, w: 119, h: 74 }); // 右下角，距正文右边 24px
     // 奖励列表 = FGUI `列表_奖励列表`（`102,775 size 515,100`）：视口 anchor 是 **(0,0.5)**
     // （横向那套，见 `gen_mail.mjs buildRewardList` 的注释）⇒ 盒左 = lpos.x 直接就是画布左缘
     assertCanvas(D, 'RewardBox/RewardList', { left: 102, top: 775, w: 515, h: 100 });
@@ -663,38 +661,51 @@ test('C4 ⚠️ 几何：反解回画布像素后必须等于 FGUI XML 原值（
     assert.equal((MAIL_REWARD_LIST_WIDTH - contentWidth(5)) / 2, 12.5);
 });
 
-test('C5 ⚠️ 行模板：`_lpos.y = −85`、尺寸 575×170，行内 6 个节点按 item 局部坐标落位', () => {
+test('C4b 邮件标题文字/关闭按钮对齐巡逻宝箱：字号 40、行高 50、标题 262×54', () => {
+    const P = loadPrefab(PREFAB_MAIN);
+    const title = P.pick('Title');
+    const label = P.comp(title, 'cc.Label');
+    assert.equal(label._fontSize, 40);
+    assert.equal(label._lineHeight, 50);
+    assert.deepEqual(label._color, { __type__: 'cc.Color', r: 255, g: 250, b: 235, a: 255 });
+    assert.equal(label._enableOutline, true);
+    assert.equal(label._outlineWidth, 2);
+    assert.deepEqual(label._outlineColor, { __type__: 'cc.Color', r: 92, g: 45, b: 12, a: 255 });
+    const close = P.pick('CloseBtn');
+    assert.equal(close._lpos.x, 298);
+    assert.equal(close._lpos.y, 447);
+});
+
+test('C5 ⚠️ 行模板：`_lpos.y = −54`、尺寸 560×108，行内节点按 v2 局部坐标落位', () => {
     const P = loadPrefab(PREFAB_MAIN);
     const T = 'RowView/content/RowTemplate';
     const template = canvasBox(P, T);
-    assert.equal(P.pick(T)!._lpos.y, -85, 'VScrollView 的模板高度约定：_lpos.y 必须是 −h/2');
+    assert.equal(P.pick(T)!._lpos.y, -54, 'VScrollView 的模板高度约定：_lpos.y 必须是 −h/2');
     assert.equal(P.pick(T)!._lpos.x, 0);
-    assert.equal(template.w, 575);
-    assert.equal(template.h, 170);
+    assert.equal(template.w, 560);
+    assert.equal(template.h, 108);
 
     const tLeft = template.left;
     const tTop = template.top;
-    /** item 局部的 (对应边 x, 中心 y)。 */
     const local = (name: string) => {
         const b = canvasBox(P, `${T}/${name}`);
         return { b, left: b.left - tLeft, right: b.left + b.w - tLeft, cx: b.cx - tLeft, cy: b.cy - tTop };
     };
-    // n25 信封 (40,50) 100×72 ⇒ 中心 (90,86)
-    assert.deepEqual([local('MailIcon').cx, local('MailIcon').cy], [90, 86]);
-    // n24 装饰 (19,17) 140×130 ⇒ 中心 (89,82)
-    assert.deepEqual([local('Deco').cx, local('Deco').cy], [89, 82]);
-    // 文本_标题 `164,32 pivot 0,.5` ⇒ 左边缘 164、中心 y 32（原稿 52 宽 autoSize ⇒ 放宽 300）
-    assert.deepEqual([local('Title').left, local('Title').cy], [164, 32]);
-    assert.equal(local('Title').b.w, 300);
-    // 文本_时间 `164,80 pivot 0,.5`
-    assert.deepEqual([local('Time').left, local('Time').cy], [164, 80]);
-    assert.equal(local('Time').b.w, 95);
-    // n26 印章 (409,40) 119×74 ⇒ 中心 (468.5,77)
-    assert.deepEqual([local('TakenStamp').cx, local('TakenStamp').cy], [468.5, 77]);
-    // ⚠️ 状态 `501,71 pivot 1,.5` ⇒ **右边缘 501**（当左边缘用会整体右偏一个格宽 52）
-    assert.deepEqual([local('State').right, local('State').cy], [501, 71]);
-    assert.equal(local('State').b.ax, 1, 'State 的 anchor.x 必须是 1（FGUI pivot 1,.5）');
-    // 三个 pivot 0/.5 的必须真的是 (0,0.5)
+    // 深色圆盘 + 信封：中心都在 (56, 54)
+    assert.deepEqual([local('MailIcon').cx, local('MailIcon').cy], [56, 54]);
+    assert.deepEqual([local('Plate').cx, local('Plate').cy], [56, 54]);
+    // 标题 `118,20`、时间 `118,56`（pivot 0,.5）
+    assert.deepEqual([local('Title').left, local('Title').cy], [118, 40]);
+    assert.equal(local('Title').b.w, 292);
+    assert.deepEqual([local('Time').left, local('Time').cy], [118, 70]);
+    assert.equal(local('Time').b.w, 220);
+    // 印章：右端 20 边距，108×67 旋转 -5°
+    assert.deepEqual([local('TakenStamp').cx, local('TakenStamp').cy], [206 + 280, 57.5]);
+    // 状态：右边缘 258（= 280 − 22），anchor.x=1
+    assert.deepEqual([local('State').right, local('State').cy], [258 + 280, 51]);
+    assert.equal(local('State').b.ax, 1, 'State 的 anchor.x 必须是 1');
+    // 行内领取：130×54，右端 16
+    assert.deepEqual([local('ClaimBtn').left, local('ClaimBtn').cy], [414, 58]);
     for (const name of ['Title', 'Time']) assert.equal(local(name).b.ax, 0);
     for (const name of ['Title', 'Time']) assert.equal(local(name).b.ay, 0.5);
 });
@@ -722,19 +733,36 @@ test('C7 ⚠️ 九宫格：`cc.Sprite._type` = 1(SLICED) + `_sizeMode` = 0(CUST
     assert.equal(P.comp(P.pick('TitleBg'), 'cc.Sprite')._type, 0);
 });
 
-test('C8 行模板的 8 个 `@property` 全回填，`button` 指向**本节点**上的 `cc.Button`', () => {
+test('C8 行模板的 `@property` 全回填，`button` 指向**本节点**上的 `cc.Button`', () => {
     const P = loadPrefab(PREFAB_MAIN);
     const row = P.comp(P.pick('RowView/content/RowTemplate'), '4c02aMqNlBBr60ZNNLUy7Zt');
     assert.ok(row, 'RowTemplate 必须挂 MailRow');
-    for (const key of ['background', 'deco', 'mailIcon', 'titleLabel', 'timeLabel', 'stateLabel', 'takenStamp', 'button']) {
+    for (const key of ['background', 'deco', 'mailIcon', 'titleLabel', 'timeLabel', 'stateLabel', 'takenStamp', 'button', 'claimButton', 'unreadDot']) {
         assert.ok(row[key], `MailRow.${key} 未回填（漏了就是运行时 undefined，不报错）`);
     }
     assert.equal(P.byId(P.byId(row.button.__id__).node.__id__)._name, 'RowTemplate');
-    assert.equal(P.byId(P.byId(row.deco.__id__).node.__id__)._name, 'Deco');
+    assert.equal(P.byId(P.byId(row.deco.__id__).node.__id__)._name, 'Plate');
     assert.equal(P.byId(P.byId(row.mailIcon.__id__).node.__id__)._name, 'MailIcon');
+    assert.equal(P.byId(P.byId(row.unreadDot.__id__).node.__id__)._name, 'UnreadDot');
+    assert.equal(P.byId(row.unreadDot.__id__).__type__, '5fa5aSCCTRI/Y8zkguS79+z', '未读点必须挂工程通用 RedDot');
+    // 行内红点与全工程通用红点同尺寸（根 scale 1），下移 7px 避免首行顶部被列表视口裁切
+    assert.equal(P.byId(P.byId(row.unreadDot.__id__).node.__id__)._lscale.x, 1);
+    assert.equal(P.byId(P.byId(row.unreadDot.__id__).node.__id__)._lpos.y, 34);
+    // 红点必须用工程通用素材：Spine 绑 `skel/reddot` 骨架。
+    // 不绑不会报错 —— `RedDot` 会静默回退成静态小圆点，和页签/入口的「红点闪闪」长得不一样。
+    const unreadSpine = P.comp(P.pick('RowView/content/RowTemplate/UnreadDot/Spine'), 'sp.Skeleton');
+    assert.ok(unreadSpine, 'UnreadDot/Spine 必须挂 sp.Skeleton');
+    const reddotSkeleton = JSON.parse(readFileSync('assets/resources/skel/reddot/reddot.skel.meta', 'utf8')) as { uuid: string };
+    assert.equal(unreadSpine._skeletonData?.__uuid__, reddotSkeleton.uuid,
+        'UnreadDot 必须绑工程红点骨架（skel/reddot），不能退回单独的静态红点');
+    // 不保留“单独的红点节点”：MailRow 只认工程通用 RedDot
+    assert.equal(P.pick('RowView/content/RowTemplate/DotRaw'), null, '不能留单独的红点节点');
+    assert.match(readFileSync('assets/script/app/mail/MailRow.ts', 'utf8'),
+        /unreadDot\.setRedDot\(view\.state === MAIL_STATE_UNREAD \? 1 : 0\)/,
+        '未读点必须由三态数据驱动，不能常亮');
     // 默认行底是**未读**那张（已读由代码换）
     assert.equal(P.comp(P.pick('RowView/content/RowTemplate'), 'cc.Sprite')._spriteFrame.__uuid__,
-        'a5bf30a4-00e7-4706-8039-adbffaab2897@f9941');
+        '50a74cff-026f-4c84-ea8f-f5f8d837115f@f9941');
 });
 
 test('C9 ⚠️ 奖励列表：`RewardBox > RewardList(横向 VirtualScrollView + Mask) > content > 模板`，只有一颗槽组件', () => {

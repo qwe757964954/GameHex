@@ -4,7 +4,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { LoginController } from '../assets/script/app/login/LoginController';
-import { LoginUiEvent } from '../assets/script/app/login/LoginEvents';
+import { LoginUiEvent, type LoginOutput } from '../assets/script/app/login/LoginEvents';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { createControllerContext } from './helpers/controller-context';
 
@@ -55,7 +55,6 @@ test('LoginPage restores optional status binding, emits intents and fully render
 test('login failures only show a tip and leave successful bootstrap status intact', async () => {
     const owner = {}, tips: string[] = [], states: any[] = [];
     const controller = new LoginController(createControllerContext(), {
-        owner,
         service: { servers_: [], selectedServerId_: null, recentServerIds_: [], protocolReady_: true, hasSavedSession_: false,
             restoreAccount: () => ({ account: '', password: '' }), bootstrap: async () => ({ ok: true }),
             restoreAgreement: () => false, saveAgreement() {},
@@ -64,25 +63,16 @@ test('login failures only show a tip and leave successful bootstrap status intac
         config: {
             loadVersion: async () => ({ version: '1', url: '', index: '' })
         },
-        view: {
-            restoreCredentials() {},
-            render: value => states.push(value)
-        },
-        feedback: {
-            tip: value => tips.push(value)
-        },
-        servers: {
-            openServers: async () => {},
-            closeServers() {}
-        },
         clock: {
             schedule: () => () => {}
         },
-        navigation: {
-            navigate() {}
-        },
         channel: { platformLoginVisible: false, gmVisible: true },
     });
+    EventMgr.instance.on(LoginUiEvent.Output, (output: LoginOutput, source: object) => {
+        if (source !== controller) return;
+        if (output.kind === 'render') states.push(output.state);
+        else if (output.kind === 'tip') tips.push(output.message);
+    }, owner);
     try {
         await controller.start();
         // 先勾选协议
@@ -91,5 +81,5 @@ test('login failures only show a tip and leave successful bootstrap status intac
         EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'login', account: '', password: '' });
         await new Promise(resolve => setImmediate(resolve));
         assert.deepEqual(tips, ['请输入账号和密码']); assert.equal(states[states.length - 1].status, '服务器列表已就绪');
-    } finally { controller.dispose(); }
+    } finally { EventMgr.instance.offTarget(owner); controller.dispose(); }
 });

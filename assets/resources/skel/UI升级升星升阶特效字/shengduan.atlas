@@ -1,0 +1,69 @@
+
+shengduan.png
+size: 568,568
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+images/HDBH
+  rotate: false
+  xy: 2, 326
+  size: 121, 46
+  orig: 123, 48
+  offset: 1, 1
+  index: -1
+images/SDCG
+  rotate: true
+  xy: 125, 251
+  size: 121, 46
+  orig: 123, 48
+  offset: 1, 1
+  index: -1
+images/SJCG
+  rotate: false
+  xy: 2, 278
+  size: 121, 46
+  orig: 123, 47
+  offset: 1, 0
+  index: -1
+images/SXCG
+  rotate: false
+  xy: 2, 230
+  size: 121, 46
+  orig: 123, 47
+  offset: 1, 0
+  index: -1
+images/XJBH
+  rotate: true
+  xy: 125, 131
+  size: 118, 44
+  orig: 123, 48
+  offset: 2, 2
+  index: -1
+images/hd_di
+  rotate: true
+  xy: 198, 2
+  size: 562, 52
+  orig: 565, 52
+  offset: 2, 0
+  index: -1
+images/lantiao
+  rotate: true
+  xy: 173, 273
+  size: 99, 12
+  orig: 102, 16
+  offset: 1, 2
+  index: -1
+images/ren1_shou_glow_huang
+  rotate: false
+  xy: 2, 374
+  size: 194, 190
+  orig: 194, 190
+  offset: 0, 0
+  index: -1
+images/star_blue_kong
+  rotate: false
+  xy: 2, 71
+  size: 58, 58
+  orig: 58, 58
+  offset: 0, 0
+  index: -1

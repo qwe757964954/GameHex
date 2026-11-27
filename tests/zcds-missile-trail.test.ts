@@ -5,6 +5,7 @@ import {
     zcMissileTrailOf, zcMissileTrailPaths, zcMissileTrailQuads,
 } from '../assets/script/app/zcds/view/ZCMissileTrail';
 import { zcCombatEffectNodeScaleOf } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
+import { ZC_EFFECT_PATHS } from '../assets/script/app/zcds/model/ZCEffectCatalog';
 
 /**
  * 弹道拖尾。
@@ -27,6 +28,9 @@ const MISSILE_PREFAB = 'units/projectiles/镭射飞龙_导弹技能/镭射飞龙
 /** 68022 雷蕉 / 68016 磁电菇共用的 30231 电弹 —— 2026-11-19 起**不登记拖尾**（只留弹体）。 */
 const THUNDER_PREFAB = 'units/projectiles/雷弹攻击/雷弹攻击';
 
+/** 2026-11-26 第 57 批：卡牌常用子弹。从目录取，避免测试里再抄一份路径字面量。*/
+const CARD_BULLET_PATHS = ZC_EFFECT_PATHS;
+
 test('拖尾：只给登记过的弹体画，普通弹道一律 null', () => {
     const spec = zcMissileTrailOf(MISSILE_PREFAB);
     assert.ok(spec, '镭射飞龙的导弹弹体必须登记拖尾');
@@ -38,7 +42,28 @@ test('拖尾：只给登记过的弹体画，普通弹道一律 null', () => {
     assert.equal(zcMissileTrailOf(undefined), null);
     //  逐条列出来而不是 `length > 0`：新增拖尾时这条会红，逼着人回来确认"是不是真该有"。
     //  2026-11-19 第二轮：用户「三角形拖尾要保留」⇒ 雷蕉电弹那条回来了，顺序 = 目录里的书写顺序。
-    assert.deepEqual(zcMissileTrailPaths(), [MISSILE_PREFAB, THUNDER_PREFAB]);
+    //  2026-11-26 第 57 批：卡牌常用子弹七颗（用户「子弹带白色三角形的拖尾」）——
+    //  除诅咒菇是紫色，其余六条都是 255 纯白；顺序同样按目录书写顺序。
+    assert.deepEqual(zcMissileTrailPaths(), [
+        MISSILE_PREFAB, THUNDER_PREFAB,
+        CARD_BULLET_PATHS.cardBulletPea,
+        CARD_BULLET_PATHS.cardBulletDujuan,
+        CARD_BULLET_PATHS.cardBulletJack,
+        CARD_BULLET_PATHS.cardBulletMouth,
+        CARD_BULLET_PATHS.cardBulletPeach,
+        CARD_BULLET_PATHS.cardBulletYulin,
+        CARD_BULLET_PATHS.cardBulletCurse,
+    ]);
+    //  诅咒菇是整套里唯一一条非白拖尾（用户「紫色三角形的拖尾」）。
+    const curse = zcMissileTrailOf(CARD_BULLET_PATHS.cardBulletCurse)!;
+    const [curseRed, curseGreen, curseBlue] = curse.color;
+    assert.ok(curseBlue > curseRed && curseRed > curseGreen,
+        `诅咒菇要紫色，现在是 ${curse.color.join(',')}`);
+    for (const key of ['cardBulletPea', 'cardBulletDujuan', 'cardBulletJack',
+        'cardBulletMouth', 'cardBulletPeach', 'cardBulletYulin'] as const) {
+        assert.deepEqual([...zcMissileTrailOf(CARD_BULLET_PATHS[key])!.color], [255, 255, 255],
+            `${key} 要白色拖尾`);
+    }
 });
 
 test('拖尾：每条登记的配置都是「宽端贴弹体、往外收成尖」、长度为正、起点在弹体后方', () => {

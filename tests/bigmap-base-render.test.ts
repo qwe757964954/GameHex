@@ -196,8 +196,7 @@ test('名字牌只在选中时出现：无底板、两行「名称 / 等级N」'
 test('建造中的格用这座建筑自己的图，不再退回通用脚手架', () => {
     const h = buildBase();
     const building = { rect: { width: 212, height: 212 }, originalSize: { width: 212, height: 212 }, offset: { x: 0, y: 0 } };
-    const scaffold = { rect: { width: 96, height: 96 }, originalSize: { width: 96, height: 96 }, offset: { x: 0, y: 0 } };
-    h.view.setArt({ ...h.art, buildings: new Map([[71001, building]]), construction: scaffold });
+    h.view.setArt({ ...h.art, buildings: new Map([[71001, building]]) });
     const data = (h.view as unknown as { data: { plots: readonly Record<string, unknown>[] } }).data;
     // 4 号格改成「建造中」：投影层不给在建建筑 `buildingId`，id 只能来自 `queueBuildingIds`。
     h.view.render({
@@ -208,5 +207,4 @@ test('建造中的格用这座建筑自己的图，不再退回通用脚手架',
     } as never);
     const slot = h.view.slots.get(4) as unknown as { icon: { spriteFrame: unknown } };
     assert.equal(slot.icon.spriteFrame, building, '在建也要用这座建筑自己的图（不要通用脚手架）');
-    assert.notEqual(slot.icon.spriteFrame, scaffold);
 });

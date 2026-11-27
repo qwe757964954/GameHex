@@ -2,7 +2,7 @@ import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCCombatTargetKind, ZCHexState, ZCUnitState } from '../ZCGameTypes';
 import { ZC_OWNER_ORDER, type ZCOwner } from '../ZCMapConfig';
-import { isZCAwakeMonster } from './ZCNeutralFeatureSystem';
+import { isZCAwakeMonster } from '../ZCNeutralResourceGroup';
 import { ZCSkillTargetMode } from '../ZCSkillRuntime';
 
 export interface ZCPoint { readonly x: number; readonly y: number }

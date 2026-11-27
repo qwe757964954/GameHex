@@ -1,4 +1,5 @@
 import { ZC_RUNTIME_CONFIG } from '../zcds/model/ZCRuntimeConfigStore';
+import { CARD_LEVEL_UP_TABLE, PVP_BOND_TABLE, PVP_CARD_TABLE } from '../../core/config/TableNames';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
 import {
@@ -15,6 +16,7 @@ import {
     parseCard,
     parseCardCatalogRow,
 } from '../zcds/model/ZCGameRuntimeConfig';
+export { parseCardCatalogRow };
 import type { PvpHeroInfo } from './PvpHeroService';
 
 /**
@@ -61,7 +63,7 @@ export async function ensureLineupDecks(): Promise<readonly ZCDeckCard[]> {
     if (getPlayerDeck().length > 0) return getPlayerDeck();
 
     const revision = ZC_RUNTIME_CONFIG.revision;
-    const [cardRows, bondRows] = await Promise.all([readRows('pvpCard'), readRows('pvpBond')]);
+    const [cardRows, bondRows] = await Promise.all([readRows(PVP_CARD_TABLE), readRows(PVP_BOND_TABLE)]);
     if (ZC_RUNTIME_CONFIG.revision !== revision) return getPlayerDeck();
     const { player, enemy } = parseDecks(cardRows);
     if (player.length === 0) {
@@ -87,7 +89,7 @@ export async function loadPvpHeroCards(infos: readonly PvpHeroInfo[]): Promise<r
     const known = new Set<string>();
     const cards: ZCDeckCard[] = [];
 
-    for (const row of await readRows('pvpCard')) {
+    for (const row of await readRows(PVP_CARD_TABLE)) {
         try {
             const card = parseCardCatalogRow(row);
             known.add(card.id);
@@ -117,7 +119,7 @@ export async function loadPvpCatalogCards(): Promise<readonly ZCDeckCard[]> {
     const cards: ZCDeckCard[] = [];
     const found = new Set<string>();
 
-    for (const row of await readRows('pvpCard')) {
+    for (const row of await readRows(PVP_CARD_TABLE)) {
         try {
             const card = parseCardCatalogRow(row);
             if (!card.enabled || isHqCard(card) || found.has(card.id)) continue;
@@ -133,7 +135,7 @@ export async function loadPvpCatalogCards(): Promise<readonly ZCDeckCard[]> {
 /** 从 `cardLevelUp` 取每张卡的最高档位；布阵页按它钳制后端等级。 */
 export async function loadPvpHeroLevelCaps(): Promise<ReadonlyMap<string, number>> {
     const caps = new Map<string, number>();
-    for (const row of (await readRows('cardLevelUp')) as readonly IRefcardLevelUp[]) {
+    for (const row of (await readRows(CARD_LEVEL_UP_TABLE)) as readonly IRefcardLevelUp[]) {
         const key = String(row.id);
         caps.set(key, Math.max(caps.get(key) ?? 0, row.level));
     }
@@ -144,7 +146,7 @@ export async function loadPvpHeroLevelCaps(): Promise<ReadonlyMap<string, number
  * 读 cardLevelUp 原始行。升级弹窗要用整行（消耗、两种经验），不要只抽等级。
  */
 export async function loadCardLevelUpRows(): Promise<readonly unknown[]> {
-    return readRows('cardLevelUp');
+    return readRows(CARD_LEVEL_UP_TABLE);
 }
 
 /**
@@ -156,7 +158,7 @@ export async function loadCardLevelUpRows(): Promise<readonly unknown[]> {
  */
 export async function loadPvpCardRarities(): Promise<ReadonlyMap<string, number>> {
     const rarities = new Map<string, number>();
-    for (const value of await readRows('pvpCard')) {
+    for (const value of await readRows(PVP_CARD_TABLE)) {
         if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
         const row = value as Record<string, unknown>;
         const id = Number(row.id);
@@ -183,7 +185,7 @@ export async function loadArmySkillLevelUpRows(): Promise<readonly IRefarmySkill
  * 与 `loadCardLevelUpRows` 同一条「原始行」口径，不另写一套解析。
  */
 export async function loadPvpCardRawRow(cardId: string): Promise<IRefpvpCard | null> {
-    for (const row of await readRows('pvpCard')) {
+    for (const row of await readRows(PVP_CARD_TABLE)) {
         const record = row as IRefpvpCard;
         if (String(record.id) === String(cardId)) return record;
     }
@@ -200,7 +202,7 @@ export async function loadPvpUnitGrowthRows(): Promise<readonly IRefpvpUnitGrowt
  * 战力要连算 8 张，逐张走 loadPvpCardRawRow 会反复读整表。
  */
 export async function loadPvpCardRawRows(): Promise<readonly IRefpvpCard[]> {
-    return (await readRows('pvpCard')) as readonly IRefpvpCard[];
+    return (await readRows(PVP_CARD_TABLE)) as readonly IRefpvpCard[];
 }
 
 /** 当前阵容的羁绊加成（供加成条展示）。deck 为空时返回中性值。 */

@@ -1,9 +1,11 @@
 /**
- * 邮件列表行，575×170。未读/已读/已领取三态换行底图、状态字和印章。
+ * 邮件列表行，560×108。未读/已读/已领取三态换行底图、状态字和印章。
+ * v2 在行内加了快捷「领取」按钮：可领取（`!take`）时显示，点击交给宿主单封领取。
  * 行会被虚拟列表复用，render 必须绝对赋值；行底图由宿主预加载后传入，避免闪上一行的图。
  */
 
 import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { RedDot } from '../common/RedDot';
 import { mailStampVisible, mailStateTextVisible } from './MailArt';
 import { IMailRowView, MAIL_STATE_UNREAD } from './MailTable';
 
@@ -38,6 +40,12 @@ export class MailRow extends Component {
     @property({ type: Node, tooltip: 'TakenStamp：「已领取」印章（只有已领取显示）' })
     takenStamp: Node = null;
 
+    @property({ type: RedDot, tooltip: 'UnreadDot：未读红点（工程通用 RedDot，按未读态显隐）' })
+    unreadDot: RedDot = null!;
+
+    @property({ type: Button, tooltip: 'ClaimBtn：行内「领取」（可领取时显示）' })
+    claimButton: Button = null!;
+
     @property({ type: Button, tooltip: '本节点：整行可点（打开详情）' })
     button: Button = null!;
 
@@ -48,11 +56,15 @@ export class MailRow extends Component {
      */
     onOpen: ((id: string) => void) | null = null;
 
+    /** 行内领取回调（同样由宿主每次铺行重设）。 */
+    onClaim: ((id: string) => void) | null = null;
+
     /** 当前渲染的是哪一封（回调里用）—— 每次 `render` 覆盖。 */
     private mailId = '';
 
     protected onLoad(): void {
         this.button.node.on(Button.EventType.CLICK, this.emitOpen, this);
+        this.claimButton.node.on(Button.EventType.CLICK, this.emitClaim, this);
     }
 
     /** 铺一行（所有状态绝对赋值）。 */
@@ -65,10 +77,16 @@ export class MailRow extends Component {
         // 状态文本：未读 / 已领取都是空串 ⇒ 必须同时关节点（否则上一行的「已读」会留着）
         // 「哪一态显示文本 / 印章」由 `MailArt` 出（口径唯一，别在这里复述那张表）
         this.stateLabel.string = view.stateText;
-        this.stateLabel.node.active = mailStateTextVisible(view.state);
+        this.stateLabel.node.active = mailStateTextVisible(view.state) && !view.takeable;
 
         // 印章：只有「已领取」显示
         this.takenStamp.active = mailStampVisible(view.state);
+
+        // 行内领取：可领取时显示；与状态文本互斥，避免同一行右端叠两层
+        this.claimButton.node.active = view.takeable;
+
+        // 未读红点：接入工程通用 RedDot，由三态数据驱动而不是常亮
+        this.unreadDot.setRedDot(view.state === MAIL_STATE_UNREAD ? 1 : 0);
 
         // 行底图：未读一张、已读/已领取一张
         const frame = view.state === MAIL_STATE_UNREAD ? art.unread : art.read;
@@ -83,5 +101,10 @@ export class MailRow extends Component {
     private emitOpen(): void {
         if (!this.mailId) return;
         this.onOpen?.(this.mailId);
+    }
+
+    private emitClaim(): void {
+        if (!this.mailId) return;
+        this.onClaim?.(this.mailId);
     }
 }

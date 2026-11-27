@@ -6,6 +6,27 @@
  *
  * 零 `cc` 依赖（可被 `tests/role.test.ts` 直接 import）。
  */
+
+/**
+ * 品质名（1..7）。真源是 `gameConfig.qualityname`，未加载时按这份兜底；
+ * 宝石详情与一键合成共用，别再各写一张表。
+ */
+const ROLE_QUALITY_NAMES: Readonly<Record<number, string>> = {
+    1: '普通',
+    2: '精良',
+    3: '优秀',
+    4: '史诗',
+    5: '传说',
+    6: '绝世',
+    7: '神话',
+};
+
+/** 品质名；越界 / 空值按 1（普通）收口，不返回空串（Label 空串会留白）。 */
+export function roleQualityName(quality: number): string {
+    const n = Math.floor(quality) || 1;
+    return ROLE_QUALITY_NAMES[n] ?? ROLE_QUALITY_NAMES[1];
+}
+
 export const ROLE_TEXTS = {
     /** 战斗力占位（`--`）。角色页现在统一按数值写（0 也显示），保留给需要区分「未取到」的界面。 */
     powerUnknown: '--',
@@ -43,19 +64,30 @@ export const ROLE_TEXTS = {
     gemChooseSocket: '请先选择装备上的宝石孔',
     gemInvalid: '该宝石无法用于当前孔位',
     gemUnavailable: '当前装备方案没有这个宝石孔',
-    gemSocket: (order: number) => `宝石孔 ${order}`,
+    gemSocket: (order: number) => `第 ${order} 孔`,
+    gemEmptySocket: '暂未镶嵌',
+    gemSkill: (name: string) => `生效技能：${name}`,
     gemUnknown: (id: string) => `宝石 ${id}`,
-    gemLine: (name: string, count: number) => `${name} × ${count}`,
+    gemDataLoading: '宝石数据同步中，请稍后再试',
     gemOn: '镶嵌',
     gemReplace: '替换',
     gemDown: '卸下',
-    gemDownConfirm: (name: string) => `确定卸下「${name}」？`,
+    gemDownPrompt: '卸下后属性失效，是否继续？',
     gemChooseReplacement: '选择替换',
     gemCompose: '一键合成',
+    gemBagEntry: '宝石背包',
     gemComposeConfirm: '合成',
-    gemComposeAgain: '确认合成高品质宝石',
+    /** 高品质二次确认的按钮文案（「确认合成传说宝石」）；品质名由调用方按最高档取。 */
+    gemComposeAgain: (qualityName: string) => `确认合成${qualityName}宝石`,
     gemComposeEmpty: '暂无可合成的宝石',
-    gemComposeMaterials: '以下宝石将用于合成',
+    /** 第一段标题：材料总颗数（按品质汇总后只报总数）。 */
+    gemComposeSummary: (gems: number) => `将消耗 ${gems} 颗宝石`,
+    /** 第二段标题：按 `gemQuality.consume` 逐档估算的产出总颗数。 */
+    gemComposeOutput: (gems: number) => `预计产出 ${gems} 颗宝石`,
+    gemComposeTip: '合成后材料不可找回',
+    gemComposeWarn: (qualityName: string) => `含${qualityName}宝石，合成后无法找回`,
+    gemComposeChipCount: (count: number) => `×${count}`,
+    gemComposeCancel: '取消',
     gemChanged: '宝石操作成功',
     gemFilter: '按装备部位筛选',
     gemFilterAll: '全部',
@@ -80,6 +112,7 @@ export const ROLE_TEXTS = {
     equipPlanEmpty: '暂无装备方案',
     equipAllLevel: '一键强化',
     equipAllLevelConfirm: '一键强化会消耗金币及对应装备的图纸，是否继续？',
+    equipManage: '装备操作',
     equipWear: '穿戴',
     equipDecompose: '分解',
     equipDecomposeConfirm: (name: string) => `分解「${name}」后无法找回，是否继续？`,
@@ -96,9 +129,35 @@ export const ROLE_TEXTS = {
     equipDetails: (rank: number, level: number, attack: number, hp: number) =>
         [`${rank}阶`, level > 0 ? `Lv.${level}` : '', `攻击力 +${attack}`, `生命 +${hp}%`].filter(Boolean).join('\n'),
     gemComposed: '宝石合成成功',
+    gemPlanCleared: '已清空宝石方案',
+    gemPlanPartiallyCleared: '部分宝石已卸下，方案未清空',
+    gemRefineUnavailable: '暂无可洗练的属性',
 
     /** 宝石页签没有可显示的分页。 */
     equipEmpty: '暂无装备',
+
+    /** 装备分解模式（入口 / 筛选 / 底部操作条）。 */
+    decomposeEntry: '装备分解',
+    decomposeRank: (rank: number) => `≤${rank}阶`,
+    decomposeQuality: (quality: number) => `≤${roleQualityName(quality)}`,
+    decomposeAll: '全部',
+    decomposeSelectAll: '全选',
+    decomposeEmpty: '暂无可分解装备',
+    decomposeSelected: (count: number, limit: number, gain: number) => `已选 ${count}/${limit} · 预计返还 ×${gain}`,
+    decomposeConfirm: (count: number) => (count > 0 ? `分解 ${count} 件` : '分解'),
+    decomposeLimit: '一次最多分解 99 件装备',
+    decomposeFailed: '分解失败，请稍后再试',
+    decomposePartial: (count: number) => `${count} 件装备未能分解`,
+    decomposeDone: '分解成功',
+    /** 分解弹窗（蓝湖效果稿）。 */
+    decomposeScrollHint: '上下滑动查看更多 · 一次最多分解 99 件',
+    decomposeBagLine: (bag: number, decomposable: number, limit: number) =>
+        `背包 ${bag} 件 · 可分解 ${decomposable} 件 · 一次最多分解 ${limit} 件`,
+    decomposeSelectedCount: (count: number, limit: number) => `已选 ${count} 件 / ${limit}`,
+    decomposeCountTitle: (count: number) => (count > 0 ? `分解 ${count} 件` : '分解'),
+    decomposeNoRecover: '关闭后不可找回',
+    decomposeYieldNote: '按装备品阶基础返还 + 已投入养成材料的 70% 计算',
+    decomposeFootnote: '分解后装备与已投入的强化 / 升品材料无法找回 · 返还数量以服务端结算为准',
 
     /** 尚未接的请求（明确提示，不静默失败）。 */
     offline: '网络未连接，请稍后再试',

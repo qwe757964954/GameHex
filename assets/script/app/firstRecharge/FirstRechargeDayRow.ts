@@ -1,5 +1,5 @@
 import { _decorator, Component, Label, Node, SpriteFrame, UITransform } from 'cc';
-import { qualityFrameName } from './FirstRechargeArt';
+import { qualityFrameName } from '../common/QualityFrameArt';
 import type { IFirstRechargeItemInfo } from './FirstRechargeArt';
 import { FirstRechargeSlot } from './FirstRechargeSlot';
 import type { FirstRechargeDayState, IFirstRechargeReward } from './FirstRechargeTable';

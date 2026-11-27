@@ -53,10 +53,10 @@ export const ZC_NEUTRAL_BURST_COUNT = 12;
 export const ZC_NEUTRAL_BURST_HALF_ANGLE_DEG = 26;
 
 /** 初速度（px/s）。*/
-export const ZC_NEUTRAL_BURST_SPEED = 650;
+const ZC_NEUTRAL_BURST_SPEED = 650;
 
 /** 初速度的随机幅度（±12%）—— 不加抖动的话 12 条轨迹会叠成一束。*/
-export const ZC_NEUTRAL_BURST_SPEED_JITTER = 0.12;
+const ZC_NEUTRAL_BURST_SPEED_JITTER = 0.12;
 
 /** 重力加速度（px/s²）：抛物线靠它把粒子拉回来。*/
 export const ZC_NEUTRAL_BURST_GRAVITY = 1500;
@@ -66,50 +66,41 @@ export const ZC_NEUTRAL_BURST_GRAVITY = 1500;
  *
  * 12 枚 × 0.025s = 0.275s 铺开 ⇒ 绝不会同一帧全部生成（一帧才 16ms）。
 */
-export const ZC_NEUTRAL_BURST_STAGGER_SECONDS = 0.025;
+const ZC_NEUTRAL_BURST_STAGGER_SECONDS = 0.025;
 
 /** 单枚粒子的存活时长基准（秒）。*/
-export const ZC_NEUTRAL_BURST_LIFE_SECONDS = 1.1;
+const ZC_NEUTRAL_BURST_LIFE_SECONDS = 1.1;
 
 /** 存活时长的随机幅度（±15%）。*/
-export const ZC_NEUTRAL_BURST_LIFE_JITTER = 0.15;
+const ZC_NEUTRAL_BURST_LIFE_JITTER = 0.15;
 
 /** 生命末段淡出时长（秒）——没落回地面的那几枚走这条。*/
-export const ZC_NEUTRAL_BURST_FADE_SECONDS = 0.25;
+const ZC_NEUTRAL_BURST_FADE_SECONDS = 0.25;
 
 /** 落回地块表面后的快速淡出时长（秒）：从这一刻起 `offsetY` 冻在 0，不穿模。*/
 export const ZC_NEUTRAL_BURST_SURFACE_FADE_SECONDS = 0.12;
 
 /** 基础缩放的基准值（`1` = icon 的设计边长）与随机幅度 ⇒ 实际 0.8 ~ 1.2。*/
-export const ZC_NEUTRAL_BURST_BASE_SCALE = 1;
-export const ZC_NEUTRAL_BURST_SCALE_JITTER = 0.2;
+const ZC_NEUTRAL_BURST_BASE_SCALE = 1;
+const ZC_NEUTRAL_BURST_SCALE_JITTER = 0.2;
 
 /** 翻面频率区间（次/秒）：每枚落在这个区间里的随机值，12 枚不会同步翻。*/
-export const ZC_NEUTRAL_BURST_FLIP_MIN_HZ = 2;
-export const ZC_NEUTRAL_BURST_FLIP_MAX_HZ = 4;
-
-/**
- * 整次喷发的上限时长（秒）= 最后一枚的出发时刻 + 它可能达到的最长生命。
- *
- * 只是给视图 / 队列兜底用的硬上限（防止脏数据让某枚永不消失）；实际收尾更早 ——
- * 绝大多数粒子在 ~0.8s 就落回台面淡掉了。
-*/
-export const ZC_NEUTRAL_BURST_TOTAL_SECONDS = (ZC_NEUTRAL_BURST_COUNT - 1) * ZC_NEUTRAL_BURST_STAGGER_SECONDS
-    + ZC_NEUTRAL_BURST_LIFE_SECONDS * (1 + ZC_NEUTRAL_BURST_LIFE_JITTER);
+const ZC_NEUTRAL_BURST_FLIP_MIN_HZ = 2;
+const ZC_NEUTRAL_BURST_FLIP_MAX_HZ = 4;
 
 /** 「+N」读数起点相对喷发原点的抬升（像素）—— 需求原话「上方间隔 40px」。*/
-export const ZC_NEUTRAL_BURST_LABEL_LIFT_PX = 40;
+const ZC_NEUTRAL_BURST_LABEL_LIFT_PX = 40;
 
 /** 「+N」在这 40px 之上再往上飘的距离（像素，与领地读数同值）。*/
-export const ZC_NEUTRAL_BURST_LABEL_RISE_PX = 96;
+const ZC_NEUTRAL_BURST_LABEL_RISE_PX = 96;
 
 /** 「+N」读数的总时长（秒）。*/
 export const ZC_NEUTRAL_BURST_LABEL_SECONDS = 1.15;
 
 /** 入场段占读数的比例：这段里 `0.6 → 1.18` 弹出，之后回落并淡出。*/
-export const ZC_NEUTRAL_BURST_LABEL_ENTRANCE_RATIO = 0.32;
-export const ZC_NEUTRAL_BURST_LABEL_POP_SCALE = 1.18;
-export const ZC_NEUTRAL_BURST_LABEL_FROM_SCALE = 0.6;
+const ZC_NEUTRAL_BURST_LABEL_ENTRANCE_RATIO = 0.32;
+const ZC_NEUTRAL_BURST_LABEL_POP_SCALE = 1.18;
+const ZC_NEUTRAL_BURST_LABEL_FROM_SCALE = 0.6;
 
 /**
  * 确定性哈希 → `[0, 1)`：给「同一 index 每次喷发长得不一样」的抖动取值用。

@@ -119,15 +119,21 @@ export class MatchingComposition extends ControllerBase {
         else if (event.phase === 'destroyed') this.dispose();
     }
 
-    private onStateChanged(state: IMatchingViewState): void {
-        this.mounted.page.render(state);
+    private onStateChanged(state: IMatchingViewState, source?: object): void {
+        const mounted = this.mounted;
+        if (!mounted || source !== mounted.controller) return;
+        mounted.page.render(state);
     }
 
-    private onHandoff(): void {
-        this.handOverCover(this.mounted.page.node);
+    private onHandoff(_payload: undefined, source?: object): void {
+        const mounted = this.mounted;
+        if (!mounted || source !== mounted.controller) return;
+        this.handOverCover(mounted.page.node);
     }
 
-    private onLeaveMatching(event: IMatchingLeave): void {
+    private onLeaveMatching(event: IMatchingLeave, source?: object): void {
+        const mounted = this.mounted;
+        if (!mounted || source !== mounted.controller) return;
         if (event.destination === 'battle') {
             ProcedureManager.navigate(GameRoute.Battle, event.entry);
         } else {

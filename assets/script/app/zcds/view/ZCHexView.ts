@@ -40,6 +40,19 @@ import { tileTypeFromLegacyHex, ZCPvpTileType } from '../model/ZCPvpTileRules';
 import { ZCOwner } from '../model/ZCMapConfig';
 import { neutralResourceVisualOf, ZCNeutralResourceVisual, type IZCGateEffect } from '../model/ZCNeutralResourceGroup';
 import {
+    ZC_MONSTER_FOCUS_GAP_ABOVE_BAR,
+    zcMonsterFocusButtonY,
+    zcMonsterFocusSpineArtLiftPx,
+    zcMonsterFocusSpineScale,
+    zcMonsterFocusSpineVisualOf,
+    zcMonsterFocusSpineY,
+    zcMonsterIdleTimeScale,
+    zcMonsterTintStateOf,
+    ZC_MONSTER_TINTS,
+    type ZCMonsterFocusSpineVisual,
+    type ZCMonsterTintState,
+} from '../model/ZCMonsterPresentation';
+import {
     ZC_CARD_FADE_START_PROGRESS,
     ZC_CARD_REVEAL_SECONDS,
     ZC_CARD_START_SECONDS,
@@ -86,23 +99,107 @@ import {
 const { ccclass, property } = _decorator;
 
 const MONSTER_FOCUS_STYLE = {
-    locked: { text: '未解锁', color: new Color(130, 140, 150) },
+    /**
+     * 未解锁：**不出文案**（2026-11-25 用户：「隐藏未解锁的文字提示」）。
+     *
+     * `text` 留空串而不是删掉这一支 —— `styleKey` 仍要靠它取色，`renderMonsterFocus`
+     * 也仍然整段只走一个分支；真正让它不出现的是那个 `node.active = false`。
+     */
+    locked: { text: '', color: new Color(130, 140, 150) },
     focus: { text: '集火野怪', color: new Color(45, 120, 225) },
     cancel: { text: '取消集火', color: new Color(235, 145, 55) },
 } as const;
 type ZCMonsterFocusStyleKey = keyof typeof MONSTER_FOCUS_STYLE;
 
 /**
- * 野怪集火按钮的三态底图（`image/spawn-region/frame_01/02/03`）。
+ * 野怪集火按钮**底边**与血条**顶边**的间距（屏幕 px）。
  *
- * 三张图是同一套 94×45 的九宫气泡（底部箭头本体就是气泡的一部分），只是配色不同
- * ⇒ 状态切换只换帧、不重建节点。prefab 默认绑 `frame_01`（locked），另外两张随对局
- * 由 `ZCGameLoader` 预加载后注入（见 `setMonsterFocusFrames`）。
+ * 2026-11-25 用户（配图圈住集火按钮）：「特效按钮移动到血条位置上方 3px 的位置」，
+ * 原值写死在 `positionMonsterHeader` 里的 `4`。
+ *
+ * 只影响野怪格的**按钮**：血条自己那个 `ZC_MONSTER_HEALTH_BAR_GAP`（6）是「模型头顶 →
+ * 血条底边」，两者互不牵连，别混着改。
+ *
+ * 2026-11-26 第 53 批：真源搬到 `model/ZCMonsterPresentation`（那里还有集火特效的锚点算式），
+ * 这里只做再导出 —— 已有 `import { ZC_MONSTER_FOCUS_GAP_ABOVE_BAR } from './ZCHexView'` 的调用方不受影响。
+ */
+export { ZC_MONSTER_FOCUS_GAP_ABOVE_BAR };
+
+/**
+ * 野怪集火按钮的现场特效（`bundles/battle/units/effects/野怪激活可攻击UI特效`，spine 3.8）。
+ *
+ * 口径（2026-11-25 用户）：可集火时**持续循环**播放；未解锁时定格在动画**倒数第 2 帧**
+ * 并压一层灰 —— 一眼看出"这格现在点不动"，不再靠气泡换图。
+ *
+ * 2026-11-26 第 59 批补（用户「按钮也需要是灰色的」）：灰**不只**发生在未解锁 ——
+ * 「已解锁但野怪还没激活」同样是循环 + 压灰。两件事必须分开：**灰跟野怪三态、定格跟解锁**，
+ * 三档判据在 `zcMonsterFocusSpineVisualOf`（少一档就退回"解锁即白"）。
+ *
+ * 动画名取自 skel 里唯一的动画（`action`）；名字变了这里要同改，否则特效静默不播
+ * （`applyMonsterFocusSpine` 拿不到动画就直接返回，不写状态、下一帧再试）。
 */
-export interface IZCMonsterFocusFrames {
-    readonly locked: SpriteFrame;
-    readonly focus: SpriteFrame;
-    readonly cancel: SpriteFrame;
+const MONSTER_FOCUS_SPINE_ANIMATION = 'action';
+/**
+ * 拿不到附件时间轴时的兜底回退量（30fps 一帧）。
+ *
+ * 🔴 正常路径**不走**这里：`action` 在墨迹翻页之后还有淡出关键帧（整段 ≈0.83s，
+ * 末帧 alpha 已掉到个位数），按"总时长 − 一帧"定位会停在最后一帧且几乎透明，
+ * 按钮看着像空的。真正的落点由 `monsterFocusLockedTime` 从附件时间轴算。
+*/
+const MONSTER_FOCUS_LOCKED_TAIL_SECONDS = 1 / 30;
+/**
+ * 集火特效「未激活 / 未解锁」时用的压灰色。
+ *
+ * 🔴 spine 顶点色是**乘算**（同 `ZC_MONSTER_SLEEP_GRAY` 那条）：这里给的是压暗倍率，不是一层
+ * 真正的灰度遮罩 —— 黄剑会变成暗黄而不是灰白。要真灰度只能换材质（`unit-outline-copy`
+ * 那套），代价是丢掉插槽色/透明度动画，不值当。
+ *
+ * 2026-11-26 用户：「按钮也需要是灰色的」—— 这档灰现在同时盖 `locked`（无相邻地块）
+ * 与 `idle`（已解锁但野怪未激活），见 `zcMonsterFocusSpineVisualOf`。
+*/
+const MONSTER_FOCUS_DIM_TINT = new Color(140, 146, 158, 255);
+/** 时间轴形状：只取定格要用的两个字段，避免依赖 `sp.spine` 的具体类型声明。 */
+interface IZCMonsterFocusTimeline {
+    readonly frames?: ArrayLike<number>;
+    readonly attachmentNames?: readonly unknown[];
+}
+interface IZCMonsterFocusAnimation {
+    readonly duration: number;
+    readonly timelines?: readonly IZCMonsterFocusTimeline[];
+}
+/**
+ * 附件时间轴上「倒数第 2 帧」的定格时刻（秒）。
+ *
+ * 🔴 必须从**附件时间轴**取，不能按总时长回退：`action` 里墨迹是 4 帧翻页
+ * （`hit_00000..hit_00003`），翻完之后还有一段淡出关键帧 —— 按总时长回退会落在
+ * 最后一帧，而那一帧已经淡到几乎看不见，按钮看着像空的（2026-11-25 实查）。
+ *
+ * 附件时间轴每格是一张图，取倒数第 2 格 **[自身起点, 下一格起点)** 的中点，
+ * 就是"定格在倒数第 2 张图"本身，与 fps / 帧数无关（换素材不用改代码）。
+*/
+function monsterFocusLockedTime(animation: IZCMonsterFocusAnimation): number {
+    const frames = monsterFocusInkFrames(animation);
+    if (frames.length >= 2) {
+        const from = frames[frames.length - 2];
+        const to = frames[frames.length - 1];
+        return from + (to - from) * 0.5;
+    }
+    return Math.max(0, animation.duration - MONSTER_FOCUS_LOCKED_TAIL_SECONDS);
+}
+/** 取帧数最多的那条附件时间轴（= 墨迹翻页）；运行时结构对不上就返回空数组走兜底。 */
+function monsterFocusInkFrames(animation: IZCMonsterFocusAnimation): ArrayLike<number> {
+    const timelines = animation.timelines;
+    if (!timelines) return [];
+    let best: ArrayLike<number> = [];
+    for (let i = 0; i < timelines.length; i += 1) {
+        const timeline = timelines[i];
+        const frames = timeline.frames;
+        // 只认附件时间轴（`attachmentNames` 是它的独有字段）：骨骼/变形时间轴的帧数更多，
+        // 混进来会把定格点算到别的轨道上。
+        if (!frames || !timeline.attachmentNames || frames.length <= best.length) continue;
+        best = frames;
+    }
+    return best;
 }
 const BUILDING_SYMBOLS: Readonly<Record<ZCBuildingType, string>> = {
     none: '', hq: '城', mine: '金', barracks: '兵', tower: '塔',
@@ -127,8 +224,19 @@ const RESOURCE_ICON_TARGET_SIZE = 128;
 const NEUTRAL_FEATURE_ICON_SCALE = 0.85;
 /** 中立资源统一上移量随格面高度缩放，图标、Spine 与兵团预览共用。*/
 export const NEUTRAL_RESOURCE_LIFT = HEX_GRID_FACE_HEIGHT * 0.08;
-const MONSTER_SLEEP_TINT = new Color(130, 150, 180, 255);
 const GATE_COOLDOWN_TINT = new Color(105, 105, 105, 255);
+
+/**
+ * 野怪三态染色的 `Color` 实例（数字真源在 `model/ZCMonsterPresentation`，那边零 `cc`）。
+ *
+ * 🔴 `Skeleton.color` 的 setter 内部会拷贝，共享这几个实例是安全的（同 `ZCUnitView` 的写法）。
+ * 每次 `renderContent` 都会走一遍，所以实例必须常驻 —— 不要每帧 `new Color`。
+ */
+const MONSTER_TINT_COLORS: Readonly<Record<ZCMonsterTintState, Color>> = {
+    sleep: new Color(ZC_MONSTER_TINTS.sleep.r, ZC_MONSTER_TINTS.sleep.g, ZC_MONSTER_TINTS.sleep.b, ZC_MONSTER_TINTS.sleep.a),
+    awake: new Color(ZC_MONSTER_TINTS.awake.r, ZC_MONSTER_TINTS.awake.g, ZC_MONSTER_TINTS.awake.b, ZC_MONSTER_TINTS.awake.a),
+    captured: Color.WHITE,
+};
 
 /**
  * 自选阶段的中立资源占位图（`image/gameui/whh`）额外乘的缩放。
@@ -649,16 +757,26 @@ export class ZCHexView extends Component {
     private unknownResourceFrame: SpriteFrame | null = null;
     private neutralResourceFrames: ReadonlyMap<string, SpriteFrame> | null = null;
     /**
-     * 野怪集火按钮的三态底图，由渲染层注入（见 `setMonsterFocusFrames`）。
-     * `null` = 没加载到 ⇒ 底图停留在 prefab 默认的 `frame_01`（locked），文字色仍按状态走。
+     * 集火特效当前落在哪一态（`true` = 未解锁定格、`false` = 可点循环、`null` = 还没画过）。
+     *
+     * `renderMonsterFocus` 每帧全量跑，只有靠这个 diff 才敢碰 `setAnimation` ——
+     * 每帧重设一次会把动画永远钉在第 1 帧。池化复用要连同 `initialize` 一起清。
     */
-    private monsterFocusFrames: IZCMonsterFocusFrames | null = null;
-    /** prefab 上默认绑的 locked 帧（`image/spawn-region/frame_01`）：三态图未注入时沿用它，别把底图刷成 null。*/
-    private monsterFocusPlaceholderFrame: SpriteFrame | null = null;
+    private monsterFocusSpineVisual: ZCMonsterFocusSpineVisual | null = null;
+    /**
+     * 上一帧这只野怪是不是还在中立手里（`null` = 这一格不是野怪，或还没画过）。
+     *
+     * 只服务「野怪被玩家方打下」那一拍：`true → false` 说明这一帧刚改归属，
+     * 置一次性标志让渲染层播出生特效（视图自己拿不到特效池）。
+     */
+    private monsterNeutralLastFrame: boolean | null = null;
+    /** 「野怪刚被玩家方打下」的一次性通知，`consumeMonsterCapturedFx()` 取走即空。*/
+    private monsterCapturedFxPending = false;
     private gateCooldownSeconds = 0;
     private portalUses = 0;
     private mowerSpeed = 0;
     private mowerVisible = true;
+    private portalAnimating = false;
     private readonly mowerOffset = new Vec3();
     /**
      * 兵力资源点表里配的卡 id（`rewardCardId`，如 `'68001'`）与要站几个
@@ -685,6 +803,15 @@ export class ZCHexView extends Component {
     private monsterOffsetY = 0;
     private monsterBarBase: Vec3 | null = null;
     private monsterFocusBase: Vec3 | null = null;
+    /** 集火特效（`FocusSpine`）进野怪态之前的局部坐标：离开野怪态时按它写回。*/
+    private monsterSpineBase: Vec3 | null = null;
+    /** 同上，缩放（第 56 批放大 1.5 倍后要能还原 —— 池化复用会把放大带进下一个地块）。*/
+    private monsterSpineBaseScale: Vec3 | null = null;
+    /**
+     * 集火特效骨架的 `bounds.y`（美术底边离节点原点的距离，骨架单位）；`null` = 读不到、走兜底常量。
+     * 只在第一次进野怪态时读一次（`getRuntimeData` 首次会算整份运行时数据）。
+     */
+    private monsterSpineArtLift: number | null | undefined = undefined;
     private resourceUnitBaseY = ZCHexView.RESOURCE_UNIT_POS_Y;
     private monsterHeadY?: number;
     private monsterBaseScaleX = 1;
@@ -828,6 +955,18 @@ export class ZCHexView extends Component {
      * 详见 docs/ZCHexView设计决策.md §11。
     */
     private resourceIconLayer: Node | null = null;
+    /**
+     * 角色层（渲染层注入）：单位与野怪共用的排序容器。
+     *
+     * 野怪的身体从 `ResourceLayer` 搬进来、血条与集火按钮从 `CooldownOverlay` 搬进来，
+     * 三者作为**一个角色**参与排序（组内层序固定：身体 → 血条 → 按钮）。
+     */
+    private characterLayer: Node | null = null;
+    /** 血条 / 集火按钮被借进角色层之前的父节点；退出野怪态时原样还回去（城墙与建筑共用同一根血条）。*/
+    private monsterBarHome: Node | null = null;
+    private monsterFocusHome: Node | null = null;
+    /** 跟着身体一起排序的节点（血条 → 按钮）；空 = 这一格当前没摆野怪。复用数组，不每帧新建。*/
+    private readonly monsterTrailing: Node[] = [];
     /** 资源图标当前是否被抬到 `resourceIconLayer`（false = 正常挂在 `BuildingLayer` 下）。*/
     private resourceIconRaised = false;
     /**
@@ -855,16 +994,19 @@ export class ZCHexView extends Component {
     monsterFocusButton: Button = null!;
     @property(Label)
     monsterFocusLabel: Label = null!;
-    @property(Sprite)
-    monsterFocusBackground: Sprite = null!;
+    /**
+     * 集火按钮的底特效（`ZCGameHex.prefab` 的 `FocusSpine`，挂在按钮节点里、文字之下）。
+     *
+     * 与文字节点同属一个 150×42 的点击区：按钮点位由 `positionMonsterHeader` 统一排，
+     * 特效只负责"看得出能不能点"，尺寸在 prefab 上按按钮大小标定。
+    */
+    @property({ type: sp.Skeleton, tooltip: '野怪集火按钮底特效：可点循环、未解锁定格倒数第2帧' })
+    monsterFocusSpine: sp.Skeleton = null!;
     @property(Sprite)
     monsterGround: Sprite = null!;
     private focusHexId = -1;
 
     onLoad(): void {
-        // 三态图未注入时底图停在 prefab 默认的 locked 帧，所以要先记下它；
-        // 之后 renderMonsterFocus 每帧全量赋 spriteFrame，缺图时赋回它而不是 null。
-        this.monsterFocusPlaceholderFrame = this.monsterFocusBackground.spriteFrame;
         this.monsterFocusButton.node.on(Button.EventType.CLICK, this.onMonsterFocus, this);
     }
 
@@ -909,8 +1051,51 @@ export class ZCHexView extends Component {
         if (track) track.trackTime = (now - attackStartedAt) * speed;
     }
 
+    /**
+     * 野怪「被玩家方打下」的那一拍只判一次：上一帧还是中立、这一帧改了归属 ⇒ 置一次性标志。
+     *
+     * 为什么要绕一圈：出生特效在 `ZCEffectPool`（渲染层持有），视图拿不到；而「刚改归属」
+     * 这件事只有视图每帧看得到（`renderContent` 里已经有 `state.owner`）。于是用
+     * 「置标志 → 渲染层 `consumeMonsterCapturedFx()` 取走」这条单向通道，
+     * 与 `drainBuildingShakes` 的「取走即空」同款。
+     *
+     * 只认**玩家方**（`ZCOwner.Player`）：敌方打下别人的野怪不该播我方的出生特效。
+     */
+    private noteMonsterCapture(monster: boolean, owner: string, tintState: ZCMonsterTintState | null): void {
+        const neutralNow = monster ? owner === 'neutral' : null;
+        if (neutralNow === null) {
+            this.monsterNeutralLastFrame = null;
+            return;
+        }
+        if (this.monsterNeutralLastFrame === true && !neutralNow
+            && tintState === 'captured' && owner === ZCOwner.Player) {
+            this.monsterCapturedFxPending = true;
+        }
+        this.monsterNeutralLastFrame = neutralNow;
+    }
+
+    /** 取走「野怪刚被玩家方打下」的一次性通知；没有就是 `false`（取走即空，不会连播两帧）。*/
+    consumeMonsterCapturedFx(): boolean {
+        if (!this.monsterCapturedFxPending) return false;
+        this.monsterCapturedFxPending = false;
+        return true;
+    }
+
+    /**
+     * 出生特效应挂的宿主（野怪身体）。`null` = 这一格当前没画出资源单位（被隐藏 / 还没重建）。
+     *
+     * 只读 `resourceUnitNodes[0]`：野怪格恒定一只，多只的是「兵团资源点」，那种格不会有
+     * `captured` 态（`zcMonsterTintStateOf` 只对 `monster` 出结果）。
+     */
+    get monsterFxHost(): Node | null {
+        return this.resourceUnitNodes.length ? this.resourceUnitNodes[0] : null;
+    }
+
     renderMonsterFocus(state: DeepReadonly<ZCHexState>, now: number): void {
         const feature = state.neutralFeature;
+        //  先搬层再判显示：被玩家方打下（`claimed`）之后按钮要收起来，但身体和血条还在画，
+        //  它们仍得跟着野怪一起排序 —— 所以这一步不能放在下面的早退分支之后。
+        this.syncMonsterTrailingNodes();
         const visible = feature !== undefined && typeof feature.awake === 'boolean' && !feature.claimed;
         this.monsterFocusButton.node.active = visible;
         if (!visible || !feature) return;
@@ -918,15 +1103,61 @@ export class ZCHexView extends Component {
         const focused = feature.focusOwners ? feature.focusOwners.includes(ZCOwner.Player) : false;
         const focusReadyAt = feature.focusReadyAt ? (feature.focusReadyAt.player ?? 0) : 0;
         const remaining = Math.max(0, focusReadyAt - now);
-        this.monsterFocusButton.interactable = unlocked && remaining <= 0;
+        //  🔴 按钮**恒可点**（2026-11-26 第 56 批用户：「点击特效按钮后弹出提示UI」）。
+        //  以前这里是 `unlocked && remaining <= 0`，点不动 ⇒ 玩家得不到任何反馈；
+        //  现在把「能不能集火」交给模型判（`monsterFocusBlockReason`），控制器按原因弹吐司：
+        //  不相邻 ⇒「相邻地块才能集火野怪」、冷却中 ⇒「集火冷却中，请稍候」。
+        //  视觉上的"现在点不动"仍由底特效定格压灰 + 文案收起表达，与可点性解耦。
+        this.monsterFocusButton.interactable = true;
         const styleKey: ZCMonsterFocusStyleKey = !unlocked ? 'locked' : focused ? 'cancel' : 'focus';
         const style = MONSTER_FOCUS_STYLE[styleKey];
-        const frame = this.monsterFocusFrames ? (this.monsterFocusFrames[styleKey] ?? null) : null;
-        this.monsterFocusLabel.string = remaining > 0 ? `${style.text} ${remaining.toFixed(1)}s` : style.text;
+        // 未解锁整段文字收起（2026-11-25 用户：「隐藏未解锁的文字提示」）。
+        // 那一态只留底特效定格 + 压灰，靠 `FocusSpine` 自己表达"点不动"；
+        // 顺带把冷却秒数一起挡住 —— 未解锁时 `remaining` 可能非 0，压上去会读成假倒计时。
+        this.monsterFocusLabel.node.active = unlocked;
+        this.monsterFocusLabel.string = unlocked
+            ? (remaining > 0 ? `${style.text} ${remaining.toFixed(1)}s` : style.text)
+            : '';
         this.monsterFocusLabel.color = style.color;
-        this.monsterFocusBackground.spriteFrame = frame ?? this.monsterFocusPlaceholderFrame;
-        // 底图恒为白色：颜色烘在帧里，状态色只上文字。prefab 已按此配置，这里全量赋一次防池化复用残留。
-        this.monsterFocusBackground.color = Color.WHITE;
+        //  按钮底特效的颜色跟**野怪三态**走（未激活 = 灰），定格仍只跟「解锁」走。
+        //  两者分开是因为它们是两件事：灰 = 这怪还没激活；定格 = 这一下点不出结果。
+        const tintState = zcMonsterTintStateOf({
+            monster: neutralResourceVisualOf(state.neutralResourceId) === ZCNeutralResourceVisual.Monster,
+            owner: state.owner,
+            awake: feature.awake === true,
+            hp: state.hp,
+        });
+        this.applyMonsterFocusSpine(zcMonsterFocusSpineVisualOf({ unlocked, tintState }));
+    }
+
+    /**
+     * 集火特效三档：`locked` = 定格 + 压灰；`idle` = 循环 + 压灰；`active` = 循环 + 原色。
+     *
+     * `renderMonsterFocus` 每帧都会进来（全量渲染），所以这里自带 diff：只有档位真的翻转
+     * 才碰 `setAnimation` —— 否则每帧重播一次，动画永远停在第 1 帧。
+     */
+    private applyMonsterFocusSpine(visual: ZCMonsterFocusSpineVisual): void {
+        if (this.monsterFocusSpineVisual === visual) return;
+        const spine = this.monsterFocusSpine;
+        const animation = spine.findAnimation(MONSTER_FOCUS_SPINE_ANIMATION);
+        // 骨架数据还没就绪（首帧 / prefab 换资源）：不写状态，下一帧再试。
+        if (!animation) return;
+        if (visual !== 'locked') {
+            spine.timeScale = 1;
+            spine.color = visual === 'active' ? Color.WHITE : MONSTER_FOCUS_DIM_TINT;
+            spine.setAnimation(0, MONSTER_FOCUS_SPINE_ANIMATION, true);
+            this.monsterFocusSpineVisual = visual;
+            return;
+        }
+        // 定格：先按**单次**播放摆到倒数第 2 帧，再把时间轴钉死（`timeScale = 0`），
+        // 最后手动推一帧把姿势算出来（dt = 0 ⇒ 只应用不前进）。
+        const track = spine.setAnimation(0, MONSTER_FOCUS_SPINE_ANIMATION, false);
+        if (!track) return;
+        track.trackTime = monsterFocusLockedTime(animation);
+        spine.timeScale = 0;
+        spine.updateAnimation(0);
+        spine.color = MONSTER_FOCUS_DIM_TINT;
+        this.monsterFocusSpineVisual = visual;
     }
 
     initialize(onClick: () => void, hexId = -1): void {
@@ -946,6 +1177,13 @@ export class ZCHexView extends Component {
         // 这里捕一份基准给翻面动效用；顺手清掉上一局的补间状态。
         this.basePosition = this.node.position.clone();
         this.lastActivationFx = null;
+        // 集火特效的态是每局表现状态：池化复用回来时清掉 diff，让下一帧重新摆姿势
+        //（否则上一局停在"未解锁定格"，这一局即使可点也不会重新起播）。
+        this.monsterFocusSpineVisual = null;
+        // 野怪的三态染色与「刚被打下」通知同样是每局一次的表现状态：池化复用回来若还留着
+        // 上一局的 `true`，新局第一帧就会误判成「刚改归属」而在空地上播一次出生特效。
+        this.monsterNeutralLastFrame = null;
+        this.monsterCapturedFxPending = false;
         // 脉冲层与开口光共用 `GroundGlow`：这里把 prefab 的原始画布尺寸存一份，
         // 离开脉冲段时按它写回（见 `restorePulseLayer`）。GroundGlow 是 Sprite，
         // `UIRenderer` 强制 requireComponent(UITransform)，无需再判空。
@@ -995,6 +1233,7 @@ export class ZCHexView extends Component {
         // `initialize` 之后才注入的，此刻它还是 null，那个方法会走早退分支收不回来。
         this.resourceIconRaised = false;
         this.mowerVisible = true;
+        this.portalAnimating = false;
         this.iconSprite.node.active = true;
         if (this.iconSprite.node.parent !== this.buildingLayer) {
             this.iconSprite.node.setParent(this.buildingLayer);
@@ -1033,6 +1272,27 @@ export class ZCHexView extends Component {
     */
     setResourceIconLayer(layer: Node | null): void {
         this.resourceIconLayer = layer ?? null;
+    }
+
+    /**
+     * 注入角色层（`mapLayer/CharacterLayer`）。新建地块视图时由渲染层喂一次。
+     *
+     * 野怪要跟单位一起按 y 排序（2026-11-26 第 55 批），所以身体 / 血条 / 集火按钮
+     * 都得挂进同一个父节点 —— 跨父节点没法比兄弟序。没注入时一律留在原地，
+     * 排序退化成「野怪整体在单位之下」，但绝不按猜的父节点乱挂。
+     */
+    setCharacterLayer(layer: Node | null): void {
+        this.characterLayer = layer ?? null;
+    }
+
+    /** 参与排序的野怪身体（= `resourceUnitNodes[0]`）；`null` = 这一格没摆野怪。*/
+    get monsterBodyNode(): Node | null {
+        return this.resourceUnitNodes.length ? this.resourceUnitNodes[0] : null;
+    }
+
+    /** 跟在身体之后一起排序的节点（血条 → 集火按钮），空 = 这一格没摆野怪。*/
+    get monsterTrailingNodes(): readonly Node[] {
+        return this.monsterTrailing;
     }
 
     /**
@@ -1147,23 +1407,18 @@ export class ZCHexView extends Component {
         this.contentKey = '';
     }
 
-    /**
-     * 注入野怪集火按钮的三态底图（`locked/focus/cancel` ⇒ `image/spawn-region/frame_01/02/03`）。
-     *
-     * 尺寸（150×42）、九宫（SLICED）与白色染底都在 prefab 里定死了 —— 这三张图的箭头是
-     * 气泡本体的一部分，节点高度必须撑到 42 才不会被九宫边距吃掉中段。本方法只换帧。
-     * 染色交给 `renderMonsterFocus` 每帧全量刷（底图恒白，缺图时保留 prefab 的 locked 帧）。
-    */
-    setMonsterFocusFrames(frames: IZCMonsterFocusFrames | null): void {
-        this.monsterFocusFrames = frames;
-    }
-
     setGateCooldownSeconds(seconds: number): void {
         this.gateCooldownSeconds = seconds;
     }
 
     setPortalUses(uses: number): void {
         this.portalUses = uses;
+    }
+
+    setPortalAnimating(playing: boolean): void {
+        if (this.portalAnimating === playing) return;
+        this.portalAnimating = playing;
+        this.applyResourceIconVisibility();
     }
 
     setMowerSpeed(speed: number): void {
@@ -1197,7 +1452,7 @@ export class ZCHexView extends Component {
     private applyResourceIconVisibility(): void {
         // 移动结束和地块动画的隐藏条件叠加，任一刷新都不能把另一方隐藏的图标回显。
         const isHidden = this.lastActivationFx ? this.lastActivationFx.hidden : false;
-        const visible = this.mowerVisible && !isHidden;
+        const visible = this.mowerVisible && !this.portalAnimating && !isHidden;
         if (this.iconSprite.node.active !== visible) this.iconSprite.node.active = visible;
     }
 
@@ -1259,6 +1514,7 @@ export class ZCHexView extends Component {
 
     render(presentation: Readonly<IZCHexPresentation>): void {
         const feature = presentation.state.neutralFeature;
+        if (!feature?.claimed || feature.portalAt === undefined) this.setPortalAnimating(false);
         if ((!feature || !feature.patrol || feature.claimed)
             && (this.monsterOffsetX || this.monsterOffsetY)) this.renderMonsterPatrol(0, 0);
         const { state } = presentation;
@@ -2019,23 +2275,112 @@ export class ZCHexView extends Component {
         if (this.monsterHeadY === undefined) return;
         const bar = this.healthBar.node;
         const focus = this.monsterFocusButton.node;
+        const spine = this.monsterFocusSpine ? this.monsterFocusSpine.node : null;
         this.monsterBarBase ??= bar.position.clone();
         this.monsterFocusBase ??= focus.position.clone();
+        if (spine) this.monsterSpineBase ??= spine.position.clone();
         const halfBar = bar.getComponent(UITransform).contentSize.height / 2;
         const halfButton = focus.getComponent(UITransform).contentSize.height / 2;
         // 实战中血条和按钮都挂在棋盘状态层，需要加上本格在棋盘上的坐标。
         const origin = bar.parent === this.node ? Vec3.ZERO : this.node.position;
         const x = origin.x + this.monsterOffsetX;
         const barY = origin.y + this.monsterOffsetY + this.monsterHeadY + ZC_MONSTER_HEALTH_BAR_GAP + halfBar;
+        const barTopY = barY + halfBar;
         bar.setPosition(x, barY, this.monsterBarBase.z);
-        focus.setPosition(x, barY + halfBar + 4 + halfButton, this.monsterFocusBase.z);
+        // 按钮**底边**贴血条顶边往上 `ZC_MONSTER_FOCUS_GAP_ABOVE_BAR`：
+        // 两个半高都加回去，才叫「按钮底边 ↔ 血条顶边」，不是中心距。
+        const buttonY = zcMonsterFocusButtonY(barTopY, halfButton);
+        focus.setPosition(x, buttonY, this.monsterFocusBase.z);
+        // 🔴 集火**特效**要单独落位。它挂在按钮节点里、美术整体画在**节点原点之上**
+        // （骨架 `bounds.y`），所以「原点到可见底边」还差 `bounds.y × 缩放` 那一段 ——
+        // 2026-11-26 第 56 批用户实测「特效还在血条上方约 100px」，就是这段没算。
+        // 现在：放大 1.5 倍（`ZC_MONSTER_FOCUS_SPINE_SCALE`），再把美术底边压到
+        // 「血条顶边 + 3px」那条线（`zcMonsterFocusSpineY` 返回的 y 减去这一段）。
+        // 传的是相对按钮的局部 y（按钮父节点 scale 恒 1）。
+        if (spine) {
+            this.monsterSpineBaseScale ??= spine.scale.clone();
+            const spineScale = zcMonsterFocusSpineScale(this.monsterSpineBaseScale.y);
+            if (spine.scale.y !== spineScale) spine.setScale(spineScale, spineScale, spine.scale.z);
+            const artLift = zcMonsterFocusSpineArtLiftPx(this.monsterFocusSpineArtLiftValue(), spineScale);
+            spine.setPosition(spine.position.x, zcMonsterFocusSpineY(barTopY, artLift) - buttonY, spine.position.z);
+        }
+    }
+
+    /**
+     * 集火特效骨架的 `bounds.y`（美术底边离节点原点的距离，骨架单位）。
+     * 只在第一次进野怪态时读一次；读不到（空骨架 / 单测桩）给 `null`，由纯函数走兜底常量。
+     */
+    private monsterFocusSpineArtLiftValue(): number | null {
+        if (this.monsterSpineArtLift !== undefined) return this.monsterSpineArtLift;
+        const skeleton = this.monsterFocusSpine;
+        const data = skeleton && skeleton.skeletonData ? skeleton.skeletonData.getRuntimeData(true) : null;
+        const boundsY = data ? data.y : null;
+        this.monsterSpineArtLift = Number.isFinite(boundsY) ? (boundsY as number) : null;
+        return this.monsterSpineArtLift;
     }
 
     private restoreMonsterHeader(): void {
         if (this.monsterBarBase) this.healthBar.node.setPosition(this.monsterBarBase);
         if (this.monsterFocusBase) this.monsterFocusButton.node.setPosition(this.monsterFocusBase);
+        if (this.monsterSpineBase && this.monsterFocusSpine) this.monsterFocusSpine.node.setPosition(this.monsterSpineBase);
+        //  放大 1.5 倍也要还原：池化复用会把放大的特效带进下一个（非野怪）地块。
+        if (this.monsterSpineBaseScale && this.monsterFocusSpine) {
+            this.monsterFocusSpine.node.setScale(this.monsterSpineBaseScale.x, this.monsterSpineBaseScale.y, this.monsterSpineBaseScale.z);
+        }
         this.monsterBarBase = null;
         this.monsterFocusBase = null;
+        this.monsterSpineBase = null;
+        this.monsterSpineBaseScale = null;
+        //  血条 / 集火按钮只是**借**进角色层参与排序（2026-11-26 第 55 批），退出野怪态
+        //  一律还给原来的父节点 —— 这一根血条城墙和建筑也在用，留在角色层会被当成
+        //  野怪的一部分，跟着一起被别的角色遮挡 / 排到奇怪的层上。
+        //  位置不用重算：角色层与 `CooldownOverlay` 共用棋盘坐标，原父节点在原点。
+        //  `healthBar` / `monsterFocusButton` 可能没绑（旧 prefab / 单测桩），缺哪个跳哪个。
+        if (this.healthBar && this.healthBar.node) this.restoreMonsterParent(this.healthBar.node, this.monsterBarHome);
+        if (this.monsterFocusButton && this.monsterFocusButton.node) {
+            this.restoreMonsterParent(this.monsterFocusButton.node, this.monsterFocusHome);
+        }
+        this.monsterBarHome = null;
+        this.monsterFocusHome = null;
+        this.monsterTrailing.length = 0;
+    }
+
+    private restoreMonsterParent(node: Node, home: Node | null): void {
+        if (!home || !home.isValid) return;
+        if (node.parent !== home) node.setParent(home);
+    }
+
+    /**
+     * 把野怪（身体 / 血条 / 集火按钮）搬进角色层，交给渲染层统一按 y 排序。
+     *
+     * 为什么由每帧的 `renderMonsterFocus` 触发、而不是建骨骼时顺手搬：
+     * `initialize` 里 `injectResourceUnits`（建骨骼）跑在 `attachCooldownOverlay`（把血条抬到
+     * `CooldownOverlay`）**之前**，那会儿血条还挂在格节点上，搬早了会被随后的抬高逻辑
+     * 按错误的坐标系重新落位（血条会飘到棋盘原点）。开打后的第一帧才不会踩这个顺序。
+     *
+     * 组内层序恒为「身体 → 血条 → 按钮」：血条画在头顶、y 比身体大，若让它单独按 y 排，
+     * 会被判成「更远先画」，结果反过来被自己的身体盖住（用户口径：血条不独立于单位）。
+     */
+    private syncMonsterTrailingNodes(): void {
+        const layer = this.characterLayer;
+        const body = this.resourceUnitNodes.length ? this.resourceUnitNodes[0] : null;
+        if (!layer || !layer.isValid || !this.monsterDefinition || !body || !body.isValid || !body.active) {
+            this.monsterTrailing.length = 0;
+            return;
+        }
+        const bar = this.healthBar.node;
+        const focus = this.monsterFocusButton.node;
+        if (body.parent !== layer) body.setParent(layer);
+        if (bar.parent !== layer) {
+            if (!this.monsterBarHome || !this.monsterBarHome.isValid) this.monsterBarHome = bar.parent;
+            bar.setParent(layer);
+        }
+        if (focus.parent !== layer) {
+            if (!this.monsterFocusHome || !this.monsterFocusHome.isValid) this.monsterFocusHome = focus.parent;
+            focus.setParent(layer);
+        }
+        this.monsterTrailing.length = 0;
+        this.monsterTrailing.push(bar, focus);
     }
 
     /** 一格共用一根血条，优先显示城墙耐久，其次建筑或野怪生命。*/
@@ -2179,10 +2524,20 @@ export class ZCHexView extends Component {
         const resourceUnits = wantsResourceUnits
             ? this.rebuildResourceUnitsIfNeeded()
             : this.hideResourceUnits();
-        const sleepingMonster = monster && !(state.neutralFeature && state.neutralFeature.awake);
+        //  野怪三态染色（2026-11-26 第 53 批）：未激活灰 35% / 激活暗红 / 被玩家方打下回正常色。
+        //  判据全在 `zcMonsterTintStateOf`（零 `cc`，用例直接断言），这里只做「态 → Color」映射。
+        const tintState = zcMonsterTintStateOf({
+            monster,
+            owner: state.owner,
+            awake: state.neutralFeature?.awake === true,
+            hp: state.hp,
+        });
+        this.noteMonsterCapture(monster, state.owner, tintState);
+        const monsterTint = tintState ? MONSTER_TINT_COLORS[tintState] : Color.WHITE;
+        const idleScale = zcMonsterIdleTimeScale(tintState);
         for (const skeleton of this.resourceUnitSkeletons) {
-            skeleton.color = sleepingMonster ? MONSTER_SLEEP_TINT : Color.WHITE;
-            if (this.monsterAttackStartedAt === undefined) skeleton.timeScale = sleepingMonster ? 0.35 : 1;
+            skeleton.color = monsterTint;
+            if (this.monsterAttackStartedAt === undefined) skeleton.timeScale = idleScale;
         }
         // 神器充能点（`artifact_charge`）：若 prefab 已挂 Spine 动画（六边形底 + 问号指示器），
         // 走 Spine 分支——不显示静态神器图标、也不写中文兜底。`null`（prefab 未挂 Spine）

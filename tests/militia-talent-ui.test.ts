@@ -13,13 +13,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { buildResBarSlots } from '../assets/script/app/main/MainResBarTypes';
+import { ROLE_TEXTS } from '../assets/script/app/role/RoleTexts';
 import { assetPath } from './helpers/asset-paths';
+import { ccStub, loadTsModule } from './helpers/cc-sandbox';
 
 type Obj = Record<string, any>;
 
 const PREFAB = {
     page: assetPath('ui/Role/TabMilitiaTalent.prefab'),
     item: assetPath('ui/Role/MilitiaTalentItem.prefab'),
+    overview: assetPath('ui/Role/MilitiaTalentOverview.prefab'),
     resBar: assetPath('ui/common/ResBar.prefab'),
     tabButton: assetPath('ui/common/TabButton.prefab'),
 } as const;
@@ -282,7 +285,7 @@ test('天赋页：PageClose 已删、MenuBar 接管退出（返回按钮 + 皮�
     assert.ok(!childNames(L, root).includes('PageClose'), '临时右上角关闭必须删掉（规则 113 由菜单层接管）');
 
     const page = L.find((o) => o && typeof o.__type__ === 'string' && o.backButton !== undefined)!;
-    assert.equal(L[page.backButton.__id__]._name, 'BtnBack');
+    assert.equal(L[page.backButton.__id__], compOf(L, byName(L, 'BtnBack'), 'cc.Button'));
     assert.ok(!('closeButton' in page), 'closeButton 属性必须随 PageClose 一起从脚本里移除');
 
     // 跨 prefab 引用：字段本体是 null，真身在根 targetOverrides
@@ -337,12 +340,105 @@ test('天赋项：效果框 frame_Zhikuang04 与链条 tf_bar01_bg / tf_bar_fg_3
     // 链条前景按状态显隐：脚本必须持有它
     const item = L.find((o) => o && typeof o.__type__ === 'string' && o.barForeground !== undefined)!;
     assert.equal(L[item.barForeground.__id__]._name, 'BarFg');
+    for (const [field, name, type] of [
+        ['frame', 'Frame', 'cc.Sprite'],
+        ['icon', 'Icon', 'cc.Sprite'],
+        ['nameLabel', 'Name', 'cc.Label'],
+        ['descLabel', 'Desc', 'cc.Label'],
+    ]) {
+        assert.equal(L[item[field].__id__], compOf(L, byName(L, name), type), `${field} 应直接绑定 ${type}`);
+    }
 });
 
 test('天赋项：链条前景只在本格解锁后点亮（老端 gearDisplay 状态=1,2）', () => {
     const src = readFileSync('assets/script/app/role/MilitiaTalentItem.ts', 'utf8');
     assert.match(src, /barForeground\.active\s*=\s*cell\.state\s*!==\s*'locked'/,
         'render 里必须无条件按 state 写 barForeground.active（规则 82：比新旧会被默认值短路）');
+});
+
+test('天赋总览直接绑定虚拟列表和关闭按钮组件', () => {
+    const prefab = prefabOf(PREFAB.overview);
+    const page = prefab.find(entry => entry?.attrList && entry.descList);
+    assert.ok(page, '缺少天赋总览脚本');
+    for (const [field, name, type] of [
+        ['attrList', 'AttrList', '544earF5qRLB4JTuTnSr11+'],
+        ['descList', 'List', '544earF5qRLB4JTuTnSr11+'],
+        ['closeButton', 'CloseBtn', 'cc.Button'],
+    ]) {
+        assert.equal(prefab[page[field].__id__], compOf(prefab, byName(prefab, name), type));
+    }
+});
+
+test('天赋详情通过 Prefab 绑定显示节点和两行消耗组件', () => {
+    const prefab = prefabOf(PREFAB.page);
+    const page = prefab.find(entry => entry?.goldCost && entry.itemCost);
+    assert.ok(page, '缺少天赋详情绑定');
+    assert.deepEqual(page.infoNodes.map((ref: Obj) => prefab[ref.__id__]._name),
+        ['Popup', 'SkillName', 'NodeIcon', 'SkillDesc', 'Cost1', 'Cost2']);
+    for (const [field, name, type] of [
+        ['skillName', 'SkillName', 'cc.Label'],
+        ['skillDesc', 'SkillDesc', 'cc.Label'],
+        ['infoCloseButton', 'CloseBtn', 'cc.Button'],
+    ]) {
+        assert.equal(prefab[page[field].__id__], compOf(prefab, byName(prefab, name), type));
+    }
+    const iconBox = byName(prefab, 'NodeIcon');
+    const detailIcon = iconBox._children.map((ref: Obj) => prefab[ref.__id__]).find((node: Obj) => node._name === 'Icon');
+    assert.equal(prefab[page.skillIcon.__id__], compOf(prefab, detailIcon, 'cc.Sprite'));
+
+    for (const [field, name] of [['goldCost', 'Cost1'], ['itemCost', 'Cost2']]) {
+        const row = prefab[page[field].__id__];
+        const node = byName(prefab, name);
+        assert.equal(prefab[row.node.__id__], node);
+        for (const [property, childName, type] of [
+            ['icon', 'CostIcon', 'cc.Sprite'],
+            ['ownedLabel', 'HasText', 'cc.Label'],
+            ['needLabel', 'NeedText', 'cc.Label'],
+        ]) {
+            const child = node._children.map((ref: Obj) => prefab[ref.__id__]).find((entry: Obj) => entry._name === childName);
+            assert.equal(prefab[row[property].__id__], compOf(prefab, child, type));
+        }
+    }
+});
+
+test('天赋总览提交列表条数前已准备好行数据和空态提示', async () => {
+    let overview: { attrs: string[]; descs: string[] } = { attrs: [], descs: [] };
+    const { exports, unresolved } = loadTsModule<{ MilitiaTalentOverviewPage: new () => Obj }>(
+        'assets/script/app/role/MilitiaTalentOverviewPage.ts',
+        { modules: {
+            cc: ccStub(),
+            '/PopupBase': { PopupBase: class { isValid = true; popupOpenContext = { cancelled: false }; } },
+            '/VScrollView': {},
+            '/MilitiaAttrItem': {},
+            '/MilitiaRepository': { militiaRepository: { loadTables: async () => {}, overview: () => overview } },
+            '/RoleTexts': { ROLE_TEXTS },
+        } },
+    );
+    assert.deepEqual(unresolved, []);
+    const createList = () => ({
+        rows: [] as string[],
+        renderItemFn: (_node: Obj, _index: number) => {},
+        setTotalCount(count: number) {
+            this.rows.length = 0;
+            const node = { getComponent: () => ({ render: (text: string) => this.rows.push(text) }) };
+            for (let index = 0; index < count; index++) this.renderItemFn(node, index);
+        },
+        scrollToTop() {},
+    });
+    const page = new exports.MilitiaTalentOverviewPage();
+    page.attrList = createList();
+    page.descList = createList();
+    page.closeButton = { node: { on() {} } };
+    page.onInit();
+
+    await page.refresh();
+    assert.deepEqual(page.attrList.rows, [ROLE_TEXTS.talentEmpty]);
+    assert.deepEqual(page.descList.rows, []);
+
+    overview = { attrs: ['属性'], descs: ['描述'] };
+    await page.refresh();
+    assert.deepEqual(page.attrList.rows, overview.attrs);
+    assert.deepEqual(page.descList.rows, overview.descs);
 });
 
 test('天赋页：皮肤页签点击必须给「没移植」提示，不留死按钮', () => {

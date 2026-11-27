@@ -39,7 +39,7 @@ export const BT_TYPE_PASS = 4;
 /** 转盘战令 1（本轮不做页签，老端走独立 `LayerBattleTokenSpin`）。 */
 export const BT_TYPE_LOTTERY1 = 5;
 /** 转盘战令 2。 */
-export const BT_TYPE_LOTTERY2 = 6;
+const BT_TYPE_LOTTERY2 = 6;
 
 /**
  * 底栏 4 个页签，**顺序 = FGUI 屏幕从左到右**（240 / 360 / 480 / 600）。

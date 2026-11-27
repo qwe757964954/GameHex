@@ -9,8 +9,12 @@
 | `units/projectiles/麻辣铁锅_爆炸龙卷/` | 32 张 1144×1136（`action-action_00 … _31`） | 102604「凤凰降临」命中爆炸 |
 
 另外顺手派生一个**只有 prefab、不含新图**的 `麻辣铁锅_凤凰弹`：它是
-`火法师_火船.prefab` 的「放大 150%」副本（根 `_lscale` 1.733333 × 1.5 = 2.6），
-直接复用火船的 anim clip 与散图 uuid，所以图集不会多一份。
+`火法师_火船.prefab` 的派生副本，直接复用火船的 anim clip 与散图 uuid，所以图集不会多一份。
+
+⚠️ 2026-11-26：火船已裁空边、按屏上尺寸重烘成 `396×126` / 根 `_lscale` **1**，
+凤凰弹的 `_lscale` **仍然是绝对的 0.65**（= 旧基准 1.733333 × 1.5 × 0.25，第三轮「缩成 25%」
+已烘进 prefab），**不跟着基准变** —— 否则 102604 那 4 颗子弹会比用户拍板的再小 1.73 倍。
+换言之「1.5 倍 × 25%」的语义只能按旧基准读，见 `DERIVED` 的 `absolute_scale`。
 
 > 为什么不直接把 `units/projectiles/火法师_火船/火法师_火船` 登记进
 > `ZCCombatEffectScale.NODE_SCALE_BY_PREFAB_PATH` 挂 1.5：那条路径同时被
@@ -197,11 +201,15 @@ SETS = [
 
 #  「放大 150%」的派生 prefab：只有 prefab 一个文件，复用火船的 clip / 散图 uuid。
 #  2026-11-11 第四轮用户口径「4 个子弹的体型缩小成 25%」⇒ 1.5 × 0.25 = 0.375（＝火船 × 0.375 = 0.65）。
+#  2026-11-26：火船基准重烘成 1（贴图即屏上）⇒ 若继续用 `scale_multiplier`，凤凰弹会变成 0.375，
+#  比用户拍板的 0.65 再小 1.73 倍。所以改成 `absolute_scale`（绝对值锁定，与源基准解耦）。
 DERIVED = [
     dict(
         name='麻辣铁锅_凤凰弹',
         source='火法师_火船',
-        scale_multiplier=1.5 * 0.25,
+        absolute_scale=0.65,
+        #  画布裁空边后内容中心微移，位置跟着补回来（原来 (1.066667, -1.642667)）。
+        pos=(-0.88, 0.31),
     ),
 ]
 
@@ -692,17 +700,21 @@ def build_derived(cfg):
     size = next(o for o in data if o.get('__type__') == 'cc.UITransform')['_contentSize']
     base_scale = root['_lscale']['x']
     base_pos = (root['_lpos']['x'], root['_lpos']['y'])
+    #  绝对值优先：源 prefab 重烘（基准从 1.733333 收到 1）时，派生副本的观感不能跟着变。
+    base_pos = cfg.get('pos', base_pos)
 
     set_dir = os.path.join(PROJECTILES_DIR, name)
     os.makedirs(set_dir, exist_ok=True)
     prefab_path = os.path.join(set_dir, name + '.prefab')
     prefab_uuid = existing_uuid(prefab_path + '.meta')
-    scale = base_scale * cfg['scale_multiplier']
+    scale = cfg.get('absolute_scale') or base_scale * cfg['scale_multiplier']
     write_json(prefab_path, build_prefab(name, size['width'], size['height'], scale,
                                          base_pos, first_frame, clip_uuid, prefab_uuid))
     write_json(prefab_path + '.meta', build_prefab_meta(name, prefab_uuid))
-    print('[%s] 派生自 %s：_lscale %.6f → %.6f（×%s），复用 clip %s' % (
-        name, cfg['source'], base_scale, scale, cfg['scale_multiplier'], clip_uuid[:8]))
+    print('[%s] 派生自 %s：_lscale %.6f → %.6f（%s），复用 clip %s' % (
+        name, cfg['source'], base_scale, scale,
+        ('绝对 %s' % cfg['absolute_scale']) if 'absolute_scale' in cfg
+        else ('×%s' % cfg['scale_multiplier']), clip_uuid[:8]))
     print('        路径 = units/projectiles/%s/%s' % (name, name))
     return dict(name=name, scale=scale)
 

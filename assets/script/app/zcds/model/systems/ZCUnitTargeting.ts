@@ -10,6 +10,10 @@ import { ZCDC_LOG_TARGET_SWITCH } from '../../ZCDCLogSwitch';
 
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
 
+function iterableUnits(units: ReadonlyMap<number, ZCUnitState> | readonly ZCUnitState[]): Iterable<ZCUnitState> {
+    return Array.isArray(units) ? units : (units as ReadonlyMap<number, ZCUnitState>).values();
+}
+
 export function zcTargetSwitchWatched(): boolean {
     return ZCDC_LOG_TARGET_SWITCH;
 }
@@ -82,8 +86,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         this.targetScratch.delete(id);
         const units = this.context.units;
         if (units) {
-            const list = 'values' in units && typeof units.values === 'function' ? units.values() : units;
-            for (const u of list) {
+            for (const u of iterableUnits(units)) {
                 if (u && u.hatredUnitId === id) {
                     u.hatredUnitId = null;
                     u.hatredUntil = 0;
@@ -249,11 +252,10 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         const units = this.context.units;
         if (!units) return null;
         const maxDistSq = maxDistance * maxDistance;
-        const list = 'values' in units && typeof units.values === 'function' ? units.values() : units;
         const definition = this.context.effectiveDefinition(unit);
         let bestBreaker: ZCUnitState | null = null;
         let bestDistSq = Infinity;
-        for (const candidate of list) {
+        for (const candidate of iterableUnits(units)) {
             if (!candidate || candidate.owner === unit.owner || candidate.hp <= 0 || candidate.battleState === 'dead') continue;
             if (!definition.canAttackAir && this.context.baseDefinition(candidate.unitId).flying) continue;
             const targetHexId = candidate.targetWallHexId ?? candidate.targetBuildingHexId;

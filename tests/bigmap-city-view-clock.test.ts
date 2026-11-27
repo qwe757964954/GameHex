@@ -52,7 +52,7 @@ async function createOnline(now: (reads: number) => number): Promise<IHarness> {
         fetchSimple: async () => ({ infos: [{ campId: 101, opType: 0 }] }),
         fetchDetail: async () => ({ infos: [{ campId: 101, opType: 0, occupyRoleId: '', occupyRoleName: '' }] }),
         fetchRoles: async () => ({ infos: [] }),
-        requestMove: async () => ({}),
+        requestMove: async () => ({ status: 'unconfirmed' }),
     };
     const repository = new BigMapCampRepository(gateway, clock);
     const model = new BigMapModel({

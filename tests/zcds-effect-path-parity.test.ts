@@ -45,10 +45,13 @@ const EXPECTED_WARMUP = [
     'units/projectiles/子弹_新怪物/通用箭矢',
     'units/projectiles/普攻爆炸/普攻爆炸',
     'units/projectiles/长戟兵_撕裂/长戟兵_撕裂',
-    'units/projectiles/轻骑兵_冲锋/轻骑兵_冲锋',
+    // 2026-11-25 第 49 批：冲锋三卡统一换【战士通用剑气】（原为 轻骑兵_冲锋 残影）。
+    'units/projectiles/战士通用剑气/战士通用剑气',
     'units/projectiles/刀盾兵_护盾/刀盾兵_护盾',
     'units/projectiles/三叶小丑_普攻/三叶小丑_普攻',
     'units/projectiles/风法师_龙卷风/风法师_龙卷风',
+    // 2026-11-25 第 47 批：治疗光环（详见 EXPECTED_BEHAVIOR_PATHS 里 heal_aura 的注释）。
+    'units/projectiles/通用治疗特效/通用治疗特效',
 ];
 
 /** 改造前 `ZCEffectCatalog` 各语义键对应的字面量路径（快照，不跟着实现改）。*/
@@ -65,7 +68,12 @@ const PATH_LITERALS = {
     thunderBulletImpact: 'units/projectiles/雷弹命中/雷弹命中',
     // 2026-11-20 同轮：30717 的命中爆点（68008 杰克藕），同一口径 0.5。
     cidianBulletImpact: 'units/projectiles/磁电菇_子弹命中/磁电菇_子弹命中',
+    // 2026-11-25 第 49 批前：冲锋车道播的是这张骑兵残影。
+    // 现在只剩配表 30191「轻骑兵普攻」按字面量取它（不走目录、不预热）。
     chargeDash: 'units/projectiles/轻骑兵_冲锋/轻骑兵_冲锋',
+    // 2026-11-25 第 49 批：三条冲锋车道统一换【战士通用剑气】。
+    // 飞行定格帧 = `070-1-Skill_1_24`（1 帧），凸面朝 -X ⇒ 飞行朝向偏移 180°。
+    warriorQi: 'units/projectiles/战士通用剑气/战士通用剑气',
     dashGuard: 'units/projectiles/刀盾兵_护盾/刀盾兵_护盾',
     nutAttack: 'units/projectiles/巨力坚果_普攻/巨力坚果_普攻',
     yulinDart: 'units/projectiles/玉林好汉_飞镖普攻/玉林好汉_飞镖普攻',
@@ -102,6 +110,44 @@ const PATH_LITERALS = {
     // 目录里**不登记** tint（否则 68003 也会变蓝）。
     hotZone: 'units/projectiles/火焰树妖_灼热地带技能/火焰树妖_灼热地带技能',
     iceCone: 'units/projectiles/冰法师_冰锥/冰法师_冰锥',
+    // 2026-11-25 第 45 批：机甲菇 68015 的「三尖两刃 / 武器绞杀」换成专属扇形挥击
+    // （25 张散图剔 6 张全透明帧 ⇒ 19 帧，见 tools/build_jiajigu_fan_fx.py）。
+    // 目录登记 `facingDegrees: 0`（美术尖端在 +X），锚点由事件的 `from = 施法者` 决定。
+    jiajiguFan: 'units/projectiles/机甲菇_武器绞杀/机甲菇_武器绞杀',
+    // 2026-11-25 第 45 批：技能范围白环（戈壁狂箭 / 冰山陨落 / 篮球火共用一张）。
+    // 程序化生成，见 tools/build_range_ring_fx.py；半轴比 0.8361 = 透视系数，scale 1 = 半径 256 屏上 px。
+    skillRangeRing: 'units/projectiles/技能范围_白环/技能范围_白环',
+    // 2026-11-25 第 46 批：运动霸 68033「天外飞石」30853 换成砸落爆炸
+    // （33 帧，见 tools/build_yundongba_meteor_fx.py）。只从 `pvpSkill.effectPrefabPath`
+    // 配进数据，模型侧没有代码引用 —— 登记在这里是为了让「路径增删」留痕，
+    // 并且防止有人把它挂到 behaviorKey 上（那会把资源收进别的卡的首包）。
+    yundongbaMeteor: 'units/projectiles/运动霸_砸落技能/运动霸_砸落技能',
+    // 2026-11-25 第 47 批：通用治疗特效（Spine `eff_cost_01`，动画 `eff_buff_heal`）。
+    // 🔴 它**必须**登记在 `heal_aura` 行为组里并进预热：治疗来自吸血 / 吃口菠萝 / 群体治疗 /
+    // 贯穿滋养四条不同的路，没有任何一条技能车道能认领它；不预热就是「治疗了但没特效」。
+    healAura: 'units/projectiles/通用治疗特效/通用治疗特效',
+    // 2026-11-25 第 51 批：急冻瓜 68024 的【急冻光线】弹体 + 【冰山陨落】落地一击共用一颗子弹
+    // （见 tools/build_ice_mage_bullet_fx.py，7 帧循环 @24）。命中是同一套素材的 13 帧爆炸。
+    // 🔴 两条都**不进**开战预热（`IZCEffectMissileSpec.warmup: false`）：8MB 只服务一张卡，
+    // 按阵容由 `ZCVisualResourcePlan` 收。
+    iceMageBullet: 'units/projectiles/冰法师通用子弹/冰法师通用子弹',
+    iceMageBulletImpact: 'units/projectiles/冰法师通用子弹命中/冰法师通用子弹命中',
+    // 2026-11-26 第 57 批：卡牌常用子弹统一格式（七张卡各一颗）。
+    // prefab 由 `tools/build_card_bullet_fx.py` 从同目录碎图批量生成，结构「根 + body」；
+    // 拖尾在 `ZC_EFFECT_TRAIL_SPECS`（白色，诅咒菇紫），不进 prefab。
+    // 七条都**不进**开战预热：pvpSkill 表里写了的那几行由 `attackProfile.effectPrefabPath`
+    // 按阵容收，破阵术与陷阱飞行段两条由 `ZCLanceFx` / `ZCTrapFx` 的按单位函数补收。
+    cardBulletPea: 'units/projectiles/卡牌常用子弹物件/豌豆游侠_子弹',
+    cardBulletDujuan: 'units/projectiles/卡牌常用子弹物件/毒箭菇_子弹',
+    cardBulletJack: 'units/projectiles/卡牌常用子弹物件/杰克藕_子弹',
+    cardBulletMouth: 'units/projectiles/卡牌常用子弹物件/大嘴花_子弹',
+    cardBulletPeach: 'units/projectiles/卡牌常用子弹物件/仙桃行者_子弹',
+    cardBulletYulin: 'units/projectiles/卡牌常用子弹物件/玉林好汉_子弹',
+    cardBulletCurse: 'units/projectiles/卡牌常用子弹物件/诅咒菇_子弹',
+    // 破阵术（投枪）的缺省弹体：第 57 批从 `ZCAttackResolutionSystem` 的字面量迁进目录，
+    // 因为弹体表搬去了 `ZCLanceFx.ts`，而守卫不允许 `*Fx.ts` 里出现路径字面量。
+    // 值与 `splashMissile` **同一条路径**，但语义是两个键（一个是溅射弹、一个是投枪缺省）。
+    lanceArrow: 'units/projectiles/子弹_新怪物/通用箭矢',
 } as const;
 
 /** 行为键 → 目录给出的路径；与改造前每个 `ZC*Fx` 模块的输出逐项一致。*/
@@ -120,10 +166,12 @@ const EXPECTED_BEHAVIOR_PATHS: Readonly<Record<string, readonly string[]>> = {
     [ZC_EFFECT_BEHAVIOR_KEYS.sporeBurst]: [PATH_LITERALS.splashMissile, PATH_LITERALS.burstImpact],
     [ZC_EFFECT_BEHAVIOR_KEYS.burstAura]: [PATH_LITERALS.burstImpact],
     [ZC_EFFECT_BEHAVIOR_KEYS.burstKnockback]: [PATH_LITERALS.burstImpact],
-    [ZC_EFFECT_BEHAVIOR_KEYS.fanSlow]: [PATH_LITERALS.burstImpact],
+    //  2026-11-25 第 45 批：扇形甩击从「铺 3 发普攻爆炸」换成专属挥击特效。
+    [ZC_EFFECT_BEHAVIOR_KEYS.fanSlow]: [PATH_LITERALS.jiajiguFan],
     [ZC_EFFECT_BEHAVIOR_KEYS.singleStrike]: [PATH_LITERALS.singleStrike],
-    [ZC_EFFECT_BEHAVIOR_KEYS.chargeShield]: [PATH_LITERALS.chargeDash, PATH_LITERALS.dashGuard],
-    [ZC_EFFECT_BEHAVIOR_KEYS.legacyDash]: [PATH_LITERALS.chargeDash, PATH_LITERALS.dashGuard],
+    //  2026-11-25 第 49 批：两条冲锋车道的残影 → 剑气。`dashGuard` 位置不变。
+    [ZC_EFFECT_BEHAVIOR_KEYS.chargeShield]: [PATH_LITERALS.warriorQi, PATH_LITERALS.dashGuard],
+    [ZC_EFFECT_BEHAVIOR_KEYS.legacyDash]: [PATH_LITERALS.warriorQi, PATH_LITERALS.dashGuard],
     [ZC_EFFECT_BEHAVIOR_KEYS.windBolt]: [
         PATH_LITERALS.clownDart, PATH_LITERALS.windHurricane,
         PATH_LITERALS.missileBody, PATH_LITERALS.missileImpact,
@@ -144,34 +192,40 @@ const EXPECTED_BEHAVIOR_PATHS: Readonly<Record<string, readonly string[]>> = {
     //  不进预热（`warmup` 未标）⇒ 本局没有分裂菇 / 艺术家就不下这些资源。
     [ZC_EFFECT_BEHAVIOR_KEYS.summonUnit]: [PATH_LITERALS.fissionSpawn, PATH_LITERALS.sustainedAura],
     //  2026-11-21 第 37 批：`skill_params`（只带数据的参数袋车道）本身没有造型，但巨力坚果 68002
-    //  的「亡者护盾」挂在这条车道上 ⇒ 按单位覆盖补收 `刀盾兵_护盾`。公共清单仍是空，
+    //  的「巨力护盾」（2026-11-25 前叫「亡者护盾」）挂在这条车道上 ⇒ 按单位覆盖补收 `刀盾兵_护盾`。公共清单仍是空，
     //  其余卡在这条车道一个资源都不多收。
     [ZC_EFFECT_BEHAVIOR_KEYS.skillParams]: [],
     //  2026-11-21 第 38 批：`self_cast`（冷却型自身施法）同样没造型槽。波利奥 68006 的
     //  「吃口菠萝」100603 是群体治疗，视觉上要给半径内每个己方单位挂一圈刀盾兵_护盾 ⇒
     //  按单位覆盖补收。嗜血 100703 / 迅击 100903 同车道但零资源。
     [ZC_EFFECT_BEHAVIOR_KEYS.selfCast]: [],
+    //  2026-11-25 第 47 批：治疗光环。公共清单一条（不按单位覆盖 —— 它是全局表现，
+    //  任何单位都可能被治疗），且 `warmup: true`。
+    [ZC_EFFECT_BEHAVIOR_KEYS.healAura]: [PATH_LITERALS.healAura],
 };
 
 test('路径语义键的字面量保持改造前快照', () => {
     assert.deepEqual(ZC_EFFECT_PATHS, PATH_LITERALS);
 });
 
-test('预热路径保持 30 条集合与顺序（含击杀横栏）', () => {
+test('预热路径保持集合与顺序（含击杀横栏；第 47 批起 31 条）', () => {
     assert.deepEqual(buildZCBattleWarmupPaths([], [], []), EXPECTED_WARMUP);
 });
 
-test('目录 warmup 子集只含行为技能新增的 9 条，不把按需资源塞进首包', () => {
+test('目录 warmup 子集只含行为技能与治疗光环新增的 10 条，不把按需资源塞进首包', () => {
     assert.deepEqual(zcWarmupEffectPaths(), [
         ZC_EFFECT_PATHS.missileBody,
         ZC_EFFECT_PATHS.missileImpact,
         ZC_EFFECT_PATHS.splashMissile,
         ZC_EFFECT_PATHS.burstImpact,
         ZC_EFFECT_PATHS.singleStrike,
-        ZC_EFFECT_PATHS.chargeDash,
+        ZC_EFFECT_PATHS.warriorQi,
         ZC_EFFECT_PATHS.dashGuard,
         ZC_EFFECT_PATHS.clownDart,
         ZC_EFFECT_PATHS.windHurricane,
+        //  2026-11-25 第 47 批：治疗光环。**故意**放进预热 —— 它是唯一一条收不拢到
+        //  技能车道的表现（治疗出口统一在 `healUnit`），不进预热就必然漏载。
+        ZC_EFFECT_PATHS.healAura,
     ]);
 });
 
@@ -236,9 +290,9 @@ test('弹道拖尾与光束数值仍与改造前逐项一致', () => {
     });
 });
 
-test('Fx facade 文件不再自带路径字面量，路径统一由目录提供', () => {
+test('Fx 域模块不再自带路径字面量，路径统一由目录提供', () => {
     const files = readdirSync(FX_DIRECTORY).filter(file => file.startsWith('ZC') && file.endsWith('Fx.ts'));
-    assert.ok(files.length >= 14, `Fx facade 数量异常：${files.length}`);
+    assert.ok(files.length >= 7, `Fx 模块数量异常：${files.length}`);
     for (const file of files) {
         const source = readFileSync(join(FX_DIRECTORY, file), 'utf8');
         assert.equal(source.includes('units/projectiles/'), false, `${file} 仍写死特效路径`);

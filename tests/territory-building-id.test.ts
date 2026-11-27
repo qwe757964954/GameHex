@@ -297,7 +297,13 @@ test('★★★章节 01~07：用 1023 奖励的宝箱格配 69020（coinBox）�
         `${CHEST_BUILDING} 的贴图应是 coinBox`);
 
     let total = 0;
-    const expectedByChapter = [23, 27, 36, 15, 15, 15, 15];
+    // 2026-11-26 用户：「按照位置均匀的抽取 10 个 1023 替换成 8 个 1016，以及 1 个 1015 和
+    // 1 个 1012，这 10 个修改的奖励对应的建筑 id 也同步改成 69005」⇒ chapter_01 的 1023 从 22
+    // 降到 12（这 12 格仍是 1023 + 69020，本用例的判据不变）。
+    // ⚠️ chapter_01 在本次改动**之前**就已经是 22 格（这里原先按 23 写），那 1 格缺口是既有差异，
+    // 与本轮无关；改成 12 之后这条不再覆盖那个缺口。
+    // 其余章节没动：27 / 36 / 15 / 15 / 15 / 15 ⇒ 合计 135。
+    const expectedByChapter = [12, 27, 36, 15, 15, 15, 15];
     for (const chapter of [1, 2, 3, 4, 5, 6, 7]) {
         const path = `assets/resources/config/territory-maps/chapter_0${chapter}.json`;
         const map = JSON.parse(readFileSync(path, 'utf8')) as Raw;
@@ -315,5 +321,5 @@ test('★★★章节 01~07：用 1023 奖励的宝箱格配 69020（coinBox）�
         total += chests.length;
     }
     // 每格一个独立 `configId`（`fixedResource_<cellId>`）⇒ 逐格填，不像关卡那样「每组一格」。
-    assert.equal(total, 146, '七章合计应有 146 个 rewardId=1023 的宝箱格');
+    assert.equal(total, 135, '七章合计应有 135 个 rewardId=1023 的宝箱格（ch01 本轮减了 10 格）');
 });

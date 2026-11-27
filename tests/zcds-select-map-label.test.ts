@@ -14,62 +14,108 @@ import { assetPath } from './helpers/asset-paths';
 const hexView = readFileSync('assets/script/app/zcds/view/ZCHexView.ts', 'utf8');
 const renderWorld = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
 const game = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
+const resourcePlan = readFileSync('assets/script/app/zcds/model/ZCGameResourcePlan.ts', 'utf8');
 const hintOverlay = readFileSync('assets/script/app/zcds/view/ZCSpawnRegionHintOverlay.ts', 'utf8');
+const hintViewSource = readFileSync('assets/script/app/zcds/view/ZCSpawnRegionHintView.ts', 'utf8');
+const hintViewMeta = JSON.parse(readFileSync('assets/script/app/zcds/view/ZCSpawnRegionHintView.ts.meta', 'utf8')) as { uuid: string };
 const boardPrefab = JSON.parse(readFileSync(assetPath('ui/game/ZCGameBoard.prefab'), 'utf8')) as any[];
-const hintPrefab = JSON.parse(readFileSync(assetPath('ui/game/SpawnRegionHint.prefab'), 'utf8')) as any[];
+const hintPrefab = JSON.parse(readFileSync('assets/bundles/battle/ui/game/SpawnRegionHint.prefab', 'utf8')) as any[];
 
-/** 与 SpawnRegionHint.prefab 同构的最小桩：根 Sprite(SLICED) + Label 子节点。 */
-function hintPrefabFixture(FakeNode: any, cc: any) {
+const CID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function cidOf(uuid: string): string {
+    const hex = uuid.replace(/-/g, '');
+    return hex.slice(0, 5) + Array.from({ length: 9 }, (_, i) => {
+        const value = parseInt(hex.slice(5 + i * 3, 8 + i * 3), 16);
+        return CID_ALPHABET[value >> 6] + CID_ALPHABET[value & 0x3f];
+    }).join('');
+}
+
+/** 与 SpawnRegionHint.prefab 同构的最小桩：根 Sprite(SLICED) + Label 子节点 + ZCSpawnRegionHintView 绑定。 */
+function hintPrefabFixture(load: (name: string) => any, FakeNode: any, cc: any, frames?: { front: unknown; mid: unknown; back: unknown }) {
+    const { ZCSpawnRegionHintView } = load('./ZCSpawnRegionHintView');
+    const frame01 = frames?.mid ?? new cc.SpriteFrame();
+    const frame02 = frames?.front ?? new cc.SpriteFrame();
+    const backFrame = frames?.back ?? frame01;
     return {
-        make: () => {
-            const root = new FakeNode('SpawnRegionHint');
-            const rootTransform = root.addComponent(cc.UITransform);
-            rootTransform.setContentSize(150, 42);
-            const sprite = root.addComponent(cc.Sprite);
-            sprite.node = root;
-            sprite.type = cc.Sprite.Type.SLICED;
-            sprite.sizeMode = cc.Sprite.SizeMode.CUSTOM;
-            sprite.trim = false;
-            const labelNode = new FakeNode('Label');
-            labelNode.setPosition(0, 5, 0);
-            const labelTransform = labelNode.addComponent(cc.UITransform);
-            labelTransform.setContentSize(138, 42);
-            const label = labelNode.addComponent(cc.Label);
-            label.string = '';
-            label.overflow = cc.Label.Overflow.SHRINK;
-            label.horizontalAlign = cc.Label.HorizontalAlign.CENTER;
-            label.verticalAlign = cc.Label.VerticalAlign.CENTER;
-            labelNode.setParent(root);
-            return root;
+        frame01,
+        frame02,
+        prefab: {
+            make: () => {
+                const root = new FakeNode('SpawnRegionHint');
+                const rootTransform = root.addComponent(cc.UITransform);
+                rootTransform.setContentSize(150, 42);
+                const sprite = root.addComponent(cc.Sprite);
+                sprite.node = root;
+                sprite.type = cc.Sprite.Type.SLICED;
+                sprite.sizeMode = cc.Sprite.SizeMode.CUSTOM;
+                sprite.trim = false;
+                sprite.spriteFrame = frame01;
+                const labelNode = new FakeNode('Label');
+                labelNode.setPosition(0, 5, 0);
+                const labelTransform = labelNode.addComponent(cc.UITransform);
+                labelTransform.setContentSize(138, 42);
+                const label = labelNode.addComponent(cc.Label);
+                label.string = '';
+                label.overflow = cc.Label.Overflow.SHRINK;
+                label.horizontalAlign = cc.Label.HorizontalAlign.CENTER;
+                label.verticalAlign = cc.Label.VerticalAlign.CENTER;
+                labelNode.setParent(root);
+                const view = root.addComponent(ZCSpawnRegionHintView);
+                view.node = root;
+                view.backgroundSprite = sprite;
+                view.titleLabel = label;
+                view.frontFrame = frame02;
+                view.midFrame = frame01;
+                view.backFrame = backFrame;
+                return root;
+            },
         },
     };
 }
 
-test('spawn region hints render in a dedicated non-interactive overlay', () => {
+test('spawn region hints render in a dedicated non-interactive prefab overlay', () => {
     assert.match(renderWorld, /spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay\(/);
-    assert.match(renderWorld, /this\.boardLayer\('CooldownOverlay'\)/);
-    assert.match(renderWorld, /this\.options\.spawnRegionFrames \?\? null/);
-    assert.match(renderWorld, /spawnRegionHintOverlay\.render\([^;]*hintsVisible/s);
+    assert.match(renderWorld, /this\.boardLayer\('CooldownOverlay'\)\.getChildByName\('SpawnRegionHints'\)/);
+    assert.match(renderWorld, /this\.options\.spawnRegionHintPrefab/);
+    assert.match(renderWorld, /spawnRegionHintOverlay\?\.render\([^;]*hintsVisible/s);
     // 缩放值在整盘重算入口算一次（`mapScale`），提示气泡直接复用同一个数。
     assert.match(renderWorld, /const mapScale = Math\.abs\(this\.options\.mapLayer\.scale\.x\) \|\| 1;/);
-    assert.match(renderWorld, /spawnRegionHintOverlay\.render\(\s*this\.spawnRegionHints,\s*hintsVisible,\s*mapScale,/);
+    assert.match(renderWorld, /spawnRegionHintOverlay\?\.render\(\s*this\.spawnRegionHints,\s*hintsVisible,\s*mapScale,/);
     assert.doesNotMatch(renderWorld.replace(/\/\/[^\n]*/g, ''), /regionText/);
 
+    const overlayCode = hintOverlay.replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, '');
     assert.match(hintOverlay, /class ZCSpawnRegionHintOverlay/);
-    assert.match(hintOverlay, /UITransform/);
-    assert.doesNotMatch(hintOverlay, /Graphics/, '气泡底由 prefab 的九宫格 Sprite 负责，不再有 Graphics 兜底');
-    assert.match(hintOverlay, /Label/);
+    assert.doesNotMatch(overlayCode, /new Node\(/, '气泡与容器节点全部由 prefab 提供，不允许运行期 new Node');
+    assert.doesNotMatch(overlayCode, /\.addComponent\(/, '不允许运行期 addComponent 兜底');
+    assert.doesNotMatch(overlayCode, /getChildByName\(/, '不再按字符串名找子节点，统一走 ZCSpawnRegionHintView @property');
+    assert.doesNotMatch(overlayCode, /Graphics/, '气泡底由 prefab 的九宫格 Sprite 负责，不再有 Graphics 兜底');
+    assert.match(hintViewSource, /class ZCSpawnRegionHintView/);
+    assert.match(resourcePlan, /spawnRegionHint:\s*'ui\/game\/SpawnRegionHint'/);
+    assert.doesNotMatch(hintOverlay, /BlockInputEvents|Button|TOUCH_START|TOUCH_END|\.on\(/);
+
     const hintRoot = hintPrefab.find((entry) => entry?.__type__ === 'cc.UITransform' && entry._contentSize?.width === 150);
     assert.ok(hintRoot, 'SpawnRegionHint.prefab 根节点必须是 150×42');
     const hintSprite = hintPrefab.find((entry) => entry?.__type__ === 'cc.Sprite');
     assert.equal(hintSprite?._type, 1, '气泡底必须在 prefab 里设为九宫格 SLICED');
-    assert.match(hintOverlay, /SPAWN_REGION_HINT_PREFAB/);
-    assert.doesNotMatch(hintOverlay, /BlockInputEvents|Button|TOUCH_START|TOUCH_END|\.on\(/);
+    const frame01Uuid = JSON.parse(readFileSync(assetPath('image/spawn-region/frame_01.png.meta'), 'utf8')).subMetas.f9941.uuid;
+    const frame02Uuid = JSON.parse(readFileSync(assetPath('image/spawn-region/frame_02.png.meta'), 'utf8')).subMetas.f9941.uuid;
+    const viewComp = hintPrefab.find((entry) => entry?.__type__ === cidOf(hintViewMeta.uuid));
+    assert.ok(viewComp, 'SpawnRegionHint.prefab 必须挂载 ZCSpawnRegionHintView');
+    assert.equal(viewComp.frontFrame?.__uuid__, frame02Uuid, '前区底图必须在 prefab 绑定红色 frame_02');
+    assert.equal(viewComp.midFrame?.__uuid__, frame01Uuid, '中区底图必须在 prefab 绑定绿色 frame_01');
+    assert.equal(viewComp.backFrame?.__uuid__, frame01Uuid, '后区底图必须在 prefab 绑定绿色 frame_01');
+
     const root = boardPrefab.find((object) => object?.__type__ === 'cc.Node' && object._name === 'ZCGameBoard');
     assert.ok(root, 'ZCGameBoard root exists');
     const boardLayers = root._children.map((child: { __id__: number }) => boardPrefab[child.__id__]);
     const layers = boardLayers.map((layer: { _name: string }) => layer._name);
     assert.equal(layers.at(-1), 'CooldownOverlay', 'overlay parent is the highest board layer');
+    const cooldownOverlay = boardLayers.at(-1);
+    const hintContainerRefs = (cooldownOverlay._children ?? []).map((child: { __id__: number }) => boardPrefab[child.__id__]);
+    const hintContainer = hintContainerRefs.find((node: { _name: string }) => node._name === 'SpawnRegionHints');
+    assert.ok(hintContainer, 'ZCGameBoard.prefab 的 CooldownOverlay 下必须预置 SpawnRegionHints 容器');
+    assert.equal(hintContainer._layer, 33554432);
+    assert.equal(hintContainer._active, false);
     for (const name of ['HexLayer', 'CooldownOverlay']) {
         const layer = boardLayers.find((candidate: { _name: string }) => candidate._name === name);
         assert.deepEqual([layer._lpos.x, layer._lpos.y, layer._lpos.z], [0, 0, 0], `${name} stays at board origin`);
@@ -96,12 +142,12 @@ test('region bubble nodes reuse anchors, follow visibility, draw text, and clear
     cc.Label.VerticalAlign = { CENTER: 'center' };
     cc.Label.Overflow = { NONE: 0, SHRINK: 1, CLAMP: 2, RESIZE_HEIGHT: 3 };
     const { ZCSpawnRegionHintOverlay } = load('./ZCSpawnRegionHintOverlay');
-    const parent = new FakeNode('CooldownOverlay');
-    const overlay = new ZCSpawnRegionHintOverlay(parent, null, hintPrefabFixture(FakeNode, cc));
+    const root = new FakeNode('SpawnRegionHints');
+    const fixture = hintPrefabFixture(load, FakeNode, cc);
+    const overlay = new ZCSpawnRegionHintOverlay(root, fixture.prefab);
     const initial = [{ depth: 'front', label: '速攻', x: 17, y: 32 }];
 
     overlay.render(initial, true, 0.5);
-    const root = parent.children[0];
     const bubble = root.children[0];
     const label = bubble.getChildByName('Label').getComponent(cc.Label);
     let labelText = label.string;
@@ -133,21 +179,22 @@ test('region bubble nodes reuse anchors, follow visibility, draw text, and clear
     assert.deepEqual([bubble.position.x, bubble.position.y], [-24, 8], 'hidden frames should not update anchors');
     assert.equal(labelWrites, 1, 'hidden frames should not write labels');
     overlay.clear();
-    assert.equal(parent.children.length, 0);
-    assert.equal(root.isValid, false);
+    assert.equal(root.children.length, 0);
+    assert.equal(root.active, false);
 });
 
-test('region bubbles use frame_02 red for front and frame_01 green for mid/back when frames are provided', () => {
+test('region bubbles use prefab-bound frame_02 red for front and frame_01 green for mid/back', () => {
     const { load, FakeNode, cc } = loadViews();
     cc.UITransform = class { setContentSize() {} };
     cc.Label.HorizontalAlign = { CENTER: 'center' };
     cc.Label.VerticalAlign = { CENTER: 'center' };
     cc.Label.Overflow = { NONE: 0, SHRINK: 1, CLAMP: 2, RESIZE_HEIGHT: 3 };
     const { ZCSpawnRegionHintOverlay } = load('./ZCSpawnRegionHintOverlay');
-    const parent = new FakeNode('CooldownOverlay');
+    const root = new FakeNode('SpawnRegionHints');
     const frame01 = new cc.SpriteFrame();
     const frame02 = new cc.SpriteFrame();
-    const overlay = new ZCSpawnRegionHintOverlay(parent, { front: frame02, mid: frame01, back: frame01 }, hintPrefabFixture(FakeNode, cc));
+    const fixture = hintPrefabFixture(load, FakeNode, cc, { front: frame02, mid: frame01, back: frame01 });
+    const overlay = new ZCSpawnRegionHintOverlay(root, fixture.prefab);
     const hints = [
         { depth: 'front', label: '速攻', x: 10, y: 20 },
         { depth: 'mid', label: '控场', x: -10, y: 40 },
@@ -155,7 +202,6 @@ test('region bubbles use frame_02 red for front and frame_01 green for mid/back 
     ];
 
     overlay.render(hints, true, 0.5);
-    const root = parent.children[0];
     const frontSprite = root.children[0].getComponent(cc.Sprite);
     const midSprite = root.children[1].getComponent(cc.Sprite);
     const backSprite = root.children[2].getComponent(cc.Sprite);
@@ -179,22 +225,6 @@ test('region bubbles use frame_02 red for front and frame_01 green for mid/back 
     assert.equal(root.children[0].getComponent(cc.Sprite).spriteFrame, frame01);
     assert.equal(root.children[1].getComponent(cc.Sprite).spriteFrame, frame02);
     assert.equal(root.children[2].getComponent(cc.Sprite).spriteFrame, frame01);
-});
-
-test('spawn region hint frames tolerate partial / missing frames while keeping the prefab bubble', () => {
-    const { load, FakeNode, cc } = loadViews();
-    cc.UITransform = class { setContentSize() {} };
-    cc.Label.HorizontalAlign = { CENTER: 'center' };
-    cc.Label.VerticalAlign = { CENTER: 'center' };
-    cc.Label.Overflow = { NONE: 0, SHRINK: 1, CLAMP: 2, RESIZE_HEIGHT: 3 };
-    const { ZCSpawnRegionHintOverlay } = load('./ZCSpawnRegionHintOverlay');
-    const parent = new FakeNode('CooldownOverlay');
-    const overlay = new ZCSpawnRegionHintOverlay(parent, { front: null, mid: null, back: null }, hintPrefabFixture(FakeNode, cc));
-    overlay.render([{ depth: 'front', label: '速攻', x: 5, y: 6 }], true, 0.5);
-    const bubble = parent.children[0].children[0];
-    const sprite = bubble.getComponent(cc.Sprite);
-    assert.ok(sprite, '缺帧时仍保留 prefab 的气泡节点');
-    assert.equal(sprite.spriteFrame, null, '缺帧只清空 spriteFrame，不用运行期 Graphics 兜底');
 });
 
 test('spawn region hint overlay clears after selection and on render-world teardown', () => {

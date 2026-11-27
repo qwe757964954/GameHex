@@ -29,7 +29,7 @@
 
 import {
     COMMON_ART_ROOT,
-    LEAGUE_ART_ROOT as ART_LEAGUE_ROOT,
+    LEAGUE_ART_ROOT,
     MAIN_ICON_ART_ROOT,
     RESOURCE_ICON_ART_ROOT,
     SEVEN_DAY_ART_ROOT,
@@ -42,9 +42,6 @@ import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 // （若哪天改成 `import { … }` 取值，就真的成环了 —— esbuild/tsx 下未必立刻炸，
 // 但打包器会把两份模块图拉成一坨，别冒这个险。）
 import type { LeagueTaskBoxState } from './LeagueTable';
-
-/** 联盟自有图目录（`loadArt(name, LEAGUE_ART_ROOT)` 用；不带 `resources/` 前缀）。 */
-export const LEAGUE_ART_ROOT = ART_LEAGUE_ROOT;
 
 /** 整屏背景（FGUI `loader bg`，720×1742，刻意比 720×1280 的画布高，用来盖住长屏）。 */
 export const LEAGUE_ART_BG = 'lm_bg01';

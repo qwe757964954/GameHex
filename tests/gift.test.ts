@@ -62,6 +62,7 @@ import {
 } from '../assets/script/app/gift/GiftTable';
 import type { IGiftShopRow, IPayChannelRow } from '../assets/script/app/gift/GiftTable';
 
+import { qualityFrameName } from '../assets/script/app/common/QualityFrameArt';
 import {
     GIFT_ART_NAMES,
     GIFT_ART_ROOT,
@@ -70,7 +71,6 @@ import {
     giftArtPath,
     giftCurrencyIconRef,
     giftResIconRef,
-    qualityFrameName,
     resolveGiftIconRef,
 } from '../assets/script/app/gift/GiftArt';
 import { formatText, GIFT_TEXTS } from '../assets/script/app/gift/GiftTexts';

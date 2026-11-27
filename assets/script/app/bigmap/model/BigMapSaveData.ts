@@ -19,7 +19,7 @@ import { createBigMapBattleProgress, type IBigMapBattleProgress } from './BigMap
 import type { IBigMapCityDayScore, IBigMapDaySnapshot } from './BigMapSnapshot';
 
 /** 存档版本：结构变更时 +1，`normalize` 里按版本补字段（v2 加当日快照）。 */
-export const BIGMAP_SAVE_VERSION = 2;
+const BIGMAP_SAVE_VERSION = 2;
 
 export interface IBigMapSaveData {
     readonly version: number;

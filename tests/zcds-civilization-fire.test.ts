@@ -7,19 +7,13 @@ import type { ZCFloatText, ZCProjectileState, ZCSnapshot, ZCUnitState, ZCGroundZ
 import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import {
-    ZCAttackResolutionSystem, type IZCAttackResolutionContext,
-} from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+    ZCAttackResolutionSystem, type IZCAttackResolutionContext } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 import { resolveUnitDefinition } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
-import { ZC_EFFECT_PATHS } from '../assets/script/app/zcds/model/ZCEffectCatalog';
-import { ZC_EFFECT_SCALE } from '../assets/script/app/zcds/model/ZCEffectTuning';
-import {
-    ZC_FIRE_ZONE_PREFAB_PATH, ZC_FIRE_ZONE_TINT, zcFireZoneEffectPaths,
-} from '../assets/script/app/zcds/model/ZCFireZoneFx';
-import {
-    ZC_RAY_BEAM_PREFAB_PATH, ZC_RAY_BEAM_REFERENCE_HALF_LENGTH, zcRayBeamEffectScale,
-} from '../assets/script/app/zcds/model/ZCRayBeamFx';
+import { ZC_EFFECT_PATHS, ZC_FIRE_ZONE_TINT, zcEffectPathsForBehavior } from '../assets/script/app/zcds/model/ZCEffectCatalog';
+import { ZC_EFFECT_SCALE, zcRayBeamEffectScale } from '../assets/script/app/zcds/model/ZCEffectTuning';
 
 /**
  * 第 43 批 · 机甲菇 / 科学家三条技能链（2026-11-23）。
@@ -179,19 +173,14 @@ test('③ 科学家 103503 = 文明之火（fire_zone）：3 块 / 200 散布 / 
 // ────────────────────────────────────────────── 二、表现：换图 / 蓝色 / 基准半长
 
 test('④ 射线集束换镭射飞龙那张红图，基准半长按新图重算（否则光束长度对不上判定）', () => {
-    assert.equal(ZC_RAY_BEAM_PREFAB_PATH, ZC_EFFECT_PATHS.laserAttack,
-        '射线集束仍用【雷电冲击】—— 用户要的是「和镭射飞龙普攻颜色一致」');
-    assert.equal(ZC_RAY_BEAM_REFERENCE_HALF_LENGTH, 374,
+    assert.equal(ZC_EFFECT_SCALE.rayBeamReferenceHalfLength, 374,
         '基准半长没按镭射飞龙重算：可见宽 575 × 1 / 0.76875 / 2 ≈ 374');
-    assert.equal(ZC_RAY_BEAM_REFERENCE_HALF_LENGTH, ZC_EFFECT_SCALE.rayBeamReferenceHalfLength,
-        'facade 和调参表必须同源（重复写一遍迟早漂）');
     //  表值 120 半长 ⇒ 缩放 120/374；这个数变了意味着「画面比判定长/短」。
     assert.ok(Math.abs(zcRayBeamEffectScale(120) - 120 / 374) < 1e-12);
     assert.equal(zcRayBeamEffectScale(0), 1, '非法半长要退回 1');
 });
 
 test('⑤ 文明之火用灼热地带那张图，但蓝色只按事件染（目录不能登记路径色）', () => {
-    assert.equal(ZC_FIRE_ZONE_PREFAB_PATH, ZC_EFFECT_PATHS.hotZone);
     //  🔴 同一个 prefab 被火焰树妖 68003 自己的灼热地带（30811）用着 ⇒ 路径色一旦登记，
     //  那边也会变蓝。所以蓝色必须走 `ZC_FIRE_ZONE_TINT` + 事件级 tint。
     const [red, green, blue] = ZC_FIRE_ZONE_TINT;
@@ -200,8 +189,8 @@ test('⑤ 文明之火用灼热地带那张图，但蓝色只按事件染（目�
 });
 
 test('⑥ 资源清单：文明之火收灼热地带那张图，射线集束收镭射飞龙', () => {
-    assert.deepEqual([...zcFireZoneEffectPaths('fire_zone')], [ZC_EFFECT_PATHS.hotZone]);
-    assert.deepEqual([...zcFireZoneEffectPaths('ray_beam')], [], '不是这条车道就该返回空');
+    assert.deepEqual([...zcEffectPathsForBehavior('fire_zone')], [ZC_EFFECT_PATHS.hotZone]);
+    assert.deepEqual([...zcEffectPathsForBehavior('ray_beam')], [ZC_EFFECT_PATHS.laserAttack]);
 
     //  按真定义跑一遍「配表 → 定义 → 本局清单」：配表填了但清单没收到 = 编辑器里看得见、实战一片空白。
     const plan = (unitId: string, behaviorKey: string) => ({ enabled: true, unitId, behaviorKey });
@@ -338,7 +327,7 @@ test('⑦ castFireZone：3 块独立区域，半径 60×0.3、落点圆内、每
     const state = makeState(units);
     const context = castContext(units, FIRE_PARAMS, { id: enemy.id, x: 100, y: 0 });
 
-    const ok = ZCAttackResolutionSystem.castFireZone(state, caster, context);
+    const ok = ZCSkillResolutionSystem.castFireZone(state, caster, context);
     assert.equal(ok, true, '参数齐全时应撒下区域');
     assert.equal(state.groundZones.length, 3, '必须是 3 块独立区域（不是 1 块记 3 份伤害）');
 
@@ -366,7 +355,7 @@ test('⑧ castFireZone：L1 参数 ⇒ 6 秒 6 跳、每跳 100%；参数不全 
 
     const state = makeState(units);
     const context = castContext(units, l1, { id: enemy.id, x: 100, y: 0 });
-    assert.equal(ZCAttackResolutionSystem.castFireZone(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castFireZone(state, caster, context), true);
     assert.equal(state.groundZones.length, 3);
     assert.equal(state.groundZones[0].remainingSeconds, 6);
     assert.equal(state.groundZones[0].wavesLeft, 6);
@@ -375,13 +364,13 @@ test('⑧ castFireZone：L1 参数 ⇒ 6 秒 6 跳、每跳 100%；参数不全 
     //  参数不全（块数 0）⇒ 拒绝，调用方不消费次数。
     const bad = makeState(units);
     const badContext = castContext(units, { ...FIRE_PARAMS, fireCount: 0 }, { id: enemy.id, x: 100, y: 0 });
-    assert.equal(ZCAttackResolutionSystem.castFireZone(bad, caster, badContext), false);
+    assert.equal(ZCSkillResolutionSystem.castFireZone(bad, caster, badContext), false);
     assert.equal(bad.groundZones.length, 0, '参数不全时不许留下半块区域');
 
     //  没有目标 ⇒ 也没有落点。
     const noTarget = makeState(units);
     const noTargetContext = castContext(units, FIRE_PARAMS, null);
-    assert.equal(ZCAttackResolutionSystem.castFireZone(noTarget, caster, noTargetContext), false);
+    assert.equal(ZCSkillResolutionSystem.castFireZone(noTarget, caster, noTargetContext), false);
 });
 
 test('⑨ 文明之火不读射线集束的键：ray* 全空也能跑，fire* 缺失才拒', () => {
@@ -392,6 +381,6 @@ test('⑨ 文明之火不读射线集束的键：ray* 全空也能跑，fire* �
     //  袋里只有 ray*（配置漏改的典型形态）⇒ 必须拒，而不是撒出 0 半径的区域。
     const state = makeState(units);
     const rayOnly = castContext(units, { rayEvery: 8, rayHalfLength: 120 }, { id: enemy.id, x: 100, y: 0 });
-    assert.equal(ZCAttackResolutionSystem.castFireZone(state, caster, rayOnly), false);
+    assert.equal(ZCSkillResolutionSystem.castFireZone(state, caster, rayOnly), false);
     assert.equal(state.groundZones.length, 0);
 });

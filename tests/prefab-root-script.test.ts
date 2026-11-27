@@ -149,6 +149,9 @@ test('ChangeHead 的 8 个槽位都挂着 ChangeHeadItem，且 4 个引用形态
     const itemCid = compressUuid(
         JSON.parse(readFileSync(path.join(ROOT, 'assets/script/app/playerinfo/ChangeHeadItem.ts.meta'), 'utf8')).uuid as string,
     );
+    const redDotCid = compressUuid(
+        JSON.parse(readFileSync(path.join(ROOT, 'assets/script/app/common/RedDot.ts.meta'), 'utf8')).uuid as string,
+    );
 
     const content = objects.find(
         (o) => o.__type__ === 'cc.Node' && o._name === 'Content' && (o._children as unknown[] | undefined)?.length === 8,
@@ -167,11 +170,11 @@ test('ChangeHead 的 8 个槽位都挂着 ChangeHeadItem，且 4 个引用形态
         const headIcon = objects[item.headIcon.__id__] as { __type__: string };
         const headFrame = objects[item.headFrame.__id__] as { __type__: string };
         const selectedFrame = objects[item.selectedFrame.__id__] as { __type__: string; _name: string };
-        const redDot = objects[item.redDot.__id__] as { __type__: string; _name: string };
+        const redDot = objects[item.redDot.__id__] as { __type__: string; node?: { __id__: number } };
         if (headIcon.__type__ !== 'cc.Sprite') bad.push(`${slot._name}.headIcon 不是 Sprite`);
         if (headFrame.__type__ !== 'cc.Sprite') bad.push(`${slot._name}.headFrame 不是 Sprite`);
         if (selectedFrame.__type__ !== 'cc.Node' || selectedFrame._name !== 'SelectedFrame') bad.push(`${slot._name}.selectedFrame 指向了 ${selectedFrame.__type__}:${selectedFrame._name}`);
-        if (redDot.__type__ !== 'cc.Node' || redDot._name !== 'RedDot') bad.push(`${slot._name}.redDot 指向了 ${redDot.__type__}:${redDot._name}`);
+        if (redDot.__type__ !== redDotCid || objects[redDot.node!.__id__]._name !== 'RedDot') bad.push(`${slot._name}.redDot 指向了 ${redDot.__type__}:${objects[redDot.node!.__id__]._name}`);
     });
     assert.deepEqual(bad, []);
 });

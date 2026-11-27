@@ -125,8 +125,8 @@ export class TerritoryController extends ControllerBase {
             case 'sweepChapter': void this.model.sweepIdleRewards(intent.times); break;
             // 升级怪物宝箱：消耗与成功判定全在服务端（`CmdCityChapterUpMonsterBoxLvReqMsg`）。
             case 'upgradeMonsterBox': void this.model.upgradeMonsterBox(intent.cellId); break;
-            // 动画演完 ⇒ 才弹结果 toast（回包那一刻弹等于剧透，见 `TerritoryIntent` 注释）。
-            case 'monsterBoxRollSettled': this.model.notifyMonsterBoxRollSettled(intent.cellId); break;
+            // 动画演完 ⇒ 才落地结果（失败弹 toast；成功主反馈是视图播的字特效，见 `TerritoryIntent` 注释）。
+            case 'monsterBoxRollSettled': this.model.notifyMonsterBoxRollSettled(intent.cellId, intent.fxPlayed); break;
             case 'chapter': this.model.switchChapter(intent.offset); break;
             case 'selectChapter': this.model.selectChapter(intent.chapterId); break;
             case 'enterBattle': {

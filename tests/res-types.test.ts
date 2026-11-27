@@ -19,11 +19,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { RESOURCE_ICON_ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
-    FALLBACK_RES_ICON_ART,
     ITEM_TABLE,
     OPEN_TABLE,
-    RES_BAR_MAX_SLOTS,
     ROLE_PROPERTY_TABLE,
+} from '../assets/script/core/config/TableNames';
+import {
+    FALLBACK_RES_ICON_ART,
+    RES_BAR_MAX_SLOTS,
     parseResKeys,
     resBarCellOfRefId,
     resBarIconSpritePath,

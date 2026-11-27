@@ -38,7 +38,7 @@ import {
     sweepTimesOf,
 } from './HangRepository';
 import type { IHangSnapshot } from './HangRepository';
-import { qualityFramePath } from './HangArt';
+import { qualityFramePath } from '../common/QualityFrameArt';
 import { HangGainItem } from './HangGainItem';
 import { HangGearSwitch } from './HangGearSwitch';
 import { HangRewardSlot } from './HangRewardSlot';

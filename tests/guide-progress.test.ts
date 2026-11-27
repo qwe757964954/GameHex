@@ -249,3 +249,17 @@ test('2-2「打开宝箱」是纯引导步：弱引导（不压暗）、不带�
     // 2026-11-17 表改版：卡牌碎片奖励挪到 5-4（通关结算那一步），2-3 只播台词。
     assert.deepEqual(reward.rewards, []);
 });
+
+/**
+ * 8-1 收尾：**挖孔高亮不变，孔外点击穿透**（用户 2026-11-25）。
+ *
+ * 表里写的是 `holeThrough`。`parseStep` 对**不认识的值一律回落 `full`**
+ * （宁可多压一层也不能静默变成不挡点击）⇒ 解析器漏接这个新值的话，8-1 会变成
+ * 「全屏压暗 + 点哪都推不动台词」，玩家永远点不到任务入口。这条守的就是那个回落。
+ */
+test('8-1 的遮罩解析成 holeThrough（新值没被解析器接住就会回落 full）', () => {
+    const step = STEPS.find((item: GuideStep) => item.stepId === '8-1');
+    assert.ok(step, '表里必须有 8-1');
+    assert.equal(step.maskType, 'holeThrough');
+    assert.equal(step.nextStep, GUIDE_STEP_END, '8-1 是最后一步');
+});

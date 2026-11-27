@@ -17,7 +17,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
-import { BigMapSlgRepository, type IBigMapSlgGateway, type IBigMapSlgRequestName } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
+import { BigMapSlgRepository, type IBigMapSlgGateway, type IBigMapSlgRequestName,
+    type IBigMapSlgRequestOutcome } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
 import { bigMapCityAttackPreview } from '../assets/script/app/bigmap/model/BigMapBattle';
 import { createBigMapBaseState } from '../assets/script/app/bigmap/model/BigMapBase';
 import { normalizeBigMapGameInfo } from '../assets/script/app/bigmap/model/BigMapServerState';
@@ -38,12 +39,12 @@ class Gateway implements IBigMapSlgGateway {
     readonly calls: IBigMapSlgRequestName[] = [];
     listener: ((kind: 'game' | 'build') => void) | null = null;
     game: unknown = { info: { maxMonsterLevel: 5, toCampId: 101 } };
-    request(name: IBigMapSlgRequestName): Promise<unknown> {
+    request(name: IBigMapSlgRequestName): Promise<IBigMapSlgRequestOutcome> {
         this.calls.push(name);
-        if (name === 'CmdSlgGameInfoReqMsg') return Promise.resolve(this.game);
-        if (name === 'CmdSlgBuildInfoReqMsg') return Promise.resolve({ info: { builds: [], queues: [], unlockQueue: 1 } });
-        if (name === 'CmdSlgActionUpdateReqMsg') return Promise.resolve({ info: { nextRevertTime: 20 } });
-        return Promise.resolve({});
+        const response = name === 'CmdSlgGameInfoReqMsg' ? this.game
+            : name === 'CmdSlgBuildInfoReqMsg' ? { info: { builds: [], queues: [], unlockQueue: 1 } }
+                : name === 'CmdSlgActionUpdateReqMsg' ? { info: { nextRevertTime: 20 } } : {};
+        return Promise.resolve<IBigMapSlgRequestOutcome>({ status: 'ok', response });
     }
     subscribe(listener: (kind: 'game' | 'build') => void): () => void {
         this.listener = listener;

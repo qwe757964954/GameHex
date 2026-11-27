@@ -73,7 +73,7 @@ export const DEFAULT_BIGMAP_CITY_SCHEDULE: IBigMapCitySchedule = {
 };
 
 /** 阶段中文名（界面直接用；放这里是为了「改文案不用翻 view」）。 */
-export const BIGMAP_CITY_PHASE_LABEL: Readonly<Record<BigMapCityPhase, string>> = {
+const BIGMAP_CITY_PHASE_LABEL: Readonly<Record<BigMapCityPhase, string>> = {
     closed: '休战',
     prepare: '可攻打',
     locked: '已锁榜',

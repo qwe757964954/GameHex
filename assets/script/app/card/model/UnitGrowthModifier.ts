@@ -39,7 +39,7 @@ export interface IUnitGrowthColumns {
 }
 
 /** 某一维没有成长（表里缺该档位）时的全 0 修正。 */
-export const NO_GROWTH_MODIFIER: IGrowthModifier = Object.freeze({ flat: 0, rate: 0 });
+const NO_GROWTH_MODIFIER: IGrowthModifier = Object.freeze({ flat: 0, rate: 0 });
 
 /** 整档没有成长：缺行 / 未启用时统一用它，不每次新建对象。 */
 export const NO_UNIT_GROWTH_MODIFIERS: IUnitGrowthModifiers = Object.freeze({

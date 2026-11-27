@@ -1,5 +1,5 @@
 import { _decorator, Component, Label, Prefab, Sprite, SpriteFrame, UIOpacity } from 'cc';
-import { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { CardUnitPreview } from './CardUnitPreview';
 

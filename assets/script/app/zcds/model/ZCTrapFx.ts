@@ -53,3 +53,40 @@ export const ZC_TRAP_EXPIRE_PREFAB_BY_UNIT: Readonly<Record<string, string>> = {
 export function zcTrapExpirePath(unitId: string): string {
     return ZC_TRAP_EXPIRE_PREFAB_BY_UNIT[unitId] ?? ZC_TRAP_EXPIRE_PREFAB_PATH;
 }
+
+/**
+ * 「投掷段飞在空中的那件东西」的逐单位例外（2026-11-26 第 57 批）。
+ *
+ * 用户口径：毒箭菇的【蘑菇爆炸】101704「从【陷阱特效】换成【毒箭菇_子弹】，
+ * 丢出去的行径…图片带三角形的拖尾，机制保持一致」。
+ *
+ * 所以只换**飞行段**的美术：`flightVisualPath` 从「陷阱出现」换成那颗蘑菇子弹，
+ * 落地之后仍是原来的常驻陷阱 + 踩响爆炸（机制一个字节不动）。
+ *   · 拖尾由 `ZCEffectCatalog.ZC_EFFECT_TRAIL_SPECS` 按 prefab 路径登记，不用在这里管；
+ *   · Y 轴抖动同理，登记在 spec 的 `wobble` 上；
+ *   · 飞行方向由 `ZCSkillResolutionSystem.castTrap` 写进 `zone.angleDegrees`，
+ *     `settleFlight` 落地时清掉 —— 否则那颗子弹图会歪着躺在地上。
+ *
+ * 🔴 与 {@link ZC_TRAP_EXPIRE_PREFAB_BY_UNIT} 一样按 **unitId** 登记：结算那一刻手上只有
+ * 单位的 unitId，拿不到计划行的链号 101704。
+ */
+export const ZC_TRAP_FLIGHT_PREFAB_BY_UNIT: Readonly<Record<string, string>> = {
+    '68017': ZC_EFFECT_PATHS.cardBulletDujuan,
+};
+
+/** 这个单位的陷阱在投掷段播什么；没登记就沿用「陷阱出现」。*/
+export function zcTrapFlightPath(unitId: string): string {
+    return ZC_TRAP_FLIGHT_PREFAB_BY_UNIT[unitId] ?? ZC_TRAP_SPAWN_PREFAB_PATH;
+}
+
+/**
+ * 这张卡要不要额外加载一条**飞行段**美术；`[]` = 用缺省的「陷阱出现」。
+ *
+ * 与 `zcLanceEffectPrefabPathsForUnit` 同一个理由：缺省那条已经在普攻/
+ * 行为组的清单里，只收「有覆盖」的，避免每局多收一次同一串路径。
+ */
+export function zcTrapFlightPathsForUnit(unitId: string | null | undefined): readonly string[] {
+    if (!unitId) return [];
+    const path = ZC_TRAP_FLIGHT_PREFAB_BY_UNIT[unitId];
+    return path ? [path] : [];
+}

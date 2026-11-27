@@ -36,6 +36,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { assetPath } from './helpers/asset-paths';
+import { ROLE_GEM_SOCKET_COUNT } from '../assets/script/app/role/RoleTypes';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROJECT = join(HERE, '..');
@@ -108,7 +109,31 @@ test('★ 装备栏 6 格的框/图标/等级文字都在 com_goods 盒内（父
     const arr = load(ROLE);
     const root = res(arr, arr[0].data)!;
     for (const i of SLOTS) {
-        const { goods, frame, icon, level } = slotParts(arr, root, i);
+        const { slot, goods, frame, icon, level } = slotParts(arr, root, i);
+        const script = compOf(arr, slot, '0e636EzLmhPoYjbNF9sSnqJ');
+        assert.ok(script, `Equip${i} 缺少 RoleEquipSlot`);
+        assert.equal(script.partId, i);
+        assert.equal(res(arr, script.goodsButton), compOf(arr, goods, 'cc.Button'));
+        assert.equal(res(arr, script.frameSprite), sprite(arr, frame));
+        assert.equal(res(arr, script.iconSprite), sprite(arr, icon));
+        assert.equal(res(arr, script.levelLabel), compOf(arr, level, 'cc.Label'));
+
+        const gemGroup = findNode(arr, slot, '组件_宝石')!;
+        assert.equal(res(arr, script.gemGroup), gemGroup);
+        assert.equal(script.gemButtons.length, ROLE_GEM_SOCKET_COUNT);
+        assert.equal(script.gemSprites.length, ROLE_GEM_SOCKET_COUNT);
+        assert.ok(script.emptyGemFrame.__uuid__);
+        for (let order = 1; order <= ROLE_GEM_SOCKET_COUNT; order++) {
+            const hole = findNode(arr, gemGroup, `com${order}`)!;
+            const button = compOf(arr, hole, 'cc.Button')!;
+            const gemIcon = sprite(arr, findNode(arr, hole, 'n0')!)!;
+            assert.equal(res(arr, script.gemButtons[order - 1]), button);
+            assert.equal(res(arr, script.gemSprites[order - 1]), gemIcon);
+            assert.equal(button._transition, 0);
+            assert.equal(button._target, null);
+            assert.deepEqual(script.emptyGemFrame, gemIcon._spriteFrame);
+        }
+
         const g = box(arr, goods, true);   // 容器自身的盒：不计 _lpos
         assert.deepEqual(
             [ui(arr, goods)!._anchorPoint.x, ui(arr, goods)!._anchorPoint.y],

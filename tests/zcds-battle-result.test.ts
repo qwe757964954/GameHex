@@ -309,7 +309,7 @@ test('C2 结算等待和奖励解析位于控制器与组合层，匹配局不�
     assert.match(settlementSource, /request\.battleType === null \? null : this\.services\.results\.waitResult/);
     assert.match(compositionSource, /resolveCmdGoodsFrames\(result\.goods, resources\)/);
     assert.match(compositionSource, /resId: reward\.resId, amount: reward\.number/);
-    assert.ok(settlementSource.indexOf('await pending') < settlementSource.indexOf('await this.open()'));
+    assert.ok(settlementSource.indexOf('await pending') < settlementSource.indexOf('this.open(true)'));
 });
 
 /**

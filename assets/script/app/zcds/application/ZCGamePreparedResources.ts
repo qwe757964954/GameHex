@@ -2,8 +2,6 @@ import type { EffectAsset, Material, Prefab, SpriteFrame } from 'cc';
 import type { ICardArtConfig } from '../../card/CardArtConfig';
 import type { ZCAttackTrait, ZCUnitId } from '../model/ZCCombatCatalog';
 import type { ZCMatchConfig } from '../model/ZCMatchConfig';
-import type { IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay';
-import type { IZCMonsterFocusFrames } from '../view/ZCHexView';
 import type { IZCGuidePreparedContent } from '../model/ZCGuideConfig';
 
 /** 首帧之后分项发布的表现资源，仍归当前战斗作用域。*/
@@ -54,12 +52,8 @@ export interface IZCGamePreparedResources {
     /** 自选出生点阶段把中立资源种类藏起来；其他地图为 null。*/
     unknownResourceFrame: SpriteFrame | null;
     neutralResourceFrames: ReadonlyMap<string, SpriteFrame>;
-    /** 野怪集火按钮的三态底图（`image/spawn-region/frame_01/02/03`）。*/
-    monsterFocusFrames: IZCMonsterFocusFrames;
     goldCoinFrame: SpriteFrame | null;
-    /** 只有自选出生点地图会加载。*/
-    spawnRegionFrames: IZCSpawnRegionHintFrames | null;
-    /** 区域气泡预制体；只有自选出生点地图会加载。*/
+    /** 区域气泡预制体；只有自选出生点地图会加载，纵深底图由 prefab 自身绑定。*/
     spawnRegionHintPrefab: Prefab | null;
     buildingFrames: ReadonlyMap<string, SpriteFrame>;
     wallFrames: ReadonlyMap<string, SpriteFrame>;

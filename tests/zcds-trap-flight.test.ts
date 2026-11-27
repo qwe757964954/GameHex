@@ -30,9 +30,10 @@ import { ZCStatusSystem } from '../assets/script/app/zcds/model/ZCStatusEffect';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import {
     ZC_TRAP_EXPIRE_PREFAB_PATH, ZC_TRAP_IDLE_PREFAB_PATH, ZC_TRAP_SPAWN_PREFAB_PATH,
-    ZC_TRAP_SPAWN_SECONDS, zcTrapExpirePath,
+    ZC_TRAP_SPAWN_SECONDS, zcTrapExpirePath, zcTrapFlightPath,
 } from '../assets/script/app/zcds/model/ZCTrapFx';
 import { ZC_EFFECT_PATHS } from '../assets/script/app/zcds/model/ZCEffectCatalog';
 
@@ -130,7 +131,7 @@ function trapContext(target: { x: number; y: number } | null, params: Record<str
         damageBuilding: () => undefined,
         unitsInRadius: () => [],
         healUnit: () => {},
-    } as unknown as Parameters<typeof ZCAttackResolutionSystem.castTrap>[2];
+    } as unknown as Parameters<typeof ZCSkillResolutionSystem.castTrap>[2];
 }
 
 function zoneContext(targets: ZCUnitState[], overrides: Record<string, unknown> = {}) {
@@ -160,7 +161,7 @@ test('castTrap 投掷形态：朝目标飞 2 秒、落地停 6 秒、到期不�
     const state = snapshot([caster]);
     //  目标在正右方 100 逻辑 px 处 ⇒ 速度应当朝 +x，且大小 = 100 × 距离缩放 0.3
     const context = trapContext({ x: 100, y: 0 });
-    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castTrap(state, caster, context), true);
 
     assert.equal(state.groundZones.length, 1);
     const zone = state.groundZones[0];
@@ -186,7 +187,7 @@ test('castTrap 投掷形态：朝目标飞 2 秒、落地停 6 秒、到期不�
 test('锁不到目标就朝正面丢：不能因为「没人可丢」把整次出手吞掉', () => {
     const caster = unit(1, 'player', { freeX: 0, freeY: 0, facingRadians: Math.PI / 2 });
     const state = snapshot([caster]);
-    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, trapContext(null)), true);
+    assert.equal(ZCSkillResolutionSystem.castTrap(state, caster, trapContext(null)), true);
     const zone = state.groundZones[0];
     closeTo(zone.moveVelocityX ?? 0, 0);
     closeTo(zone.moveVelocityY ?? 0, 30, '正面朝下 ⇒ 往 +y 丢');
@@ -197,27 +198,32 @@ test('参数不全就不放：触碰伤害为 0 只在投掷形态放行', () =>
     const state = snapshot([caster]);
     //  去掉飞行段 ⇒ 退回「原地陷阱」语义，此时触碰伤害还是 0 属于漏配 ⇒ 必须拒放
     const withoutFlight = { ...PARAMS, trapFlightSpeed: 0, trapFlightSeconds: 0 };
-    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }, withoutFlight)), false);
+    assert.equal(ZCSkillResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }, withoutFlight)), false);
     assert.equal(state.groundZones.length, 0, '被拒时一个区域都不该建');
     //  爆炸半径漏配也拒
-    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster,
+    assert.equal(ZCSkillResolutionSystem.castTrap(state, caster,
         trapContext({ x: 100, y: 0 }, { ...PARAMS, trapExplodeRadius: 0 })), false);
 });
 
-test('投掷段：飞行期间走弧线（中途最高、落地归零），空中播的是陷阱生成', () => {
+test('投掷段：飞行期间走弧线（中途最高、落地归零），空中播的是按单位登记的飞行美术', () => {
     //  用户口径（2026-11-20）；同日第二次裁定：「丢技能的这段特效使用的应该是陷阱生成，
     //  而不是普攻的子弹」—— 所以哪怕这张卡配了普攻弹体，飞行段也不许用那一格。
+    //  2026-11-26 第 57 批改口径：飞行段的**来源**多了一张按单位登记的表
+    //  （`ZCTrapFx.ZC_TRAP_FLIGHT_PREFAB_BY_UNIT`），68017 换成【毒箭菇_子弹】。
+    //  断言的是同一件事：飞行段走登记表、绝不借用普攻弹体那一格。
     const caster = unit(1, 'player');
     const state = snapshot([caster]);
     const context = trapContext({ x: 100, y: 0 });
     const projectilePath = 'units/projectiles/冰法师_冰锥/冰法师_冰锥';
     (context as unknown as { effectiveDefinition: () => { attackProfile: Record<string, unknown> } })
         .effectiveDefinition().attackProfile.effectPrefabPath = projectilePath;
-    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castTrap(state, caster, context), true);
     const zone = state.groundZones[0];
 
-    assert.equal(zone.flightVisualPath, ZC_TRAP_SPAWN_PREFAB_PATH,
-        '飞行段是「陷阱生成」，不吃普攻弹体那一格');
+    const flightPath = zcTrapFlightPath(UNIT_ID);
+    assert.equal(flightPath, ZC_EFFECT_PATHS.cardBulletDujuan, '68017 的飞行段是蘑菇子弹');
+    assert.equal(zone.flightVisualPath, flightPath,
+        '飞行段取「按单位登记」那一格，不吃普攻弹体');
     assert.notEqual(zone.flightVisualPath, projectilePath, '配了普攻弹体也不许借用');
     closeTo(zone.flightTotalSeconds ?? 0, 1.2, '弧线进度要用总时长当分母');
     closeTo(zone.flightArcPx ?? 0, 92, '峰高按屏上 px 给');
@@ -232,9 +238,11 @@ test('投掷段：飞行期间走弧线（中途最高、落地归零），空�
     for (let step = 0; step < 10; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context2);
     closeTo(zone.visualLiftPx ?? -1, 92, '正中间抬到峰高');
     //  表现事件要跟着抬（视图就是从事件上取的这一格）。
-    const flightEvent = state.combatEvents.find((event) => event.effectPrefabPath === ZC_TRAP_SPAWN_PREFAB_PATH);
+    const flightEvent = state.combatEvents.find((event) => event.effectPrefabPath === flightPath);
     assert.ok(flightEvent, '飞行段那条持有表现必须建出来');
     closeTo(flightEvent!.visualLiftPx ?? -1, 92, '事件上的抬升与区域同拍');
+    //  子弹头要朝飞的方向（2026-11-26 第 57 批）：没有这个角，三角形拖尾永远指着正左。
+    closeTo(flightEvent!.angleDegrees ?? Number.NaN, 0, '朝 +X 目标飞（夹具目标在 (100,0)）');
     assert.equal(state.combatEvents.some((event) => event.effectPrefabPath === projectilePath), false,
         '普攻弹体一帧都不该出现在这条链上');
 
@@ -251,7 +259,7 @@ test('投掷段：飞行期间走弧线（中途最高、落地归零），空�
 test('飞满 1.2 秒就地落地：速度归零、剩下的时间当停留', () => {
     const caster = unit(1, 'player');
     const state = snapshot([caster]);
-    ZCAttackResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }));
+    ZCSkillResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }));
     const zone = state.groundZones[0];
     const context = zoneContext([]);
 
@@ -274,7 +282,7 @@ test('飞满 1.2 秒就地落地：速度归零、剩下的时间当停留', () 
 test('踩响 = 立即引爆：按当前位置结算爆炸 + 挂中毒，并摘掉常驻光环', () => {
     const caster = unit(1, 'player');
     const state = snapshot([caster]);
-    ZCAttackResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }));
+    ZCSkillResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }));
     const zone = state.groundZones[0];
     const victim = unit(2, 'enemy', { freeX: 10, freeY: 0 });
     const applied: string[] = [];
@@ -293,7 +301,7 @@ test('踩响 = 立即引爆：按当前位置结算爆炸 + 挂中毒，并摘�
 test('到期无人触碰：直接消失，不掉血也不播爆炸', () => {
     const caster = unit(1, 'player');
     const state = snapshot([caster]);
-    ZCAttackResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }));
+    ZCSkillResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }));
     //  停留 6 秒 ⇒ 把剩余寿命压到最后一帧，期间没有任何敌人进触碰半径
     const zone = state.groundZones[0];
     zone.remainingSeconds = 0.02;
@@ -311,7 +319,7 @@ test('到期无人触碰：直接消失，不掉血也不播爆炸', () => {
 test('已经踩响的区域即使这一帧到期，也必须把爆炸结算完', () => {
     const caster = unit(1, 'player');
     const state = snapshot([caster]);
-    ZCAttackResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }));
+    ZCSkillResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }));
     const zone = state.groundZones[0];
     //  踩响标记已经置位（同帧到期）⇒ `expireRequiresContact` 不能再拦一次
     zone.contactTriggered = true;
@@ -428,7 +436,7 @@ test('101704 三档：trapEvery 8 + 飞行 1.2 秒 + 到期消失 + 各指一条
             assert.equal(bag.trapExpireOnTimeout, 0, '到期无人触碰直接消失');
             assert.equal(bag.trapDamageRate, undefined, '触碰不给独立伤害');
             assert.equal(row.statusId, `poison_bolt_l${index + 1}`);
-            assert.equal(Number(row.unlockHeroLevel), [9, 18, 27][index]);
+            assert.equal(Number(row.unlockHeroLevel), [7, 18, 27][index]);
             assert.equal(row.behaviorKey, 'trap_place');
         });
     }
@@ -461,7 +469,7 @@ test('103504 精密陷阱一字未动：还有 CD、没有飞行段、到期照�
     }
 });
 
-test('K 表 / armySkillLevelUp：卡面名字与描述已补齐，解锁等级 = 9/18/27', () => {
+test('K 表 / armySkillLevelUp：卡面名字与描述已补齐，解锁等级 = 7/18/27', () => {
     const plans = readTable('pvpSkillPlan')
         .filter((row) => Number(row.skillChainId) === CHAIN)
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
@@ -472,7 +480,7 @@ test('K 表 / armySkillLevelUp：卡面名字与描述已补齐，解锁等级 =
         rows.forEach((row, index) => {
             assert.equal(row.name, '蘑菇爆炸');
             assert.equal(row.desc, plans[index].desc, '卡面描述必须与 pvpSkillPlan 逐字相同');
-            assert.equal(Number(row.unlockarmylevel), [9, 18, 27][index]);
+            assert.equal(Number(row.unlockarmylevel), [7, 18, 27][index]);
             //  ⚠️ `modfiy` 两份产物形态不同（remoteRef 是数组、client 是逗号串）—— 导表口径的
             //  历史漂移，不是本批引入的。这里只验「指针指对了」，不锁形态。
             const pointers = (Array.isArray(row.modfiy) ? row.modfiy : String(row.modfiy ?? '').split(','))
@@ -492,27 +500,28 @@ test('炸开播哪张图按单位登记：68017 是「普攻爆炸」，别的�
 
     const caster = unit(1, 'player');
     const state = snapshot([caster]);
-    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 })), true);
+    assert.equal(ZCSkillResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 })), true);
     assert.equal(state.groundZones[0].expirePrefabPath, ZC_EFFECT_PATHS.burstImpact);
 });
 
-test('三段表现：飞行段播「陷阱生成」、落地换「陷阱」', () => {
+test('三段表现：飞行段播按单位登记的飞行美术、落地换「陷阱」', () => {
     const caster = unit(1, 'player');
     const state = snapshot([caster]);
-    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 })), true);
+    assert.equal(ZCSkillResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 })), true);
     const zone = state.groundZones[0];
-    //  ① 飞行段的持有表现 = 「生成」。落地段的 = 常驻的「陷阱」。
-    assert.equal(zone.flightVisualPath, ZC_TRAP_SPAWN_PREFAB_PATH, '空中持有表现必须是「生成」');
+    const flightPath = zcTrapFlightPath(UNIT_ID);
+    //  ① 飞行段的持有表现 = 按单位登记的那一格（68017 是蘑菇子弹）。落地段的 = 常驻的「陷阱」。
+    assert.equal(zone.flightVisualPath, flightPath, '空中持有表现取登记表');
     assert.equal(zone.effectPrefabPath, ZC_TRAP_IDLE_PREFAB_PATH, '落地持有表现是「陷阱」');
     //  ② 投掷形态不再单独推一条「原地出现」：施法点那条会留在原地，而陷阱已经飞走了。
     assert.equal(state.combatEvents.filter((event) =>
-        event.effectPrefabPath === ZC_TRAP_SPAWN_PREFAB_PATH
+        event.effectPrefabPath === flightPath
         && event.durationSeconds === ZC_TRAP_SPAWN_SECONDS).length, 0, '投掷形态不推原地生成事件');
 
     const context = zoneContext([]);
     const hold = () => state.combatEvents.find((event) => event.id === zone.visualEventId);
     ZCGroundZoneSystem.tick(state, 0.05, context);
-    assert.equal(hold()?.effectPrefabPath, ZC_TRAP_SPAWN_PREFAB_PATH, '飞行段跟的是「生成」');
+    assert.equal(hold()?.effectPrefabPath, flightPath, '飞行段跟的是登记表那一格');
 
     //  飞到 1.2 秒（+3 帧余量）落地：持有表现要换成「陷阱」，位置钉在落点。
     for (let step = 0; step < 27; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context);
@@ -520,10 +529,12 @@ test('三段表现：飞行段播「陷阱生成」、落地换「陷阱」', ()
     closeTo(hold()?.fromX ?? -1, zone.x, '常驻表现钉在落点');
 
     const flightEvents = state.combatEvents.filter((event) =>
-        event.effectPrefabPath === ZC_TRAP_SPAWN_PREFAB_PATH);
+        event.effectPrefabPath === flightPath);
     assert.equal(flightEvents.length, 1, '飞行段那条事件只建一次，落地时是「作废」不是「再建一条」');
     const expired = flightEvents[0];
     assert.ok(expired.durationSeconds <= state.elapsedSeconds - expired.startedAt + 1e-6,
         '落地那一刻把飞行段判过期（寿命压到「已活时长」），视图下一帧就摘掉它');
     assert.equal(zone.flightVisualPath, undefined, '换挡之后不再保留飞行段路径');
+    //  飞行段的朝向也要一起清（2026-11-26 第 57 批）：留着会让陷阱图歪着躺在地上。
+    assert.equal(zone.angleDegrees, undefined, '落地清掉飞行朝向');
 });

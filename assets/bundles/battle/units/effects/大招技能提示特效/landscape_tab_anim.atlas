@@ -1,0 +1,118 @@
+
+landscape_tab_anim.png
+size: 352,352
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+images/eff/anniu_liuguang
+  rotate: false
+  xy: 2, 157
+  size: 212, 69
+  orig: 212, 69
+  offset: 0, 0
+  index: -1
+images/eff/fk02
+  rotate: false
+  xy: 174, 15
+  size: 54, 54
+  orig: 64, 64
+  offset: 5, 5
+  index: -1
+images/eff/saogFk_01
+  rotate: false
+  xy: 265, 294
+  size: 84, 55
+  orig: 88, 55
+  offset: 2, 0
+  index: -1
+images/eff/saogFk_02
+  rotate: false
+  xy: 2, 100
+  size: 84, 55
+  orig: 88, 55
+  offset: 2, 0
+  index: -1
+images/eff/saogFk_03
+  rotate: false
+  xy: 265, 237
+  size: 84, 55
+  orig: 88, 55
+  offset: 2, 0
+  index: -1
+images/eff/saogFk_04
+  rotate: false
+  xy: 2, 43
+  size: 84, 55
+  orig: 88, 55
+  offset: 2, 0
+  index: -1
+images/eff/saogFk_05
+  rotate: false
+  xy: 88, 100
+  size: 84, 55
+  orig: 88, 55
+  offset: 2, 0
+  index: -1
+images/eff/saogFk_06
+  rotate: false
+  xy: 88, 43
+  size: 84, 55
+  orig: 88, 55
+  offset: 2, 0
+  index: -1
+images/eff/saogFk_07
+  rotate: true
+  xy: 174, 71
+  size: 84, 55
+  orig: 88, 55
+  offset: 2, 0
+  index: -1
+images/eff/saogFk_08
+  rotate: true
+  xy: 272, 151
+  size: 84, 55
+  orig: 88, 55
+  offset: 2, 0
+  index: -1
+images/eff/saogFk_09
+  rotate: false
+  xy: 231, 94
+  size: 84, 55
+  orig: 88, 55
+  offset: 2, 0
+  index: -1
+images/eff/saogFk_10
+  rotate: false
+  xy: 231, 37
+  size: 84, 55
+  orig: 88, 55
+  offset: 2, 0
+  index: -1
+images/eff/saogFk_11
+  rotate: true
+  xy: 216, 170
+  size: 56, 54
+  orig: 88, 55
+  offset: 30, 1
+  index: -1
+images/eff/saogFk_12
+  rotate: false
+  xy: 329, 182
+  size: 19, 53
+  orig: 88, 55
+  offset: 67, 1
+  index: -1
+images/eff/saogFk_13
+  rotate: true
+  xy: 2, 26
+  size: 15, 53
+  orig: 88, 55
+  offset: 71, 1
+  index: -1
+images/tab_xuanzhong
+  rotate: false
+  xy: 2, 228
+  size: 261, 121
+  orig: 267, 139
+  offset: 0, 12
+  index: -1

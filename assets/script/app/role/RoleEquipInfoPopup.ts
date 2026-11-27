@@ -170,6 +170,7 @@ export class RoleEquipInfoPopup extends PopupBase {
     private currentGrowth: IRoleEquipGrowth | null = null;
     private currentTab: EquipDetailTab = 'equip';
     private sessionRevision = 0;
+    private isClearingGems = false;
 
     protected onInit(): void {
         this.bindEvents();
@@ -183,6 +184,8 @@ export class RoleEquipInfoPopup extends PopupBase {
         this.currentPartId = data?.partId && data.partId >= 1 && data.partId <= 6 ? data.partId : 1;
         this.currentBagId = data?.bagUniqueId ?? null;
         this.currentTab = 'equip';
+        this.isClearingGems = false;
+        this.btnDestroyGems.interactable = true;
 
         this.contentNodes = [this.popBg];
         await this.refresh();
@@ -211,8 +214,8 @@ export class RoleEquipInfoPopup extends PopupBase {
         this.tabGemActive.active = !isEquip;
         this.tabEquipLabel.color = isEquip ? CREAM : INK;
         this.tabGemLabel.color = isEquip ? INK : CREAM;
-        if (this.tabEquipOutline) this.tabEquipOutline.enableOutline = isEquip;
-        if (this.tabGemOutline) this.tabGemOutline.enableOutline = !isEquip;
+        this.tabEquipOutline.enableOutline = isEquip;
+        this.tabGemOutline.enableOutline = !isEquip;
 
         this.btnDestroyGems.node.active = !isEquip;
         this.btnDestroyGemsTitle.string = '清空方案';
@@ -220,7 +223,7 @@ export class RoleEquipInfoPopup extends PopupBase {
         this.btnForge.node.active = true;
         if (isEquip) {
             this.btnForge.node.setPosition(-161, -250, 0);
-            this.btnForgeTitle.string = '装备锻造';
+            this.btnForgeTitle.string = this.currentBagId ? ROLE_TEXTS.equipManage : ROLE_TEXTS.equipForge;
         } else {
             this.btnDestroyGems.node.setPosition(-280, -250, 0);
             this.btnForge.node.setPosition(-41, -250, 0);
@@ -251,10 +254,10 @@ export class RoleEquipInfoPopup extends PopupBase {
         if (!growth) {
             this.nameLabel.string = ROLE_TEXTS.equipEmpty;
             this.qualityChipLabel.string = '—';
-            if (this.qualityChipBg) this.qualityChipBg.color = CHIP_GRAY;
+            this.qualityChipBg.color = CHIP_GRAY;
             this.partChipLabel.string = partName;
             this.statusChipLabel.string = '';
-            if (this.statusChipBg) this.statusChipBg.color = CHIP_PART;
+            this.statusChipBg.color = CHIP_PART;
             this.subLabel.string = `部位：${partName}`;
             this.levelBadge.active = false;
             this.attrContentRoot.active = false;
@@ -285,10 +288,10 @@ export class RoleEquipInfoPopup extends PopupBase {
         const equipName = growth.name || partName;
         this.nameLabel.string = equipName;
         this.qualityChipLabel.string = qualityName;
-        if (this.qualityChipBg) this.qualityChipBg.color = QUALITY_CHIP_COLORS[quality] ?? CHIP_GRAY;
+        this.qualityChipBg.color = QUALITY_CHIP_COLORS[quality] ?? CHIP_GRAY;
         this.partChipLabel.string = partName;
         this.statusChipLabel.string = growth.worn ? '已装备' : '背包中';
-        if (this.statusChipBg) this.statusChipBg.color = growth.worn ? CHIP_GREEN : CHIP_PART;
+        this.statusChipBg.color = growth.worn ? CHIP_GREEN : CHIP_PART;
         this.subLabel.string = `装备等级 ${growth.level || 0}`;
 
         this.levelBadge.active = growth.level > 0;
@@ -320,9 +323,9 @@ export class RoleEquipInfoPopup extends PopupBase {
         const attack = growth.attack > 0 ? `+${growth.attack}` : '—';
         const life = growth.hpPercent > 0 ? `+${growth.hpPercent}%` : '—';
         const upgrade = growth.level > 0 ? `+${growth.level * 10}` : '—';
-        this.baseRows[0]?.setData('全队攻击', attack, 'attack');
-        this.baseRows[1]?.setData('全队生命', life, 'life');
-        this.baseRows[2]?.setData('强化', upgrade, 'defense');
+        this.baseRows[0].setData('全队攻击', attack, 'attack');
+        this.baseRows[1].setData('全队生命', life, 'life');
+        this.baseRows[2].setData('强化', upgrade, 'defense');
     }
 
     private renderExtraRows(growth: IRoleEquipGrowth): void {
@@ -371,25 +374,50 @@ export class RoleEquipInfoPopup extends PopupBase {
     }
 
     private onForgeClick(): void {
+        const bagId = this.currentBagId;
         const targetPart = this.currentPartId;
         this.close(PopupCloseReason.Manual);
-        EventMgr.instance.emit(RoleEvent.Intent, { kind: 'forge', partId: targetPart });
+        if (bagId) {
+            EventMgr.instance.emit(RoleEvent.Intent, { kind: 'equip', id: bagId, manage: true });
+        } else {
+            EventMgr.instance.emit(RoleEvent.Intent, { kind: 'forge', partId: targetPart });
+        }
     }
 
     private async onDestroyOrDownClick(): Promise<void> {
-        if (this.currentTab !== 'gem') return;
-
+        const context = this.popupOpenContext;
+        if (!context || this.currentTab !== 'gem' || this.isClearingGems) return;
         const part = roleRepository.equipParts().find(item => item.partId === this.currentPartId);
-        for (const socket of part?.sockets ?? []) {
-            if (!socket.gemId) continue;
-            await roleRepository.changeGem({
-                kind: 'down',
-                payload: { equipId: socket.equipId, page: socket.page, order: socket.order },
-            }, this);
+        this.isClearingGems = true;
+        this.btnDestroyGems.interactable = false;
+        let removed = 0;
+        let failure: 'offline' | 'failed' | null = null;
+        try {
+            for (const socket of part?.sockets ?? []) {
+                if (!socket.gemId) continue;
+                const status = await roleRepository.changeGem({
+                    kind: 'down',
+                    payload: { equipId: socket.equipId, page: socket.page, order: socket.order },
+                }, this);
+                if (status === 'ok') removed++;
+                else failure = status;
+                if (context.cancelled || failure) break;
+            }
+            if (removed > 0) {
+                await roleRepository.load();
+                EventMgr.instance.emit(RoleEvent.GemChanged);
+                if (context.cancelled) return;
+                await this.refresh();
+            }
+            if (context.cancelled) return;
+            if (!failure) FW.showTip(ROLE_TEXTS.gemPlanCleared);
+            else if (removed > 0) FW.showTip(ROLE_TEXTS.gemPlanPartiallyCleared);
+            else FW.showTip(failure === 'offline' ? ROLE_TEXTS.offline : ROLE_TEXTS.failed);
+        } finally {
+            if (!context.cancelled) {
+                this.isClearingGems = false;
+                this.btnDestroyGems.interactable = true;
+            }
         }
-        await roleRepository.load();
-        EventMgr.instance.emit(RoleEvent.GemChanged);
-        FW.showTip('已清空宝石方案');
-        await this.refresh();
     }
 }

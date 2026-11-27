@@ -64,22 +64,35 @@ test('单位渲染从传送入口抛至出口，落地和后续行军恢复正�
     assert.equal(rendered.x, mapToViewX(120));
 });
 
-test('棋盘在入口和出口同时播放开合，次数圆环保持原值，跳过动画末帧也回收', () => {
+test('传送中只显示入口动画，落点无图标，跳过末帧仍恢复静态入口', () => {
     const { load, FakeNode } = loadViews();
     const mapLayer = new FakeNode('MapLayer');
     const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({ mapLayer,
         neutralResourceFrames: new Map([['portal', { name: 'portal' }]]) });
     const cooldownBar = { progress: 2 / 3 };
     world.hexEntityBySource.set(0, 1);
-    world.hexViews.set(1, { cooldownBar });
+    const view = new (load('./ZCHexView').ZCHexView)();
+    view.iconSprite = { node: new FakeNode('PortalIcon') };
+    view.cooldownBar = cooldownBar;
+    world.hexViews.set(1, view);
     const frame = { mapConfig: { hexes: [{ id: 0, x: 0, y: 0 }, { id: 1, x: 100, y: 0 }] },
         snapshot: { hexes: [{ id: 0, neutralFeature: { claimed: true, portalAt: 0, portalExitId: 1 } }],
             elapsedSeconds: ZC_PORTAL_FLIGHT_SECONDS / 2, status: 'playing' } };
+    frame.snapshot.elapsedSeconds = -0.1;
     world.renderNeutralFeatures(frame);
-    assert.equal(mapLayer.children.length, 2);
+    assert.equal(view.iconSprite.node.active, true);
+    assert.equal(mapLayer.children.length, 0);
+    frame.snapshot.elapsedSeconds = ZC_PORTAL_FLIGHT_SECONDS / 2;
+    world.renderNeutralFeatures(frame);
+    view.applyResourceIconVisibility();
+    assert.equal(view.iconSprite.node.active, false);
+    assert.equal(mapLayer.children.length, 1);
+    assert.equal(mapLayer.children[0].position.x, 0);
+    assert.equal(mapLayer.children[0].scale.x, 1);
     assert.equal(cooldownBar.progress, 2 / 3);
     frame.snapshot.elapsedSeconds = ZC_PORTAL_FLIGHT_SECONDS * 2;
     world.renderNeutralFeatures(frame);
     assert.equal(mapLayer.children.length, 0);
+    assert.equal(view.iconSprite.node.active, true);
     assert.equal(cooldownBar.progress, 2 / 3);
 });

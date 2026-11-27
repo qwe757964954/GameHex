@@ -10,6 +10,7 @@ import type { ZCCombatTarget, ZCProjectileState, ZCUnitState } from '../assets/s
 import { sweptCircleHit, ZCProjectileSystem } from '../assets/script/app/zcds/model/systems/ZCProjectileSystem';
 import { ZC_PROJECTILE_MISS_DISTANCE, ZCCombatSystem } from '../assets/script/app/zcds/model/systems/ZCCombatSystem';
 import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCStatusResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCStatusResolutionSystem';
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 import { loadViews } from './helpers/zcds-view-fixtures';
 
@@ -434,7 +435,7 @@ test('piercing projectile hits distinct enemies in deterministic order and survi
 test('shield absorbs damage without stacking and remains snapshot-safe', () => {
     const source = unit(1, 'player', 0), ally = unit(2, 'player', 10), enemy = unit(3, 'enemy', 20);
     const model = game([source, ally, enemy]);
-    ZCAttackResolutionSystem.applyShieldAura((model as any).state, (model as any).state.units[0], .2);
+    ZCStatusResolutionSystem.applyShieldAura((model as any).state, (model as any).state.units[0], .2);
     const protectedUnit = (model as any).state.units[1] as ZCUnitState;
     assert.equal(protectedUnit.shield, 200);
     (model as any).damageUnit(protectedUnit, 150, { owner: 'enemy', kind: 'unit', unitId: 3 });
@@ -448,9 +449,9 @@ test('shield absorbs damage without stacking and remains snapshot-safe', () => {
 
 test('haste and banner statuses use deterministic selection and configured critical values', () => {
     const model = game([unit(1, 'player', 0), unit(2, 'player', 10), unit(3, 'enemy', 20)]);
-    ZCAttackResolutionSystem.applyMoveSpeedAura((model as any).state, 'player', .5, 5,
+    ZCStatusResolutionSystem.applyMoveSpeedAura((model as any).state, 'player', .5, 5,
         (model as any).attackResolutionContext);
-    ZCAttackResolutionSystem.applyBannerBuff((model as any).state, 'player', 1, .3,
+    ZCStatusResolutionSystem.applyBannerBuff((model as any).state, 'player', 1, .3,
         (model as any).attackResolutionContext);
     const statuses = (model as any).statusSystem;
     assert.equal(statuses.statModsOf('1').moveSpeedPct, 50);

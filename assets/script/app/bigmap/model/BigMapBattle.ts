@@ -24,8 +24,8 @@ import { bigMapMonsterUnlock, bigMapWithinCityRange, type IBigMapUnlockContext }
 import { bigMapResCap } from './BigMapBase';
 
 /** 主城 1 级的基础攻城伤害；每升 1 级 +180（主城等级是唯一的「战力」来源）。 */
-export const BIGMAP_BASE_ATTACK = 420;
-export const BIGMAP_ATTACK_PER_MAIN_LEVEL = 180;
+const BIGMAP_BASE_ATTACK = 420;
+const BIGMAP_ATTACK_PER_MAIN_LEVEL = 180;
 export const BIGMAP_MONSTER_BATTLE_UNAVAILABLE = '野怪战斗尚未接入';
 export const BIGMAP_BATTLE_TEXT = {
     closed: '页面已关闭',

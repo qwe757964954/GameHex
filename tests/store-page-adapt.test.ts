@@ -96,8 +96,8 @@ test('资源条（嵌套 prefab 实例）以实例 override 形式挂上顶部�
         .find((item: any) => item.__type__ === 'cc.Widget');
     assert.ok(mounted, 'ResBar 实例缺少 cc.Widget');
     assert.equal(mounted._alignFlags, FLAGS.TOP | FLAGS.CENTER);
-    assert.equal(mounted._top, 78, '顶边 640-562：资源条贴顶，不随屏幕高度漂移');
-    assert.equal(mounted._horizontalCenter, -131);
+    assert.equal(mounted._top, 16, '顶边 16：与主界面 TopHud 的 edgeMargin 同口径，资源条贴顶、不随屏幕高度漂移');
+    assert.equal(mounted._horizontalCenter, 0);
 });
 
 test('页面不再有「零 Widget 的顶层子节点」——除嵌套实例外全部登记对齐位', () => {

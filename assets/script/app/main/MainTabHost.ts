@@ -4,6 +4,7 @@ import {
     Button,
     Component,
     Node,
+    UITransform,
     Vec3,
 } from 'cc';
 import { TabButton } from '../common/TabButton';
@@ -18,6 +19,9 @@ const { ccclass, property } = _decorator;
 
 /** 兜底：首屏 ready 信号丢失（章节加载失败等）时，最多等待此时长后强制结束，避免 onPreload 永久卡死。 */
 const FIRST_SCREEN_FALLBACK_SECONDS = 8;
+
+/** 底栏红点层：挂在 `BottomNav` 的最后一位，保证红点画在七格页签之上。 */
+const RED_DOT_LAYER_NAME = 'RedDotLayer';
 
 /** 主界面节点宿主；导航决策与资源归属由 MainTabController 管理。 */
 @ccclass('MainTabHost')
@@ -78,13 +82,51 @@ export class MainTabHost extends Component {
             const type = button.tabType;
             // 未开放的格子（挑战）保持可见但压暗 + 挂锁；事件照派发，由 controller 拦下不切页。
             button.setEnabled(!isMainTabLocked(type));
-            button.bindRedDotExpr(mainTabItem(type)?.rdExpr);
             button.node.on(Button.EventType.CLICK, () => {
                 EventMgr.instance.emit(MainTabEvent.Select, { tab: type });
             });
         }
 
         EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'ready' }, this);
+    }
+
+    /**
+     * 红点绑定放到 `start`：`MainTabHost.onLoad` 早于子节点 `RedDot.onLoad`，
+     * 表达式首帧就 >0 时会往未初始化的 `RedDot` 写尺寸（`iconTransform` 还是 undefined）。
+     * `start` 在整棵激活树 `onLoad` 完成后才跑，红点组件已就绪。
+     */
+    protected start(): void {
+        this.hoistRedDotsAboveTabs();
+        for (const button of this.navItems) {
+            button.bindRedDotExpr(mainTabItem(button.tabType)?.rdExpr);
+        }
+    }
+
+    /**
+     * 把七格红点统一搬到页签之上的 `RedDotLayer`。
+     *
+     * 红点在 `TabButton.prefab` 里是本格的子节点（`RedDot` 实例，x=53 正好探出格子右缘），
+     * 而页签节点按兄弟序绘制：右邻格一选中，`SelBg`（106×143 的金色底板）会把左邻格探出的半颗盖掉
+     * （2026-11-25 截图：领地选中时「角色」的红点只剩左半边）。
+     * 这里只改绘制归属、不改视觉坐标 —— `setParent(layer, true)` 保留世界坐标，
+     * `TabButton.redDot` / `RdExprBinding` 都持有组件引用，不受影响。
+     *
+     * 层节点放在 `BottomNav` 子节点末尾 = 渲染序最后一档；`HeroFragmentBadge` 之后再挂会压在本层之上。
+     */
+    private hoistRedDotsAboveTabs(): void {
+        let layer = this.navBar.getChildByName(RED_DOT_LAYER_NAME);
+        if (!layer) {
+            layer = new Node(RED_DOT_LAYER_NAME);
+            layer.layer = this.navBar.layer;
+            layer.addComponent(UITransform);
+            layer.setParent(this.navBar);
+        }
+        layer.setSiblingIndex(this.navBar.children.length - 1);
+        for (const button of this.navItems) {
+            const dot = button.redDot;
+            if (!dot?.isValid) continue;
+            if (dot.node.parent !== layer) dot.node.setParent(layer, true);
+        }
     }
 
     /**

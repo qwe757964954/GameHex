@@ -15,6 +15,7 @@ export interface IEquipWashPopupOpenParams {
     rank: number;
     level: number;
     oldEffects: readonly string[];
+    washValues: readonly number[];
     newEffectIds: readonly number[];
 }
 
@@ -84,11 +85,10 @@ export class EquipWashPopup extends PopupBase {
         this.qualityLabel.string = `${data.rank}阶`;
         this.lvLabel.string = data.level > 0 ? `Lv.${data.level}` : '';
 
-        // 计算新词条属性名
-        const growth = await roleRepository.equipmentGrowth(null, null);
-        const washValues = growth?.washValues ?? [];
-        this.newEffects = await roleRepository.equipmentWashAttributes(data.newEffectIds, washValues);
-
+        const context = this.popupOpenContext;
+        const effects = await roleRepository.equipmentWashAttributes(data.newEffectIds, data.washValues);
+        if (!context || context.cancelled) return;
+        this.newEffects = effects;
         this.renderAttributeLists();
     }
 
@@ -99,26 +99,28 @@ export class EquipWashPopup extends PopupBase {
     }
 
     private renderAttributeLists(): void {
-        const oldItems = this.nowAttrList.children;
-        for (let i = 0; i < oldItems.length; i++) {
-            const item = oldItems[i];
-            const hasEffect = i < this.oldEffects.length;
-            item.active = hasEffect;
-            if (hasEffect) {
-                const label = item.getComponentInChildren(Label);
-                if (label) label.string = this.oldEffects[i];
-            }
-        }
+        this.renderRows(this.nowAttrList, this.oldEffects);
+        this.renderRows(this.nextAttrList, this.newEffects);
+    }
 
-        const newItems = this.nextAttrList.children;
-        for (let i = 0; i < newItems.length; i++) {
-            const item = newItems[i];
-            const hasEffect = i < this.newEffects.length;
+    /**
+     * 逐行填词条文字。
+     *
+     * 行内子节点是 `Dot / Label / Line`，其中 `Dot` 本身也是一个 Label（装饰符号 `●`，
+     * 20×26、overflow=SHRINK）。`getComponentInChildren(Label)` 先命中 Dot，文字会被写进
+     * 圆点里压成看不见的极小字号，真正的文字节点一直为空 —— 表现为「弹窗词条区是空的」。
+     * 因此这里按名字取行内 `Label`，并对没有该子节点的 prefab 回退到行自身组件。
+     */
+    private renderRows(list: Node, effects: readonly string[]): void {
+        const items = list.children;
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const hasEffect = i < effects.length;
             item.active = hasEffect;
-            if (hasEffect) {
-                const label = item.getComponentInChildren(Label);
-                if (label) label.string = this.newEffects[i];
-            }
+            if (!hasEffect) continue;
+            const textNode = item.getChildByName('Label');
+            const label = textNode ? textNode.getComponent(Label) : item.getComponent(Label);
+            if (label) label.string = effects[i];
         }
     }
 

@@ -10,6 +10,7 @@ import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchCon
 import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRuntimeCompiler';
 import type { ZCGroundZoneState, ZCSnapshot, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 import { ZC_EMPOWERED_LOCK_PARAM } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import { zcCombatEffectGrowFactor } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
@@ -340,7 +341,7 @@ test('横扫：只打前方 120° 扇形的敌人，扇形外 / 超距一律不�
         secondaryRadiusScale: 1.4, secondaryKnockback: 2,
     });
     const state = fanState(units);
-    assert.equal(ZCAttackResolutionSystem.castFanSkill(state, caster, context as never), true);
+    assert.equal(ZCSkillResolutionSystem.castFanSkill(state, caster, context as never), true);
     assert.deepEqual(hits.map((hit) => hit.id).sort(), [2, 3], `只该打中正前方与斜前方，实际 ${JSON.stringify(hits)}`);
     // 伤害 = 面板 30 × 1 × 1 × 1.8（无暴击、无克制）
     for (const hit of hits) assert.equal(hit.damage, 54);
@@ -362,7 +363,7 @@ test('横扫：L3 带 2 格击退（换算成逻辑距离 84），L1 不击退',
         secondaryCooldown: 8, secondaryDamageRate: 1.8, secondaryFanDeg: 120,
         secondaryRadiusScale: 1.4, secondaryKnockback: 2,
     });
-    ZCAttackResolutionSystem.castFanSkill(fanState(l3.units), caster3, l3.context as never);
+    ZCSkillResolutionSystem.castFanSkill(fanState(l3.units), caster3, l3.context as never);
     assert.equal(l3.hits.length, 1);
     // `applyLegacyKnockback` 的口径是「格 × HEX_GRID_LOGICAL_ROW_STEP(42)」再乘 combatDistanceScale。
     assert.equal(l3.hits[0].knock, 84, '2 格 = 2 × 42 逻辑单位');
@@ -372,25 +373,25 @@ test('横扫：L3 带 2 格击退（换算成逻辑距离 84），L1 不击退',
         secondaryCooldown: 8, secondaryDamageRate: 1.2, secondaryFanDeg: 120,
         secondaryRadiusScale: 1.4, secondaryKnockback: 0,
     });
-    ZCAttackResolutionSystem.castFanSkill(fanState(l1.units), caster1, l1.context as never);
+    ZCSkillResolutionSystem.castFanSkill(fanState(l1.units), caster1, l1.context as never);
     assert.equal(l1.hits[0].knock, 0, 'L1/L2 不击退');
 });
 
 test('横扫：没有副轨参数或没有目标时不出手（CD 不该被消费）', () => {
     const caster = makeUnit(1, 0, 0, ZCOwner.Player);
     const noParams = fanContext(caster, [makeUnit(2, 20, 0)], {});
-    assert.equal(ZCAttackResolutionSystem.castFanSkill(fanState(noParams.units), caster, noParams.context as never), false);
+    assert.equal(ZCSkillResolutionSystem.castFanSkill(fanState(noParams.units), caster, noParams.context as never), false);
 
     const noTarget = fanContext(caster, [], { secondaryCooldown: 8 });
     (noTarget.context as unknown as { currentTarget: () => null }).currentTarget = () => null;
-    assert.equal(ZCAttackResolutionSystem.castFanSkill(fanState(noTarget.units), caster, noTarget.context as never), false);
+    assert.equal(ZCSkillResolutionSystem.castFanSkill(fanState(noTarget.units), caster, noTarget.context as never), false);
 });
 
 test('独立打击的最近排序落实到真实伤害对象，不受随机值影响', () => {
     const caster = makeUnit(1, 0, 0, ZCOwner.Player);
     const h = fanContext(caster, [makeUnit(3, 20, 0), makeUnit(2, 10, 0)], {});
     const state = fanState(h.units);
-    const hits = ZCAttackResolutionSystem.strikeTargets(state, caster,
+    const hits = ZCSkillResolutionSystem.strikeTargets(state, caster,
         { count: 1, radius: Infinity, damageRate: 1, nearest: true }, h.context as never);
     assert.equal(hits, 1);
     assert.deepEqual(h.hits.map(hit => hit.id), [2]);
@@ -402,7 +403,7 @@ test('吸血：命中后按真正扣掉的血量 × 2% 回血', () => {
         secondaryCooldown: 8, secondaryDamageRate: 1.0, secondaryFanDeg: 120,
         secondaryRadiusScale: 1.4, secondaryKnockback: 0,
     }, { lifestealRate: 0.02 });
-    ZCAttackResolutionSystem.castFanSkill(fanState(units), caster, context as never);
+    ZCSkillResolutionSystem.castFanSkill(fanState(units), caster, context as never);
     assert.equal(hits.length, 1);
     assert.equal(hits[0].damage, 30);
     assert.equal(hits[0].heal, 30 * 0.02, '按 applied 反算，不是面板伤害');
@@ -755,25 +756,25 @@ test('武将技解锁门控：兵种等级没到 12 时，暴风一次都不放'
     //    · 施放与否由 `pvpSkill` 30707 的 `empoweredEvery: 5` + `empoweredSkillId: 30831` 决定，
     //      **与等级无关** —— 1 级也会放；
     //    · 「三道 / 50° / 100px / 3s / 名额 / 由小变大」却写在 `pvpSkillPlan` 的 100504 上，
-    //      三档解锁等级是 12 / 24 / 36。
+    //      三档解锁等级自 2026-11-26 起是 7 / 24 / 36（设计案口径，原 12/24/36）。
     //  等级没到时整条链被 `selectZCSkillPlans` 过滤 ⇒ 参数袋里一个 `zone*` 都没有
     //  ⇒ `moving = zoneMoveSpeed > 0` 退化成 false ⇒ 落回「原地生成」，且不报任何错。
     //  用户口径（2026-11-19）：「没到技能解锁以前不能释放技能」⇒ 门控见
     //  `ZCCompiledModifierLoadout.empoweredLocked` / `ZC_EMPOWERED_LOCK_PARAM`。
     const base = prepare();
-    //  前提：8 级时 100504 这条链确实还没解锁（否则本用例测的就不是门控那条路）。
+    //  前提：6 级时 100504 这条链确实还没解锁（否则本用例测的就不是门控那条路）。
     assert.ok(
-        !selectZCSkillPlans('68005', 8).some((row) => row.skillChainId === 100504),
-        '前提：8 级时 100504 未解锁',
+        !selectZCSkillPlans('68005', 6).some((row) => row.skillChainId === 100504),
+        '前提：6 级时 100504 未解锁',
     );
-    for (const [heroLevel, expectedZones, maxHits] of [[8, 0, 0], [12, 3, 3], [36, 3, 5]] as const) {
+    for (const [heroLevel, expectedZones, maxHits] of [[6, 0, 0], [7, 3, 3], [36, 3, 5]] as const) {
         const compiled = compileZCCombatBuild({ unitId: '68005', heroLevel }, base.units, getZCModifierCatalogs());
         const runtime = compileZCMatchRuntime({ ...base, modifiers: { player: compiled, enemy: [] } } as never);
         const runtimeDefinition = runtime.skillRuntime[ZCOwner.Player].get('68005:30707');
         assert.ok(runtimeDefinition, `Lv${heroLevel} 必须有 68005:30707 的运行时（否则门控标记无处可挂）`);
         assert.equal(
             runtimeDefinition.parameters[ZC_EMPOWERED_LOCK_PARAM] ?? 0,
-            heroLevel < 12 ? 1 : 0,
+            heroLevel < 7 ? 1 : 0,
             `Lv${heroLevel} 的门控标记`,
         );
         //  直接把**真实构筑出来的**参数喂进既有夹具，等于把「表 → 运行时 → 区域」整条链验一遍。

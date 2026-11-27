@@ -31,13 +31,12 @@ import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchCon
 import type { ZCAttackProfile, ZCDeckBonuses, ZCUnitDefinition } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { ZCCombatEventType } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import type {
-    ZCCombatEvent, ZCFloatText, ZCSnapshot, ZCUnitState,
-} from '../assets/script/app/zcds/model/ZCGameTypes';
+    ZCCombatEvent, ZCFloatText, ZCSnapshot, ZCUnitState, } from '../assets/script/app/zcds/model/ZCGameTypes';
 import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import {
-    ZCAttackResolutionSystem, type IZCAttackResolutionContext,
-} from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+    ZCAttackResolutionSystem, type IZCAttackResolutionContext } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 import {
@@ -214,7 +213,7 @@ test('L1：链上 3 个各挨 90%，圈外的第 4 个不在链上', () => {
     const state = makeState(units);
     const { context, damaged } = chainContext(units, TIER_PARAMS[0], 2);
 
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, context), true);
     assert.deepEqual(damaged.map((item) => item.id), [2, 3, 4], '从锁定目标起跳，逐跳最近的未命中敌人');
     for (const hit of damaged) {
         assert.equal(hit.damage, 90, 'L1 每个 90%（攻击力 100）');
@@ -230,7 +229,7 @@ test('L2：4 跳，递减是复利（100 / 90 / 81 / 73），不是线性', () =
     const state = makeState(units);
     const { context, damaged } = chainContext(units, TIER_PARAMS[1], 2);
 
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, context), true);
     assert.equal(damaged.length, 4);
     assert.deepEqual(damaged.map((item) => item.damage), [100, 90, 81, 73],
         '0.9^3 = 0.729 ⇒ 73；线性递减会给 70，这就是两者的分界');
@@ -244,7 +243,7 @@ test('L3：6 跳 + 终跳强制暴击 150%（120 × 1.5 = 180）', () => {
     const state = makeState(units);
     const { context, damaged } = chainContext(units, TIER_PARAMS[2], 2);
 
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, context), true);
     assert.equal(damaged.length, 6, 'L3 命中 6 个');
     //  前五跳：120 × 0.9^k ⇒ 120 / 108 / 97 / 87 / 79（四舍五入）
     assert.deepEqual(damaged.slice(0, 5).map((item) => item.damage), [120, 108, 97, 87, 79]);
@@ -263,7 +262,7 @@ test('只剩 2 个敌人时配 6 跳只打 2 下，绝不原地来回弹', () =>
     const state = makeState(units);
     const { context, damaged } = chainContext(units, TIER_PARAMS[2], 2);
 
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, context), true);
     assert.deepEqual(damaged.map((item) => item.id), [2, 3], '同一个人只挨一次，链条提前断');
 });
 
@@ -276,7 +275,7 @@ test('跳距之外的人不上链（150 表值 × 0.3 = 45 世界 px）', () => 
     const state = makeState(units);
     const { context, damaged } = chainContext(units, TIER_PARAMS[0], 2);
 
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, context), true);
     assert.deepEqual(damaged.map((item) => item.id), [2], '差 1px 都不传过去');
 });
 
@@ -292,7 +291,7 @@ test('参数不全（漏了跳距）⇒ 不出手、不消费 CD', () => {
     delete (broken as Record<string, number | undefined>).chainJumpRadius;
     const { context, damaged } = chainContext(units, broken, 2);
 
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, context), false);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, context), false);
     assert.deepEqual(damaged, [], '漏配跳距时不能「只打首目标」地静默放出去');
     assert.equal(state.combatEvents.length, 0);
 });
@@ -306,12 +305,12 @@ test('锁定的是建筑 / 死了的目标 ⇒ 按无目标处理', () => {
     const units = [caster, dead];
     const state = makeState(units);
     const { context, damaged } = chainContext(units, TIER_PARAMS[0], 2);
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, context), false);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, context), false);
     assert.deepEqual(damaged, []);
 
     //  没有锁定目标（`currentTarget` 返回 null，建筑 / 地块走的就是这条）。
     const { context: noTarget, damaged: second } = chainContext(units, TIER_PARAMS[0], null);
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, noTarget), false);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, noTarget), false);
     assert.deepEqual(second, []);
 });
 
@@ -325,7 +324,7 @@ test('从卡牌中心起铺：n 个目标 = n 段，z 转 -90°，整条链同�
     const state = makeState(units);
     const { context } = chainContext(units, TIER_PARAMS[0], 2);
 
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, context), true);
     const effects = state.combatEvents.filter((event) => event.type === ZCCombatEventType.Area);
     //  链首那一段「卡牌 0 → 目标 20」不再被砍掉（2026-11-19 第 21 批按示意图改口）：
     //  0→20、20→40、40→80 每段都短于单段长度（size ×2 后单段 72.84 世界 px）⇒ 3 条事件。
@@ -375,7 +374,7 @@ test('复制后压缩：段数 = ceil(段距/单段)，每段压到 段距/段�
     const params = { ...TIER_PARAMS[0], chainTargetCount: 2, chainJumpRadius: 900 };
     const { context } = chainContext(units, params, 2);
 
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, context), true);
     //  只有一个目标 ⇒ 仍然有「卡牌 → 目标」那一段（不再是「在这个目标身上落一段」的退化路径）。
     const single = state.combatEvents.filter((event) => event.type === ZCCombatEventType.Area);
     assert.equal(single.length, Math.ceil(300 / ZC_CHAIN_SEGMENT_WORLD_LENGTH - 1e-6), '段数按距离算');
@@ -410,7 +409,7 @@ test('复制后压缩：段数 = ceil(段距/单段)，每段压到 段距/段�
     const second = makeUnit(3, ZCOwner.Enemy, 570);
     const longState = makeState([caster, far, second]);
     const longCtx = chainContext([caster, far, second], params, 2);
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(longState, caster, longCtx.context), true);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(longState, caster, longCtx.context), true);
     const tail = longState.combatEvents
         .filter((event) => event.type === ZCCombatEventType.Area && event.followFromUnitId === 2);
     assert.equal(tail.length, Math.ceil(270 / ZC_CHAIN_SEGMENT_WORLD_LENGTH - 1e-6), '第二段 270 世界 px');
@@ -434,7 +433,7 @@ test('150 px 圆扩散：不是「跳向最近的那一个」—— 只进得了
     const params = { ...TIER_PARAMS[0], chainTargetCount: 3 };
     const { context, damaged } = chainContext(units, params, 2);
 
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(state, caster, context), true);
     assert.deepEqual(damaged.map((item) => item.id), [2, 3, 4],
         'A 与 B 都在目标 1 的圆里 ⇒ 两个都被传导；B 不是「离目标 1 最近」的那个也要算');
     assert.equal(damaged.length, 3, '到上限就停，C 不传导');
@@ -443,7 +442,7 @@ test('150 px 圆扩散：不是「跳向最近的那一个」—— 只进得了
     //  上限放开到 4 ⇒ 从 B 的圆再往外扩一层，C 才进链（用户原话「又会产生 1 个目标 2 为圆心的判定范围」）。
     const openState = makeState(units);
     const open = chainContext(units, { ...params, chainTargetCount: 4 }, 2);
-    assert.equal(ZCAttackResolutionSystem.castChainLightning(openState, caster, open.context), true);
+    assert.equal(ZCSkillResolutionSystem.castChainLightning(openState, caster, open.context), true);
     assert.deepEqual(open.damaged.map((item) => item.id), [2, 3, 4, 5]);
 });
 
@@ -729,7 +728,7 @@ test('102203 三档：chain 前缀 + 4/6/8 个 + 90/100/120% + 递减 + 终跳�
             assert.equal(row.stateMode, 'none');
             assert.equal(Number(row.unitId), Number(UNIT_ID));
             assert.equal(Number(row.pvpSkillId), SKILL_ID);
-            assert.equal(Number(row.unlockHeroLevel), [9, 18, 27][index]);
+            assert.equal(Number(row.unlockHeroLevel), [5, 18, 27][index]);
             assert.equal(bag.chainCooldown, 12, '设计 J 列');
             assert.equal(bag.chainTargetCount, want.chainTargetCount);
             assert.equal(bag.chainDamageRate, want.chainDamageRate);
@@ -755,7 +754,7 @@ test('卡面描述（K 表 / armySkillLevelUp）与计划行逐字一致，修�
         rows.forEach((row, index) => {
             assert.equal(row.name, '闪电链');
             assert.equal(row.desc, plans[index].desc);
-            assert.equal(Number(row.unlockarmylevel), [9, 18, 27][index]);
+            assert.equal(Number(row.unlockarmylevel), [5, 18, 27][index]);
             assert.deepEqual(row.modfiy, [94022031 + index]);
         });
     }

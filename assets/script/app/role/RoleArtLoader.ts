@@ -2,23 +2,13 @@ import type { SpriteFrame } from 'cc';
 import { createRoutedSpriteFrameCache } from '../common/SpriteFrameCache';
 import { spriteFramePathOf } from '../ArtPaths';
 import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
-import { RL_ART_NAMES, RL_ART_ROOT, roleArtRelPath } from './RoleArt';
+import { gemDetailHeaderKey, roleArtRelPath } from './RoleArt';
 import type { IRoleBagEntry } from './RoleTypes';
 
-/**
- * 角色模块美术的根（真源在零 `cc` 的 `RoleArt.RL_ART_ROOT`，这里只是转发）。
- *
- * ⚠️ 绝大多数 value 相对它，但 `icons/**` 那几条**与 `image/` 平级** ⇒ 一律拼前缀会拼成
- * `image/icons/main/icon_qianghua` ⇒ `Bundle resources doesn't contain`
- * （不崩，只是装备锻造页签图标静默留白）。分流见 `roleArtRelPath`。
- */
-export const ROLE_ART_ROOT = RL_ART_ROOT;
-
-/** key → `resources.load` 用的装配路径（`image/role/rl_slot_empty_96/spriteFrame`）。 */
+/** 将美术键解析为带 `/spriteFrame` 后缀的资源路径。未知键返回空字符串。 */
 export function roleFramePathOf(key: string): string {
-    const rel = RL_ART_NAMES[key];
-    if (!rel) return '';
-    return spriteFramePathOf(roleArtRelPath(key));
+    const path = roleArtRelPath(key);
+    return path ? spriteFramePathOf(path) : '';
 }
 
 const cache = createRoutedSpriteFrameCache('RoleArt');
@@ -37,10 +27,7 @@ export function peekRoleArt(key: string): SpriteFrame | null {
     return cache.peek(roleFramePathOf(key));
 }
 
-/**
- * 清缓存（测试用）。
- * 正常流程**不要**在运行时调 —— 会把已经 `addRef()` 的图丢掉引用来源。
- */
+/** 供测试重置缓存。运行时清空会丢失已保留资源的引用记录。 */
 export function resetRoleArtCacheForTest(): void {
     cache.clear();
     bagIconCache.clear();
@@ -50,20 +37,12 @@ export function resetRoleArtCacheForTest(): void {
 // 背包图标 / 品质框
 // ============================================================
 
-/**
- * 宝石 / 装备图标的目录（**按 kind 分**，key 就是文件名）。
- *
- * ⚠️ **不要**把这两类丢给 `HeadArt.loadHeadIconFrame()`：那条链按 `icon.json` 的**包名**
- * 解目录，而宝石 / 装备的包名都是「图标」⇒ 会被拼成 `icons/head/图标_宝石_蓝色`
- * （头像目录）—— 结果既报一条 `[HeadArt] 头像加载失败`，列表又照样空白（2026-09-26 实测）。
- */
+/** 宝石、装备和民兵天赋按类型定位目录。配置的图标键用于匹配文件名，头像包名不足以定位这些资源。 */
 const BAG_ICON_ROOTS: Readonly<Record<'gem' | 'equip' | 'militia', string>> = {
     gem: 'icons/gem',
     equip: 'icons/equip',
-    // 民兵天赋（`armyLevel.icon` 的键 + 解锁后缀，如「图标_民兵天赋_21_1」）—— 共 21×2 = 42 张。
-    // 已于 2026-09-28 从 zarts `图标_民兵/天赋/tf<M>_<S>.png` 导入（脚本 `tmp/_import_militia_icons.mjs`）；
-    // ⚠️ 命名是**老端 icon.json 定的**，16..21 复用 tf1..tf6、且**后缀反着**（`_1`=解锁 → `tf*_0` 彩色），
-    // 重新导美术时别按「tf 序号 = 天赋序号」直接对拷。缺图守卫：`tests/art-paths.test.ts`。
+    // 民兵天赋图标使用 `armyLevel.icon` 加解锁状态后缀。
+    // 原始美术的 16～21 复用 tf1～tf6，且图标键的解锁后缀 `_1` 对应原图 `tf*_0`。
     militia: 'icons/militia',
 };
 
@@ -90,12 +69,7 @@ export function loadRoleBagIcon(entry: IRoleBagEntry): Promise<SpriteFrame | nul
     return entry.iconKey ? loadRoleBagIconSprite(entry.kind, entry.iconKey) : Promise.resolve(null);
 }
 
-/**
- * 民兵天赋图标（`armyLevel.icon` + `_1`/`_0` 后缀，如「图标_民兵天赋_1_0」）。
- *
- * 走 `icons/militia`（与宝石 / 装备同一条通道，规则 115：按 kind 分目录）。
- * ⚠️ 美术未导之前这里会 warn 并返回 `null` —— 界面留白，**不是**拼错目录。
- */
+/** 民兵天赋图标键由 `armyLevel.icon` 和状态后缀组成，`_1` 表示已解锁，`_0` 表示未解锁。 */
 export function loadMilitiaTalentIcon(iconKey: string): Promise<SpriteFrame | null> {
     return iconKey ? loadRoleBagIconSprite('militia', iconKey) : Promise.resolve(null);
 }
@@ -103,8 +77,18 @@ export function loadMilitiaTalentIcon(iconKey: string): Promise<SpriteFrame | nu
 /** 品质 1..5 → 角色背包扁平底；5 以上统一收口到金色，避免越界空图。 */
 const ROLE_BAG_QUALITY_KEYS = ['bagQuality1', 'bagQuality2', 'bagQuality3', 'bagQuality4', 'bagQuality5'] as const;
 
-/** 按品质加载角色背包的扁平底（蓝湖参考图的平涂圆角块，不再用跨模块的 `cu_quality`）。 */
 export function loadRoleQualityFrame(quality: number): Promise<SpriteFrame | null> {
     const index = Math.min(Math.max(Math.round(quality) || 1, 1), ROLE_BAG_QUALITY_KEYS.length) - 1;
     return loadRoleArt(ROLE_BAG_QUALITY_KEYS[index]);
+}
+
+/** 宝石详情左卡的品质底板；白品质 / 越界返回 null（由调用方隐藏底板）。 */
+export function loadGemDetailHeader(quality: number): Promise<SpriteFrame | null> {
+    const key = gemDetailHeaderKey(quality);
+    return key ? loadRoleArt(key) : Promise.resolve(null);
+}
+
+/** 该品质是否有独立底板；白品质没有，调用方应隐藏底板节点。 */
+export function hasGemDetailHeader(quality: number): boolean {
+    return !!gemDetailHeaderKey(quality);
 }

@@ -15,6 +15,7 @@ import { EventMgr } from '../../assets/script/framework/event/EventMgr';
 import * as bigMapWorld from '../../assets/script/app/bigmap/model/BigMapWorld';
 import * as bigMapCampRoleInfo from '../../assets/script/app/bigmap/model/BigMapCampRoleInfo';
 import * as bigMapCampMove from '../../assets/script/app/bigmap/model/BigMapCampMove';
+import * as bigMapServerState from '../../assets/script/app/bigmap/model/BigMapServerState';
 import * as bigMapEvents from '../../assets/script/app/bigmap/application/BigMapEvents';
 import * as bigMapViewState from '../../assets/script/app/bigmap/application/BigMapViewState';
 import * as battleStartModel from '../../assets/script/app/battle/BattleStartModel';
@@ -43,6 +44,7 @@ export function loadBigMapController(net: IBigMapNetPort = EMPTY_NET,
             '/BigMapWorld': bigMapWorld,
             '/BigMapCampRoleInfo': bigMapCampRoleInfo,
             '/BigMapCampMove': bigMapCampMove,
+            '/BigMapServerState': bigMapServerState,
             '/BigMapEvents': bigMapEvents,
             '/BigMapViewState': bigMapViewState,
         } });

@@ -1,3 +1,4 @@
+import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import { ControllerBase } from '../../../framework/controller/ControllerBase';
 import type { IControllerContext } from '../../../framework/controller/ControllerBase';
 import { EventMgr } from '../../../framework/event/EventMgr';
@@ -7,7 +8,8 @@ import { GameNet } from '../../net/GameNet';
 import { BIGMAP_BATTLE_TEXT } from '../model/BigMapBattle';
 import { bigMapOccupantOf } from '../model/BigMapWorld';
 import { normalizeBigMapRoleEvent } from '../model/BigMapCampRoleInfo';
-import { BIGMAP_CAMP_MOVE_TEXT } from '../model/BigMapCampMove';
+import { BIGMAP_CAMP_MOVE_TEXT, formatBigMapCampMoveMessage } from '../model/BigMapCampMove';
+import { formatBigMapSlgMessage } from '../model/BigMapServerState';
 import { BIGMAP_BATTLE_READY, BIGMAP_MOVE_HINT, BigMapUiEvent, BigMapViewEvent, type BigMapIntent, type IBigMapBattleReady, type IBigMapIntentEvent,
     type BigMapViewCommand } from './BigMapEvents';
 import { buildBigMapViewState, type BigMapMode, type IBigMapUiState, type IBigMapViewState } from './BigMapViewState';
@@ -16,7 +18,7 @@ import type { BigMapCampRepository } from './BigMapCampRepository';
 import type { BigMapSlgRepository } from './BigMapSlgRepository';
 /** 「探索」两颗提示：没目标 / 定位成功（后半截由等级拼出来）。 */
 export const BIGMAP_SEARCH_MONSTER_EMPTY = '暂无可挑战的野怪';
-export const BIGMAP_SEARCH_MONSTER_FOUND = '已定位到';
+const BIGMAP_SEARCH_MONSTER_FOUND = '已定位到';
 
 /**
  *可见据点查询的最小间隔（毫秒）。
@@ -31,6 +33,7 @@ export interface IBigMapControllerOptions {
     readonly context: IControllerContext;
     readonly campRepository?: BigMapCampRepository;
     readonly slgRepository?: BigMapSlgRepository;
+    readonly scope?: ResourceScope;
     readonly schedule?: (callback: () => void, milliseconds: number) => () => void;
     /** 毫秒时钟；默认 `Date.now`。可见据点查询的限速窗口按它算（测试注入可控时钟）。 */
     readonly now?: () => number;
@@ -51,7 +54,9 @@ export class BigMapController extends ControllerBase {
         campRolesVisible: false, campRoleIndex: 0, pendingCampMoveId: 0,
     };
 
-    constructor(private readonly model: BigMapModel, private readonly options: IBigMapControllerOptions) { super(options.context, 'bigmap-controller'); }
+    constructor(private readonly model: BigMapModel, private readonly options: IBigMapControllerOptions) {
+        super(options.context, options.scope ?? 'bigmap-controller');
+    }
 
     get snapshot(): IBigMapViewState { return buildBigMapViewState(this.model, this.ui); }
 
@@ -109,8 +114,23 @@ export class BigMapController extends ControllerBase {
         EventMgr.instance.emit(BigMapViewEvent.Command, { command });
     }
     private feedback(result: IBigMapActionFeedback): void {
-        if (result.message) this.command({ kind: 'feedback', ok: result.ok, message: result.message });
-        if (result.ok && result.rewards?.length) this.command({ kind: 'rewards', rewards: result.rewards });
+        const message = this.resolveFeedbackMessage(result);
+        if (result.status !== 'rejected' && message) {
+            this.command({ kind: 'feedback', ok: result.ok, message });
+        }
+        if (result.ok && result.rewards?.length) {
+            this.command({ kind: 'rewards', rewards: result.rewards });
+        }
+    }
+
+    private resolveFeedbackMessage(result: IBigMapActionFeedback): string {
+        if (result.message !== undefined) {
+            return result.message;
+        }
+        if (result.status === undefined) {
+            return '';
+        }
+        return formatBigMapSlgMessage({ ok: result.ok, status: result.status, action: result.action });
     }
 
     private onIntent(event: IBigMapIntentEvent): void {
@@ -267,7 +287,14 @@ export class BigMapController extends ControllerBase {
             const campId = this.ui.pendingCampMoveId;
             const pos = this.ui.selectedBaseHexId;
             if (!this.model.canMoveToCampPos(campId, pos)) return;
-            void this.runAction(() => this.model.requestMoveCamp(campId, pos), () => this.clearSelection());
+            void this.runAction(async () => {
+                const result = await this.model.requestMoveCamp(campId, pos);
+                return {
+                    ok: result.ok,
+                    status: result.status,
+                    message: formatBigMapCampMoveMessage(result.status),
+                };
+            }, () => this.clearSelection());
             return;
         }
         if (this.ui.campRolesVisible) {
@@ -409,7 +436,7 @@ export class BigMapController extends ControllerBase {
         return this.model.refreshVisibleCamps(this.visibleCampIds);
     }
     dispose(): void {
-        // 先断输入，再交给 Model 释放仓库（Model 自身保证仓库只释放一次）。
+        // 先断输入，再释放作用域（由共享或各自 ResourceScope 幂等收尾，不再手写 isDisposed 防重入）。
         this.releaseInputs();
         this.pendingBattleType = null;
         this.model.dispose();

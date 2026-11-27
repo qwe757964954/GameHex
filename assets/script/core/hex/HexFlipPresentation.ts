@@ -68,7 +68,7 @@ export const HEX_FLIP_PIVOT_LIFT = 0;
  * `hexFlipFoldProgress` 用来把「抬升量 / 等价 flip」反推成底光帧序 —— **别删**，
  * 对局的缩没段（`tileLift` 恒 0）也走那条推导。
  */
-export const HEX_FLIP_RISE_RATIO = 0.45;
+const HEX_FLIP_RISE_RATIO = 0.45;
 
 /**
  * **对局侧翻面段时长（秒）**：「抬起 + 原地压扁」。
@@ -79,7 +79,7 @@ export const HEX_FLIP_RISE_RATIO = 0.45;
  * ⚠️ 领地**不消费它**：随机资源格翻开按 `HEX_SHATTER_SECONDS` 计时 —— 别把它当成
  * 「两边共用的节奏」。
  */
-export const HEX_FLIP_SECONDS = 0.384;
+const HEX_FLIP_SECONDS = 0.384;
 
 /** 地块收场的每帧参数。 */
 export interface IZCHexFlipFx {
@@ -419,13 +419,10 @@ export function hexFlipFoldProgress(tileLift: number, tileFlip: number): number 
 // ── 开口补光 / 地面光斑（对局与领地共用的观感参数） ───────────────────────────
 
 /** 开口光峰值强度；改用序列帧后只剩「是否 > 0（总开关）」这一个作用，不再写任何 uniform。`0` = 关掉。 */
-export const HEX_FLIP_GROUND_GLOW = 0.9;
-
-/** 开口光带的横向宽度倍率 —— **shader 版旋钮**；序列帧版宽度由美术图定，此常量目前无人消费（保留给回退 shader 用）。 */
-export const HEX_FLIP_GROUND_GLOW_RADIUS = 1.15;
+const HEX_FLIP_GROUND_GLOW = 0.9;
 
 /** 翻到侧视前，光带在最后这一段角度内平滑退场。 */
-export const HEX_FLIP_GROUND_GLOW_FADE_COS = 0.35;
+const HEX_FLIP_GROUND_GLOW_FADE_COS = 0.35;
 
 /** GroundGlow 的落位基准 y（格心坐标系，局部 y 向上）：灭掉 / 复位回这里，点亮时在此基础上减去抬升量。 */
 export const HEX_FLIP_GLOW_MASK_OFFSET_Y = 24;

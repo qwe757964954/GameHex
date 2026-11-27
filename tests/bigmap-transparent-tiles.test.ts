@@ -299,6 +299,39 @@ test('势力归属决定整片范围的颜色：己方绿、他人红、无主�
     assert.deepEqual(rgb(neutral.color), rgb(theme.BIGMAP_TERRITORY_COLORS[0]));
 });
 
+test('打不了的据点整片势力范围铺中性灰，不再吃冷色板（2026-11-26 口径）', () => {
+    const { view, theme } = fixture();
+    const rgb = (color: { r: number; g: number; b: number }) => [color.r, color.g, color.b];
+
+    // 「本期未开放」与「还没解锁」都算打不了：玩家视角都是「这块还不能玩」，不给两档灰度。
+    for (const state of ['unavailable', 'locked']) {
+        const paint = view.territoryPaint(404, { territoryOwner: 'neutral', state, unplayable: true });
+        assert.deepEqual(rgb(paint.color), rgb(theme.BIGMAP_TERRITORY_LOCKED_COLOR), `${state} 的地块必须是灰`);
+        assert.equal(hueOf(paint.color), -1, '灰必须严格无色相 —— 掺一点色相就会被读成「某号势力」');
+        assert.equal(paint.alpha, theme.BIGMAP_TERRITORY_LOCKED_FILL_ALPHA);
+    }
+
+    // 🔴 服务器快照到达后的形态：`state` 已被改写成 `open`，但配置层仍然「打不了」⇒ 必须继续灰。
+    // 用户 2026-11-26 报的「拖动地图以后叠加的灰色消失、又变回原本的颜色」就是只看 `state` 造成的：
+    // 一拖动 → 新据点进视野 → 快照回包 → state 变 open → 灰没了。
+    const afterSnapshot = view.territoryPaint(404, { territoryOwner: 'neutral', state: 'open', unplayable: true });
+    assert.deepEqual(rgb(afterSnapshot.color), rgb(theme.BIGMAP_TERRITORY_LOCKED_COLOR), '快照把 state 改成 open 也不能退色');
+
+    // 灰不能和任何一块色板色重合，否则玩家分不清「这号势力」和「这块不开」。
+    for (const color of theme.BIGMAP_TERRITORY_COLORS) {
+        assert.notDeepEqual(rgb(theme.BIGMAP_TERRITORY_LOCKED_COLOR), rgb(color));
+    }
+
+    // 已开放且能打的无主城仍走色板 —— 灰只给打不了的，别漏染到普通势力块上。
+    const open = view.territoryPaint(404, { territoryOwner: 'neutral', state: 'open', unplayable: false });
+    assert.deepEqual(rgb(open.color), rgb(theme.BIGMAP_TERRITORY_COLORS[0]));
+    assert.equal(open.alpha, theme.BIGMAP_TERRITORY_FILL_ALPHA);
+
+    // 灰要压在沙地上看得出来：比无主实（104）、但不如「己方 / 他人占据」抢眼（150）。
+    assert.ok(theme.BIGMAP_TERRITORY_LOCKED_FILL_ALPHA > theme.BIGMAP_TERRITORY_FILL_ALPHA);
+    assert.ok(theme.BIGMAP_TERRITORY_LOCKED_FILL_ALPHA < theme.BIGMAP_TERRITORY_OWNED_FILL_ALPHA);
+});
+
 test('色板一律冷色系：不许出现红绿两族，也不许橙黄（压在沙地上看不出边界）', () => {
     const { theme } = fixture();
     for (const color of theme.BIGMAP_TERRITORY_COLORS) {

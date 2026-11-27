@@ -1,0 +1,83 @@
+
+score_anim.png
+size: 560,560
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+K
+  rotate: false
+  xy: 494, 104
+  size: 64, 65
+  orig: 65, 65
+  offset: 0, 0
+  index: -1
+K_glow
+  rotate: true
+  xy: 2, 10
+  size: 92, 110
+  orig: 120, 120
+  offset: 8, 10
+  index: -1
+P
+  rotate: false
+  xy: 241, 15
+  size: 73, 87
+  orig: 78, 90
+  offset: 5, 0
+  index: -1
+PK_shadow
+  rotate: false
+  xy: 114, 5
+  size: 125, 104
+  orig: 133, 115
+  offset: 1, 5
+  index: -1
+P_glow
+  rotate: false
+  xy: 316, 26
+  size: 111, 120
+  orig: 120, 120
+  offset: 8, 0
+  index: -1
+blue_line
+  rotate: false
+  xy: 2, 344
+  size: 546, 106
+  orig: 558, 109
+  offset: 12, 0
+  index: -1
+kaishi
+  rotate: false
+  xy: 2, 111
+  size: 145, 35
+  orig: 145, 35
+  offset: 0, 0
+  index: -1
+kaishi_1
+  rotate: true
+  xy: 495, 171
+  size: 171, 35
+  orig: 173, 35
+  offset: 1, 0
+  index: -1
+line_glow
+  rotate: false
+  xy: 2, 246
+  size: 491, 96
+  orig: 501, 100
+  offset: 0, 1
+  index: -1
+line_glow2
+  rotate: false
+  xy: 2, 148
+  size: 490, 96
+  orig: 499, 100
+  offset: 0, 1
+  index: -1
+red_line
+  rotate: false
+  xy: 2, 452
+  size: 556, 106
+  orig: 558, 109
+  offset: 0, 0
+  index: -1

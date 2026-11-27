@@ -7,8 +7,7 @@
  */
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { ICON_PACKAGE_ART_ROOT } from '../ArtPaths';
-import { loadPvpCardRawRow } from './CardLineupDecks';
-import { parseCardCatalogRow } from '../zcds/model/ZCGameRuntimeConfig';
+import { loadPvpCardRawRow, parseCardCatalogRow } from './CardLineupDecks';
 
 import { ICON_TABLE } from '../../core/config/TableNames';
 export interface IHeroObtainUserData {

@@ -27,6 +27,10 @@ const tables = Object.fromEntries(tableNames.map((name) => {
     ))];
 })) as unknown as ZCPvpTables;
 loadPvpTables(tables);
+const troopParam = tables.neutralResourceGroup?.find(row => row.id === ZC_TEST_ITEM.Unit)?.param;
+assert.ok(troopParam && typeof troopParam === 'object' && 'value' in troopParam);
+const expectedTroopCount = Number(troopParam.value);
+assert.ok(Number.isInteger(expectedTroopCount) && expectedTroopCount > 0);
 
 /**
  * `standard_3` 是**固定主城**地图（`cityMode: fixed`）且带 9 个资源点，类型齐全
@@ -190,12 +194,12 @@ test('★资源项：按 resourceType 归一出奖励字段，未知 id 返回 n
     assert.equal(charge?.artifactCharge, 1);
     assert.equal(charge?.gold, 0);
 
-    // 兵团（type3）：resId + value ⇒ 产 3 个 68001，金币 / 充能都是 0。
+    // 兵团（type3）：resId + value ⇒ 按配置发放 68001，金币 / 充能都是 0。
     const unit = neutralResourceItemOf(ZC_TEST_ITEM.Unit);
     assert.equal(unit?.gold, 0);
     assert.equal(unit?.artifactCharge, 0);
     assert.equal(unit?.cardId, '68001');
-    assert.equal(unit?.unitCount, 3);
+    assert.equal(unit?.unitCount, expectedTroopCount);
     assert.equal(isZCNeutralResourceBuilding(unit), false, '兵团不是建筑，不该立建筑');
 
     // 金矿（type2）/ 兵营（type5）：领取后要在该格立建筑。
@@ -207,6 +211,93 @@ test('★资源项：按 resourceType 归一出奖励字段，未知 id 返回 n
     for (const bad of [null, undefined, 0, -1, 99999999, 1.5]) {
         assert.equal(neutralResourceItemOf(bad as number | null), null, `${String(bad)} 应当查不到`);
     }
+});
+
+test('一次性资源领取后保留满血城墙，读档不能再开发；建筑奖励保留建筑', () => {
+    for (const itemId of [ZC_TEST_ITEM.Gold, ZC_TEST_ITEM.MixedCharge, ZC_TEST_ITEM.Buff,
+        ZC_TEST_ITEM.Unit, ZC_TEST_ITEM.Mine, ZC_TEST_ITEM.Barracks]) {
+        withRiverMap(match => {
+            forceResourceItem(match, itemId);
+            const { game, hexId } = resourceScene(match, 'player', itemId);
+            const savedGold = game.snapshot.playerGold;
+            const awardedTroops = game.snapshot.units.filter(unit => unit.sourceHexId === hexId);
+            assert.equal(awardedTroops.length, itemId === ZC_TEST_ITEM.Unit ? expectedTroopCount : 0);
+            const restored = new ZCGameModel(game.exportSnapshot(), () => 0.1, match);
+            const tile = restored.snapshot.hexes[hexId];
+            assert.deepEqual(restored.snapshot.units.filter(unit => unit.sourceHexId === hexId).map(unit => unit.id),
+                awardedTroops.map(unit => unit.id));
+            assert.equal(tile.neutralResourceId, null);
+            assert.equal(restored.snapshot.playerGold, savedGold);
+            if (itemId === ZC_TEST_ITEM.Mine || itemId === ZC_TEST_ITEM.Barracks) {
+                assert.equal(tile.building, itemId === ZC_TEST_ITEM.Mine ? 'mine' : 'barracks');
+                assert.ok(tile.hp > 0 && tile.wallHp > 0);
+                assert.equal(restored.canPlayerDevelop(hexId), false);
+                return;
+            }
+            assert.equal(tile.building, 'none');
+            assert.equal(tile.wallHp, match.rules.wallMaxHp);
+            assert.equal(tile.developmentResolved, true);
+            assert.equal(restored.snapshot.playerGold, savedGold);
+            assert.equal(restored.developHex(hexId).ok, false);
+        });
+    }
+});
+
+test('旧档已领宝箱补墙且不重复领奖，受损城墙读档保留当前血量', () => {
+    withRiverMap(match => {
+        forceResourceItem(match, ZC_TEST_ITEM.Gold);
+        const { game, hexId } = resourceScene(match, 'player', ZC_TEST_ITEM.Gold);
+        const saved = game.exportSnapshot();
+        const gold = saved.playerGold;
+        Object.assign(saved.hexes[hexId], { developmentResolved: false, state: 'developable', wallHp: 0, wallMaxHp: 0 });
+        const restored = new ZCGameModel(saved, () => 0.1, match);
+        assert.equal(restored.snapshot.hexes[hexId].wallHp, match.rules.wallMaxHp);
+        assert.equal(restored.snapshot.playerGold, gold);
+        const damaged = restored.exportSnapshot();
+        damaged.hexes[hexId].wallHp = 0;
+        assert.equal(new ZCGameModel(damaged, () => 0.1, match).snapshot.hexes[hexId].wallHp, 0);
+    });
+});
+
+test('相邻宝箱从任一端领取都会连锁，每格只发一次并解锁邻格', () => {
+    withRiverMap(match => {
+        forceResourceItem(match, ZC_TEST_ITEM.Gold);
+        const { hexId, snapshot } = bareScene(match);
+        const neighbors = match.map.hexes[hexId].neighbors;
+        const anchor = neighbors[0];
+        const next = neighbors.find(id => id !== anchor && !match.map.hexes[anchor].neighbors.includes(id));
+        assert.ok(next !== undefined);
+        for (const id of [hexId, next, ...neighbors, ...match.map.hexes[next].neighbors]) {
+            Object.assign(snapshot.hexes[id], { owner: 'neutral', building: 'none', developmentResolved: false,
+                neutralResourceId: null, state: 'occupiable', hp: 0, maxHp: 0, wallHp: 0, wallMaxHp: 0 });
+        }
+        snapshot.hexes[hexId].neutralResourceId = ZC_TEST_ITEM.Gold;
+        snapshot.hexes[next].neutralResourceId = ZC_TEST_ITEM.Gold;
+        const otherAnchor = match.map.hexes[next].neighbors.find(id => id !== hexId && !neighbors.includes(id));
+        assert.ok(otherAnchor !== undefined);
+        for (const start of [anchor, otherAnchor]) {
+            const input = structuredClone(snapshot);
+            input.hexes[start].owner = 'player';
+            input.hexes[start].developmentResolved = true;
+            const game = new ZCGameModel(input as never, () => 0.1, match);
+            const expectedGold = input.playerGold + 2 * neutralResourceItemOf(ZC_TEST_ITEM.Gold)!.gold;
+            assert.equal(game.snapshot.playerGold, expectedGold);
+            for (const id of [hexId, next]) {
+                assert.equal(game.snapshot.hexes[id].neutralResourceId, null);
+                assert.equal(game.snapshot.hexes[id].owner, 'player');
+                assert.equal(game.canPlayerDevelop(id), false);
+                assert.equal(game.snapshot.hexes[id].wallHp, match.rules.wallMaxHp);
+            }
+            const expansion = start === anchor ? otherAnchor : anchor;
+            assert.equal(game.canPlayerDevelop(expansion), true);
+            const restored = new ZCGameModel(game.exportSnapshot(), () => 0.1, match);
+            restored.tick(0.1);
+            assert.equal(restored.snapshot.playerGold, expectedGold);
+            const cost = restored.snapshot.hexes[expansion].developmentCost;
+            assert.equal(restored.developHex(expansion).ok, true);
+            assert.equal(restored.snapshot.playerGold, expectedGold - cost);
+        }
+    });
 });
 
 test('普通资源不因邻格已有归属而领取，必须等邻格翻开', () => {
@@ -232,6 +323,7 @@ test('相邻即自动领取：金币与神器充能都入袋，格子变成已�
     withRiverMap((match) => {
         // ⚠️ 必须**在构造模型之前**就把邻居铺好：`new ZCGameModel(snapshot)` 会深拷贝快照，
         // 事后改 `game.snapshot` 改的是副本、不影响模型内部状态（这条坑让本用例先红过一次）。
+        forceResourceItem(match, ZC_TEST_ITEM.MixedGold);
         const { hexId, itemId, snapshot } = bareScene(match);
         const item = neutralResourceItemOf(itemId);
         assert.ok(item, `本局抽到的 ${itemId} 必须查得到资源项，否则本用例是空断言`);
@@ -256,10 +348,10 @@ test('相邻即自动领取：金币与神器充能都入袋，格子变成已�
 
         // ③ 归属落定 + 已占领 + 资源标识清掉（这是「只发一次」的唯一判据）。
         assert.equal(game.snapshot.hexes[hexId].owner, 'player');
-        assert.equal(game.snapshot.hexes[hexId].state, 'developed', '领取后应变成已占领');
+        assert.equal(game.snapshot.hexes[hexId].state, 'developed', '领取即完成开发');
         assert.equal(game.snapshot.hexes[hexId].developmentResolved, true);
         assert.equal(game.snapshot.hexes[hexId].neutralResourceId, null, '领完必须清标识，否则会重复发');
-        assert.equal(game.canPlayerDevelop(hexId), false, '同一格不能重复领奖');
+        assert.equal(game.canPlayerDevelop(hexId), false, '已消费的空地不能再次建造');
 
         // ④ 金币**只增不减**（不再扣开发成本）—— 精确值才能抓住「发奖那行被注释掉」。
         assert.equal(game.snapshot.playerGold, goldBefore + (item?.gold ?? 0));
@@ -280,6 +372,7 @@ test('相邻即自动领取：金币与神器充能都入袋，格子变成已�
 
 test('资源点中立无归属：一方先拿到即锁定，双方都领不到第二次', () => {
     withRiverMap((match) => {
+        forceResourceItem(match, ZC_TEST_ITEM.MixedGold);
         const resolved = match.map.resolvedResources ?? [];
         assert.ok(resolved.length > 0, '这张图应该有资源点');
         const point = resolved[0];
@@ -353,25 +446,28 @@ test('口径隔离：普通地块开发不发资源奖励', () => {
     });
 });
 
-test('兵力资源点：开发后直接产出 3 个 68001 豌豆游侠，走born 流程', () => {
+test('兵团领取后按配置发兵，原格只留城墙', () => {
     withRiverMap((match) => {
         // 这张图没有兵力资源点（见 forceResourceType 的注释），把它改成兵力。
         forceResourceItem(match, ZC_TEST_ITEM.Unit);
         const item = neutralResourceItemOf(ZC_TEST_ITEM.Unit);
         assert.equal(item?.cardId, '68001');
-        assert.equal(item?.unitCount, 3);
+        assert.equal(item?.unitCount, expectedTroopCount);
 
         // ⚠️ 产兵在`resourceScene` 的构造期就发生（模型构造函数会跑一次 refreshTileStates），
-        // 所以**基线必须在铺开前取**：这里直接按「铺开后单位列表里多出 3 个」来断言。
+        // 所以**基线必须在铺开前取**：这里直接按「铺开后新增的单位」来断言。
         const { hexId, snapshot } = bareScene(match, ZC_TEST_ITEM.Unit);
         const before = snapshot.units.length;
         paveAround(snapshot, match, hexId, 'player');
         const game = new ZCGameModel(snapshot as never, () => 0.1, match);
         assert.equal(game.snapshot.hexes[hexId].owner, 'player', '铺开后应自动归属玩家');
 
-        // ① 真的多了 3 个单位，且都是 68001。
+        assert.equal(game.snapshot.hexes[hexId].building, 'none');
+        assert.equal(game.canPlayerDevelop(hexId), false);
+
+        // ① 按表中数量增加单位，且都是 68001。
         const spawned = game.snapshot.units.slice(before);
-        assert.equal(spawned.length, 3, `应产出 3 个兵，实际 ${spawned.length}`);
+        assert.equal(spawned.length, expectedTroopCount);
         for (const unit of spawned) {
             assert.equal(unit.owner, 'player');
             assert.equal(unit.cardId, '68001');
@@ -386,7 +482,7 @@ test('兵力资源点：开发后直接产出 3 个 68001 豌豆游侠，走born
         // ④ 不应超编（spawnUnit 自带 `unitCapPerSide` 守卫）。用快照自身计数，
         //    不去摸模型内部的 unitCount（那是 private，且加了访问器就得维护两份口径）。
         const mine = game.snapshot.units.filter((u) => u.owner === 'player' && u.hp > 0);
-        assert.equal(mine.length, spawned.length, '场上只该有这 3 个新兵');
+        assert.equal(mine.length, spawned.length, '场上只该有本次奖励的新兵');
         assert.equal(ZCGameModel.isValidSnapshot(game.exportSnapshot()), true);
     });
 });
@@ -454,7 +550,7 @@ test('奖励卡不在本局卡组里也照样产兵（取卡不能走 cardById�
         const game = new ZCGameModel(snapshot as never, () => 0.1, narrowedMatch);
         const spawned = game.snapshot.units.slice(before);
         assert.equal(game.snapshot.hexes[hexId].owner, 'player');
-        assert.equal(spawned.length, 3, `卡组不含 68001 时也应产 3 个兵，实际 ${spawned.length}`);
+        assert.equal(spawned.length, expectedTroopCount);
         for (const unit of spawned) assert.equal(unit.cardId, '68001');
     });
 });

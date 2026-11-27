@@ -247,3 +247,99 @@ test('本层没显示 / 台词已收 / 对话条已关时，全局触摸什么�
     noBox.host.dialogBox.active = false;
     assert.equal(noBox.tap(400), false);
 });
+
+/**
+ * 挖孔穿透（`maskType: holeThrough`，用户 2026-11-25：8-1 收尾）。
+ *
+ * 原话：「遮罩不屏蔽点击改为弱引导，**挖孔高亮的形式不变**，仅在 8-1 允许点击穿透」。
+ * ⇒ 压暗 / 挖孔 / 光圈 / 手指 / 气泡**全留**，只放开孔外那层的点击。
+ *
+ * 为什么必须真跑 `applyMaskStyle`：`hole` 与 `holeThrough` 的差别**只在
+ * `Button.enabled`** —— 少停用一个按钮，整屏又把玩家锁死；多停用一个，该挡的步漏点击。
+ * 两种都不报错、界面上也看不出（遮罩照画），只能靠这条盯着。
+ */
+const styleSource = readFileSync(VIEW, 'utf8');
+
+/** 从源码里取 alpha 常量，别在测试里抄一份数字（遮罩透明度改了两边就对不上）。 */
+function alphaConst(name: string): number {
+    const found = new RegExp(`const ${name} = (\\d+);`).exec(styleSource);
+    assert.ok(found, `GuideDialogView 缺常量 ${name}`);
+    return Number(found[1]);
+}
+
+interface IStyleHost {
+    dimColor: { a: number };
+    maskColors: { a: number }[];
+    maskButtons: { enabled: boolean }[];
+    blockerTransform: { width: number; height: number };
+    applyMaskStyle(type: string): void;
+}
+
+const styleExports: { Cls?: new () => IStyleHost } = {};
+runInNewContext(ts.transpileModule(
+    `const HOLE_MASK_ALPHA = ${alphaConst('HOLE_MASK_ALPHA')};
+     const FULL_MASK_ALPHA = ${alphaConst('FULL_MASK_ALPHA')};
+     exports.Cls = class {
+        constructor() {
+            const mk = () => ({ r: 0, g: 0, b: 0, a: 255, clone() { return { r: this.r, g: this.g, b: this.b, a: this.a }; } });
+            const dimColor = mk();
+            this.dimColor = dimColor;
+            this.maskColors = [mk(), mk(), mk(), mk()];
+            this.focusMaskSprites = this.maskColors.map(c => ({ get color() { return c; }, set color(v) { c.a = v.a; } }));
+            this.dimSprite = { get color() { return dimColor; }, set color(v) { dimColor.a = v.a; } };
+            this.maskButtons = [{ enabled: true }, { enabled: true }, { enabled: true }, { enabled: true }];
+            // 下面这批只喂给 layoutBlocker：8-1 有孔 ⇒ 有孔时点击区只盖对话条。
+            this.focusRing = { active: true };
+            this.canAdvance = false;
+            this.dialogClosed = false;
+            this.queue = [];
+            this.focusKey = '';
+            this.dialogBox = { active: true, position: { x: 0, y: -380 } };
+            this.dialogWidget = { bottom: 0, updateAlignment() {} };
+            this.dialogTransform = { width: 640, height: 180 };
+            this.hostTransform = { width: 720, height: 1560 };
+            this.blockerNode = { position: { x: 0, y: 0 }, setPosition(x, y) { this.position = { x, y }; } };
+            this.blockerTransform = { width: 0, height: 0, setContentSize(w, h) { this.width = w; this.height = h; } };
+        }
+        ${methodText('applyMaskStyle')}
+        ${methodText('needsFullScreenBlock')}
+        ${methodText('layoutBlocker')}
+     };`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } },
+).outputText, { exports: styleExports });
+
+/** 压暗的实测 alpha：`[Dim, 上, 左, 下, 右]`。 */
+function alphas(host: IStyleHost): number[] {
+    return [host.dimColor.a, ...host.maskColors.map(color => color.a)];
+}
+
+/** 四块遮罩的 Button 开关状态（`Array.from` 是为了跳出 vm 那个 realm 的数组原型）。 */
+function buttonStates(host: IStyleHost): boolean[] {
+    return Array.from(host.maskButtons, button => button.enabled);
+}
+
+test('挖孔穿透：压暗与挖孔跟 hole 一模一样，只有四块遮罩的 Button 被停用', () => {
+    const host = new styleExports.Cls!();
+    const hold = alphaConst('HOLE_MASK_ALPHA');
+    host.applyMaskStyle('holeThrough');
+    assert.deepEqual(alphas(host), [hold, hold, hold, hold, hold], '「挖孔高亮的形式不变」：孔与压暗必须照旧');
+    assert.deepEqual(buttonStates(host), [false, false, false, false],
+        '孔外那层不许再接点击 —— 玩家要能直接点到底下的底栏 / 地块');
+    // 对话条自己的点击区必须留着：台词还得靠它逐句推进，关掉就是死区（第 19 条踩过）。
+    assert.equal(host.blockerTransform.width, 640, '点击区只许收缩到对话条');
+    assert.equal(host.blockerTransform.height, 180);
+});
+
+test('别的形态照旧吃掉孔外点击：只有 holeThrough 放开', () => {
+    const host = new styleExports.Cls!();
+    const full = alphaConst('FULL_MASK_ALPHA');
+    const hold = alphaConst('HOLE_MASK_ALPHA');
+    // 逐档切回来，顺带验证幂等：先跑穿透再跑别的，Button 必须能被重新启用。
+    for (const [type, want] of [['full', full], ['hole', hold], ['none', 0]] as const) {
+        host.applyMaskStyle(type);
+        assert.deepEqual(buttonStates(host), [true, true, true, true],
+            `${type} 步的孔外点击仍要用来推进台词，不许跟着穿透`);
+        assert.deepEqual(alphas(host), [want, want, want, want, want], `${type} 的压暗档位`);
+    }
+});
+

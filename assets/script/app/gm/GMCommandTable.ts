@@ -7,7 +7,7 @@ import { HERO_OBTAIN_DEMO_USER_DATA } from '../card/HeroObtainData';
 import { HeroObtainPage } from '../card/view/HeroObtainPage';
 import { RequestGmList, RequestSystemGm } from '../generated/requestMsg/RequestSystemMsg';
 import { GameNet } from '../net/GameNet';
-import { ZCGameUiEvent, type IZCDebugDrawCardResult } from '../zcds/view/ZCGameHudEvents';
+import { ZC_BATTLE_DEBUG_EVENTS, type IZCDebugDrawCardResult } from '../zcds/application/ZCBattleEvents';
 import { GMUtils } from './GMUtils';
 
 /** GM 指令项（对齐 client 的 { gm, desc } 结构）。 */
@@ -64,11 +64,11 @@ export class GMCommandTable {
             }
             let message = '请先进入战斗并完成出生点选择';
             const onResult = (result: { message: string }) => { message = result.message; };
-            EventMgr.instance.on(ZCGameUiEvent.DebugAddGoldResult, onResult, GMCommandTable);
+            EventMgr.instance.on(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD_RESULT, onResult, GMCommandTable);
             try {
-                EventMgr.instance.emit(ZCGameUiEvent.DebugAddGold, Number(args[1]));
+                EventMgr.instance.emit(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD, Number(args[1]));
             } finally {
-                EventMgr.instance.off(ZCGameUiEvent.DebugAddGoldResult, onResult, GMCommandTable);
+                EventMgr.instance.off(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD_RESULT, onResult, GMCommandTable);
             }
             GMCommandTable.tip(message);
         });
@@ -79,11 +79,11 @@ export class GMCommandTable {
             }
             let message = '请先进入战斗并完成出生点选择';
             const onResult = (result: IZCDebugDrawCardResult) => { message = result.message; };
-            EventMgr.instance.on(ZCGameUiEvent.DebugDrawCardResult, onResult, GMCommandTable);
+            EventMgr.instance.on(ZC_BATTLE_DEBUG_EVENTS.DRAW_CARD_RESULT, onResult, GMCommandTable);
             try {
-                EventMgr.instance.emit(ZCGameUiEvent.DebugDrawCard, { cardId: args[1], count: Number(args[2]) });
+                EventMgr.instance.emit(ZC_BATTLE_DEBUG_EVENTS.DRAW_CARD, { cardId: args[1], count: Number(args[2]) });
             } finally {
-                EventMgr.instance.off(ZCGameUiEvent.DebugDrawCardResult, onResult, GMCommandTable);
+                EventMgr.instance.off(ZC_BATTLE_DEBUG_EVENTS.DRAW_CARD_RESULT, onResult, GMCommandTable);
             }
             GMCommandTable.tip(message);
         });

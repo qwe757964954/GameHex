@@ -12,13 +12,11 @@ import { getPvpRuntimeRules } from '../model/ZCGameRuntimeConfig';
 import { getZCModifierCatalogs } from '../model/ZCModifierRuntime';
 import { captureZCMatchConfig, createZCMatchConfig } from '../model/ZCMatchConfig';
 import type { ZCMatchConfig, ZCMatchMap } from '../model/ZCMatchConfig';
-import { decorFramePath, GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME, ARTIFACT_CLAIM_BURST_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, SPAWN_REGION_ART_ROOT, spriteFramePath } from '../../ArtPaths';
+import { decorFramePath, GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME, ARTIFACT_CLAIM_BURST_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, spriteFramePath } from '../../ArtPaths';
 import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { loadZCGuide, ZCGuideLoader } from './ZCGuideLoader';
 import type { IZCGuidePreparedContent } from '../model/ZCGuideConfig';
 import type { IZCDeferredBattleArt, IZCGamePreparedResources } from './ZCGamePreparedResources';
-import { SPAWN_REGION_HINT_PREFAB, type IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay';
-import type { IZCMonsterFocusFrames } from '../view/ZCHexView';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
 import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
 import { ensureZCRuntimeCompiled } from './ZCRuntimePrecompiler';
@@ -67,7 +65,7 @@ const ZC_SPAWN_SELECTION_WEIGHT = 11;
 type IZCShellPrefabs = Pick<IZCGamePreparedResources,
     'hudPrefab' | 'boardPrefab' | 'hexPrefab' | 'unitPrefab' | 'effectPrefab' | 'wallPrefab' |
     'wallLayerPrefab' | 'floatTextPrefab' | 'cardRevealPrefab' | 'legendBannerPrefab' | 'killBannerPrefab' |
-    'decorPrefab' | 'spawnSelectionPrefab' | 'bossPanelPrefab'>;
+    'decorPrefab' | 'spawnSelectionPrefab' | 'spawnRegionHintPrefab' | 'bossPanelPrefab'>;
 
 /**
  * 对局应用层加载器。
@@ -139,6 +137,7 @@ export class ZCGameLoader {
             killBannerPrefab: shellPrefabs.killBannerPrefab,
             decorPrefab: shellPrefabs.decorPrefab,
             spawnSelectionPrefab: shellPrefabs.spawnSelectionPrefab,
+            spawnRegionHintPrefab: shellPrefabs.spawnRegionHintPrefab,
             bossPanelPrefab: shellPrefabs.bossPanelPrefab,
             spawnFxPrefab: effects.spawnFxPrefab,
             deathFxPrefab: effects.deathFxPrefab,
@@ -151,10 +150,7 @@ export class ZCGameLoader {
             artifactIconFrame: icons.artifactIconFrame,
             unknownResourceFrame: icons.unknownResourceFrame,
             goldCoinFrame: icons.goldCoinFrame,
-            spawnRegionFrames: icons.spawnRegionFrames,
-            spawnRegionHintPrefab: icons.spawnRegionHintPrefab,
             neutralResourceFrames: icons.neutralResourceFrames,
-            monsterFocusFrames: icons.monsterFocusFrames,
             hexGroundGlowFrames: sceneEffects.hexGroundGlowFrames,
             hexPulseFrames: sceneEffects.hexPulseFrames,
             artifactClaimBurstFrames: sceneEffects.artifactClaimBurstFrames,
@@ -203,16 +199,13 @@ export class ZCGameLoader {
     }
 
     private async loadMapIcons(scope: ResourceScope | undefined, selectSpawn: boolean) {
-        const [artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, spawnRegionHintPrefab, neutralResourceFrames, monsterFocusFrames] = await Promise.all([
+        const [artifactIconFrame, unknownResourceFrame, goldCoinFrame, neutralResourceFrames] = await Promise.all([
             this.loadArtifactIconFrame(scope),
             selectSpawn ? this.loadUnknownResourceFrame(scope) : null,
             this.loadGoldCoinFrame(scope),
-            selectSpawn ? this.loadSpawnRegionFrames(scope) : null,
-            selectSpawn ? this.loadSpawnRegionHintPrefab(scope) : null,
             this.loadNeutralResourceFrames(scope),
-            this.loadMonsterFocusFrames(scope),
         ]);
-        return { artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, spawnRegionHintPrefab, neutralResourceFrames, monsterFocusFrames };
+        return { artifactIconFrame, unknownResourceFrame, goldCoinFrame, neutralResourceFrames };
     }
 
     private async loadInitialSceneEffects(scope: ResourceScope | undefined, progressive: boolean) {
@@ -261,6 +254,7 @@ export class ZCGameLoader {
             legendBannerPrefab: ZC_BATTLE_SHELL_PATHS.legendBanner, decorPrefab: ZC_BATTLE_SHELL_PATHS.decor,
             killBannerPrefab: ZC_BATTLE_SHELL_PATHS.killBanner,
             spawnSelectionPrefab: selectSpawn ? ZC_BATTLE_SHELL_PATHS.spawnSelection : null,
+            spawnRegionHintPrefab: selectSpawn ? ZC_BATTLE_SHELL_PATHS.spawnRegionHint : null,
             bossPanelPrefab: hasBossPanel ? ZC_BATTLE_SHELL_PATHS.bossPanel : null,
         };
         const entries = Object.entries(paths).filter(([, path]) => path !== null);
@@ -274,7 +268,7 @@ export class ZCGameLoader {
         if (values === false) throw new Error('战斗资源批量加载已取消');
         // 批次按请求顺序返回；在此恢复名称，调用方不依赖数组位置。
         return Object.assign(
-            { spawnSelectionPrefab: null, bossPanelPrefab: null },
+            { spawnSelectionPrefab: null, spawnRegionHintPrefab: null, bossPanelPrefab: null },
             Object.fromEntries(entries.map(([key], index) => [key, values[index]])),
         ) as IZCShellPrefabs;
     }
@@ -427,29 +421,6 @@ export class ZCGameLoader {
         return new Map(frames.map(frame => [frame.name, frame]));
     }
 
-    /**
-     * 野怪集火按钮的三态底图：`locked/focus/cancel` 依次对应 `image/spawn-region/frame_01/02/03`。
-     *
-     * 这套图是 94×45 的九宫气泡、**底部箭头**是气泡的一部分（与 `SpawnRegionHint.prefab`
-     * 同源同尺寸）；别用 `image/gameui/frame_0X` —— 那套是 HUD 积分气泡（110×77、尾巴在
-     * 右下角），压进 150 宽的按钮里只会剩一条窄条 + 角落缺口。
-     * 也别用 `loadDir` 的返回顺序：同目录还有 `frame_04`（宝箱水滴），顺序一变就全串。
-    */
-    private async loadMonsterFocusFrames(scope?: ResourceScope): Promise<IZCMonsterFocusFrames> {
-        const [locked, focus, cancel] = await Promise.all([
-            this.loadSpawnRegionFrame('frame_01', scope),
-            this.loadSpawnRegionFrame('frame_02', scope),
-            this.loadSpawnRegionFrame('frame_03', scope),
-        ]);
-        return { locked, focus, cancel };
-    }
-
-    /** 单张自选主城气泡图（`image/spawn-region/<name>`）。*/
-    private loadSpawnRegionFrame(name: string, scope?: ResourceScope): Promise<SpriteFrame> {
-        const path = spriteFramePath(SPAWN_REGION_ART_ROOT, name);
-        return this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope));
-    }
-
     /** 按图片名索引建筑外观帧。*/
     private async loadBuildingFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
         const frames = await this.resources.assets.loadDir(BUILDING_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
@@ -481,20 +452,6 @@ export class ZCGameLoader {
     private async loadGoldCoinFrame(scope?: ResourceScope): Promise<SpriteFrame> {
         const path = spriteFramePath(MAP_RESOURCE_ART_ROOT, 'coin_icon');
         return this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope));
-    }
-
-    /** 前区红色气泡，中后区绿色气泡。*/
-    private loadSpawnRegionHintPrefab(scope?: ResourceScope): Promise<Prefab | null> {
-        return this.resources.assets.load(SPAWN_REGION_HINT_PREFAB, Prefab, this.battleOptions(scope, BATTLE_ENTRY_PRIORITY))
-            .catch(() => null);
-    }
-
-    private async loadSpawnRegionFrames(scope?: ResourceScope): Promise<IZCSpawnRegionHintFrames> {
-        const frames = await this.loadSortedSpriteFrames(SPAWN_REGION_ART_ROOT, scope);
-        const green = frames.find(frame => frame.name === 'frame_01');
-        const red = frames.find(frame => frame.name === 'frame_02');
-        if (!green || !red) throw new Error(`出生区域气泡目录缺少 frame_01 / frame_02：${SPAWN_REGION_ART_ROOT}`);
-        return { front: red, mid: green, back: green };
     }
 
     /** 只取 Prefab 类型，动画与裸帧由 prefab 依赖加载；中毒不登记为职业受击。*/

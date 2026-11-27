@@ -13,8 +13,8 @@ import { ZCSkillRuntimeRegistry } from '../assets/script/app/zcds/model/ZCSkillR
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { ZCStatusSystem } from '../assets/script/app/zcds/model/ZCStatusEffect';
 import {
-    ZCAttackResolutionSystem, type IZCAttackResolutionContext,
-} from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+    ZCAttackResolutionSystem, type IZCAttackResolutionContext } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import { ZCSkillTriggerSystem, teamAuraStatusId } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { assetPath } from './helpers/asset-paths';
 
@@ -325,7 +325,7 @@ function fanHarness(options: { appliesHitStatus: number; statusId?: string }) {
     context.skillRuntime[ZCOwner.Player] = new Map([['68032:30708', runtime]]);
 
     return {
-        cast: () => ZCAttackResolutionSystem.castFanSkill(state, source, context),
+        cast: () => ZCSkillResolutionSystem.castFanSkill(state, source, context),
         applied,
     };
 }

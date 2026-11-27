@@ -1,6 +1,7 @@
 import type { SpriteFrame } from 'cc';
 import { loadArt } from '../card/CardLineupIcons';
-import { LEAGUE_ART_ROOT, LEAGUE_BANNER_COLOR_COUNT, leagueBannerArt } from './LeagueArt';
+import { LEAGUE_ART_ROOT } from '../ArtPaths';
+import { LEAGUE_BANNER_COLOR_COUNT, leagueBannerArt } from './LeagueArt';
 
 /** 八张旗面图名（按 FGUI `颜色` 页序）。 */
 const LEAGUE_BANNER_NAMES: readonly string[] = Array.from(

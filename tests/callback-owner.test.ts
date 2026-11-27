@@ -5,7 +5,8 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import * as ts from 'typescript';
 import { TMap } from '../assets/script/framework/collection/TMap';
-import { withTimeout } from '../assets/script/app/net/RequestGuard';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
+import { ScopedNetSender, withTimeout } from '../assets/script/app/net/RequestGuard';
 
 function load<T>(path: string, name: string): new () => T {
     const exported: Record<string, new () => T> = {};
@@ -248,4 +249,66 @@ test('业务代码直接传回调归属对象，禁止用 destroyable / any / ne
     }
     scan('assets/script/app');
     assert.deepEqual(violations, []);
+});
+
+test('ScopedNetSender 在同一个 ResourceScope 多次释放下仅注销一次归属，并正确区分四态', async () => {
+    const scope = new ResourceScope('scoped-net-test');
+    const removed: object[] = [];
+    const owner = {};
+    let current = true;
+    let outcome: { ok: boolean; rsp?: object; err?: string | null } = { ok: true, rsp: { x: 1 } };
+    const net = {
+        isConnected: true,
+        removeCaller(caller: object) {
+            removed.push(caller);
+        },
+        async send(req: {
+            fCallback: (rsp: unknown) => void;
+            fErrorCallback?: (reason: string | null) => void;
+            canSend?: () => boolean;
+        }) {
+            if (!outcome.ok) {
+                req.fErrorCallback?.(outcome.err ?? null);
+                return false;
+            }
+            req.fCallback(outcome.rsp);
+            return true;
+        },
+    };
+    const sender = new ScopedNetSender(() => net, owner, { scope, isAlive: () => current });
+    const makeReq = (receive: (rsp: unknown) => void) => ({
+        allowRetry: true,
+        canSend: null,
+        fErrorCallback: () => {},
+        receive,
+    });
+    assert.deepEqual(await sender.send((receive) => {
+        const req = makeReq(receive);
+        const rawSend = net.send;
+        net.send = async (r: typeof req & { fCallback?: (v: unknown) => void }) => {
+            r.fCallback = receive;
+            return rawSend(r);
+        };
+        return req;
+    }), { status: 'ok', response: { x: 1 } });
+
+    outcome = { ok: false, err: 'server_error' };
+    assert.deepEqual(await sender.send(makeReq), { status: 'rejected' });
+
+    outcome = { ok: false, err: 'timeout' };
+    assert.deepEqual(await sender.send(makeReq), { status: 'unconfirmed' });
+
+    net.isConnected = false;
+    assert.deepEqual(await sender.send(makeReq), { status: 'offline' });
+
+    net.isConnected = true;
+    current = false;
+    assert.equal(sender.alive, false);
+    assert.deepEqual(await sender.send(makeReq), { status: 'offline' });
+
+    sender.dispose();
+    sender.dispose();
+    scope.dispose();
+    assert.equal(sender.disposed, true);
+    assert.deepEqual(removed, [owner]);
 });

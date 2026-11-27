@@ -1,4 +1,5 @@
 import { _decorator, Button, Component, Node } from 'cc';
+import { RedDot } from '../common/RedDot';
 import { osTabVisual } from './CelebrationViewState';
 
 const { ccclass, property } = _decorator;
@@ -37,8 +38,8 @@ export class OSTabButton extends Component {
     @property({ type: Node, tooltip: 'IconOn：选中图标（FGUI selectIcon，80×80）' })
     iconOn: Node = null!;
 
-    @property({ type: Node, tooltip: 'RedDot：页签红点。只有「庆典目标」页签会被点亮，见 OSRankPage' })
-    redDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'RedDot：页签红点（工程通用红点）。只有「庆典目标」页签会被点亮，见 OSRankPage' })
+    redDot: RedDot = null!;
 
     /** 点击回调，由宿主在 `onLoad` 之后挂一次；页签不会像列表行那样被复用。 */
     onTap: () => void = null!;
@@ -54,7 +55,7 @@ export class OSTabButton extends Component {
         this.plateDown.active = vis.plateDown;
         this.iconOff.active = vis.iconOff;
         this.iconOn.active = vis.iconOn;
-        this.redDot.active = redDot;
+        this.redDot.setRedDot(redDot);
     }
 
     private _emitTap(): void {

@@ -9,25 +9,32 @@
  * 的状态串到下一行。最容易漏的是 `Duration`（非好友列表页签必须写空串并关节点）和 `CheckBtn/Mark`。
  */
 
-import { _decorator, Button, Color, Component, Label, Node, Sprite, Vec3 } from 'cc';
+import { _decorator, Button, Color, Component, Label, Node, Sprite, SpriteFrame, Vec3 } from 'cc';
 import { FriendAvatarLoader } from './FriendAvatar';
 import { friendTint } from './FriendArt';
 import type { IFriendRowView } from './FriendTable';
 
 const { ccclass, property } = _decorator;
 
+/** 主按钮三张底图（由 `FriendPage` 预加载，行内只切引用，不发请求）。 */
+export interface IFriendRowArt {
+    readonly gold: SpriteFrame | null;
+    readonly blue: SpriteFrame | null;
+    readonly mute: SpriteFrame | null;
+}
+
 @ccclass('FriendRow')
 export class FriendRow extends Component {
-    @property({ type: Sprite, tooltip: 'Bg：行底框（`fd_row_bg`，九宫格）' })
+    @property({ type: Sprite, tooltip: 'Bg：行底框（`fd_row_v2`，九宫格）' })
     background: Sprite = null;
 
-    @property({ type: Sprite, tooltip: 'HeadFrame：头像框（`fd_head_frame`）' })
+    @property({ type: Sprite, tooltip: 'HeadFrame：头像框（`hud_avatar_frame`）' })
     headFrame: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Icon：头像（运行时按 `CmdFriend.img` 加载）' })
     icon: Sprite = null;
 
-    @property({ type: Sprite, tooltip: 'LvTag：等级标签底（`fd_lv_tag`）' })
+    @property({ type: Sprite, tooltip: 'LvTag：等级圆徽底（`hud_level_bg`，32×32）' })
     lvTag: Sprite = null;
 
     @property({ type: Label, tooltip: 'Lv：等级数字' })
@@ -44,7 +51,7 @@ export class FriendRow extends Component {
      *
      * 只有它随删除模式移动（对齐 FGUI 的 `gearXY`：controller 作用在组上，组内 6 个节点坐标不变）。
      */
-    @property({ type: Node, tooltip: 'Group：左侧那一组（删除模式下整组右移 43、下移 6）' })
+    @property({ type: Node, tooltip: 'Group：左侧那一组（删除模式下整组右移 64、下移 6）' })
     shiftGroup: Node = null;
 
     @property({ type: Node, tooltip: 'ChatBtn：私聊按钮（仅好友列表页签显示）' })
@@ -95,10 +102,16 @@ export class FriendRow extends Component {
         this.checkButton.on(Button.EventType.CLICK, this.emitCheck, this);
     }
 
-    /** 铺一行（所有状态绝对赋值）。 */
-    render(view: IFriendRowView): void {
+    /** 铺一行（所有状态绝对赋值）。`art` 为空时沿用 prefab 上的金色底图。 */
+    render(view: IFriendRowView, art?: IFriendRowArt | null): void {
         const tint = friendTint(view.actionGray);
-        const color = new Color(tint[0], tint[1], tint[2], 255);
+        const color = view.actionColor === 'mute'
+            ? new Color(tint[0], tint[1], tint[2], 255)
+            : new Color(255, 255, 255, 255);
+        const frame = art
+            ? view.actionColor === 'blue' ? art.blue : view.actionColor === 'mute' ? art.mute : art.gold
+            : null;
+        if (frame) this.actionBackground.spriteFrame = frame;
 
         this.lvLabel.string = view.level;
         this.nameLabel.string = view.name;
@@ -112,7 +125,7 @@ export class FriendRow extends Component {
         // 私聊（Demo3.8 没有聊天模块，宿主传 `chatAvailable = false`，一律不显示）
         this.chatButton.active = view.showChat;
 
-        // 删除模式下整组右移 43、下移 6：两档位置都在 prefab（默认位置 + DeleteGroupAnchor）
+        // 删除模式下整组右移 64、下移 6：两档位置都在 prefab（默认位置 + DeleteGroupAnchor）
         const target = view.showCheck ? this.deleteGroupAnchor?.position : this.normalGroupPosition;
         if (target) this.shiftGroup.setPosition(target.x, target.y, 0);
 

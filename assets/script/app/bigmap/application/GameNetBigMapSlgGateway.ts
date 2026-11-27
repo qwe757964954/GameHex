@@ -1,7 +1,11 @@
+import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { RequestMsg } from '../../../framework/net/RequestMsg';
 import { GameNet } from '../../net/GameNet';
+import { ScopedNetSender, type ScopedRequestStatus } from '../../net/RequestGuard';
 import { bigMapServerInstanceId, bigMapServerUint } from '../model/BigMapServerState';
-import type { IBigMapSlgGateway, IBigMapSlgRequestBody, IBigMapSlgRequestName } from './BigMapSlgRepository';
+import type {
+    IBigMapSlgGateway, IBigMapSlgRequestBody, IBigMapSlgRequestName, IBigMapSlgRequestOutcome,
+} from './BigMapSlgRepository';
 import {
     RequestSlgActionUpdate,
     RequestSlgBuild,
@@ -15,36 +19,56 @@ import {
 } from './RequestBigMapSlgMsg';
 
 /**
- *同一类拦截只吼一次。
+ *同一类问题只吼一次。
  *
- * 为什么必须留下这条日志：`request` 在「没连上 / 存档已切换」时返回 `null`，
- *`BigMapSlgRepository.request` 把它当超时吞掉，最终界面只显示一句
- *「正在同步基地信息」——请求根本没发出去，但界面看起来像在等回包。
- *2026-11-11 用户反馈「放置时提示正在同步、服务器没收到请求」，就是被这层静默挡住的。
+ * 为什么必须留下这条日志：请求被拦下时界面只有一句提示，看不出它到底有没有发出去 ——
+ * 2026-11-11 用户反馈「放置时提示正在同步、服务器没收到请求」，就是被这层静默挡住的。
  */
 const warnedOnce = new Set<string>();
-function warnBlocked(reason: string): void {
+function warnOnce(reason: string): void {
     if (warnedOnce.has(reason)) return;
     warnedOnce.add(reason);
-    console.warn(`[BigMap] SLG 请求被拦下（${reason}），基地信息拉不到 ⇒ 建造/升级会一直提示「正在同步基地信息」`);
+    console.warn(`[BigMap] SLG ${reason}`);
 }
 
-/** 复用现有 Socket、缓存与广播分发；页面生命周期由 Repository 管理。 */
+/** 复用现有 Socket、缓存与广播分发；会话生命周期交由 ScopedNetSender 管理。 */
 export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
-    private isDisposed = false;
-    constructor(private readonly isOwnerCurrent: () => boolean) {}
+    private readonly sender: ScopedNetSender;
 
-    dispose(): void {
-        if (this.isDisposed) return;
-        this.isDisposed = true;
-        GameNet.instance.removeCaller(this);
+    constructor(isOwnerCurrent: () => boolean = () => true, scope?: ResourceScope) {
+        this.sender = new ScopedNetSender(() => GameNet.instance, this, {
+            name: 'bigmap-slg-gateway',
+            scope,
+            isAlive: isOwnerCurrent,
+        });
     }
 
-    async request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<unknown> {
-        if (this.isDisposed) return null;
-        if (!this.isOwnerCurrent()) { warnBlocked('存档已切换 / 页面已关闭'); return null; }
-        let response: unknown = null;
-        const receive = (rsp: unknown): void => { response = rsp; };
+    dispose(): void {
+        this.sender.dispose();
+    }
+
+    request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<IBigMapSlgRequestOutcome> {
+        const allowRetry = name === 'CmdSlgGameInfoReqMsg' || name === 'CmdSlgActionUpdateReqMsg'
+            || name === 'CmdSlgBuildInfoReqMsg';
+        return this.sender.send(
+            (receive) => this.buildRequest(name, body, receive),
+            {
+                timeoutMs: 5000,
+                expiresMs: 5000,
+                tag: 'SLG',
+                allowRetry,
+                onBlock: (status, failure) => {
+                    this.reportBlock(name, status, failure);
+                },
+            },
+        );
+    }
+
+    private buildRequest(
+        name: IBigMapSlgRequestName,
+        body: IBigMapSlgRequestBody,
+        receive: (rsp: unknown) => void,
+    ): RequestMsg<unknown, unknown> {
         const uint = (key: string): number => {
             const value = bigMapServerUint(body[key]);
             if (value === null) throw new Error(`[SLG] 非法请求字段 ${key}`);
@@ -65,33 +89,51 @@ export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
                 return instanceId;
             });
         };
-        let request: RequestMsg<unknown, unknown>;
         switch (name) {
-            case 'CmdSlgActionUpdateReqMsg': request = new RequestSlgActionUpdate({}, this, receive); break;
-            case 'CmdSlgGameInfoReqMsg': request = new RequestSlgGameInfo({}, this, receive); break;
-            case 'CmdSlgBuildInfoReqMsg': request = new RequestSlgBuildInfo({}, this, receive); break;
+            case 'CmdSlgActionUpdateReqMsg': return new RequestSlgActionUpdate({}, this, receive);
+            case 'CmdSlgGameInfoReqMsg': return new RequestSlgGameInfo({}, this, receive);
+            case 'CmdSlgBuildInfoReqMsg': return new RequestSlgBuildInfo({}, this, receive);
             case 'CmdSlgBuildReqMsg':
-                request = new RequestSlgBuild({
+                return new RequestSlgBuild({
                     buildingId: uint('buildingId'), position: uint('position'), instant: uint('instant'),
                 }, this, receive);
-                break;
             case 'CmdSlgBuildUpgradeReqMsg':
-                request = new RequestSlgBuildUpgrade({ buildInstId: id(), instant: uint('instant') }, this, receive);
-                break;
-            case 'CmdSlgBuildCancelReqMsg': request = new RequestSlgBuildCancel({ buildInstId: id() }, this, receive); break;
-            case 'CmdSlgBuildMoveReqMsg': request = new RequestSlgBuildMove({ buildInstId: id(), position: uint('position') }, this, receive); break;
-            case 'CmdSlgBuildCollectReqMsg': request = new RequestSlgBuildCollect({ buildInstIds: ids() }, this, receive); break;
-            case 'CmdSlgBuildUnlockQueueReqMsg': request = new RequestSlgBuildUnlockQueue({ queueId: uint('queueId') }, this, receive); break;
+                return new RequestSlgBuildUpgrade({ buildInstId: id(), instant: uint('instant') }, this, receive);
+            case 'CmdSlgBuildCancelReqMsg': return new RequestSlgBuildCancel({ buildInstId: id() }, this, receive);
+            case 'CmdSlgBuildMoveReqMsg': return new RequestSlgBuildMove({ buildInstId: id(), position: uint('position') }, this, receive);
+            case 'CmdSlgBuildCollectReqMsg': return new RequestSlgBuildCollect({ buildInstIds: ids() }, this, receive);
+            case 'CmdSlgBuildUnlockQueueReqMsg': return new RequestSlgBuildUnlockQueue({ queueId: uint('queueId') }, this, receive);
         }
-        const expiresAt = Date.now() + 5000;
-        request.canSend = () => !this.isDisposed && this.isOwnerCurrent() && Date.now() < expiresAt;
-        request.allowRetry = name === 'CmdSlgGameInfoReqMsg' || name === 'CmdSlgActionUpdateReqMsg'
-            || name === 'CmdSlgBuildInfoReqMsg';
-        const status = await GameNet.sendRequest(() => request, { timeoutMs: 5000, tag: 'SLG' });
-        //发送失败（协议未注册 / 通道关闭）同样要留痕，否则表现和「没连上」一模一样：
-        //一切静默，界面只剩「正在同步基地信息」。
-        if (status !== 'ok') warnBlocked(`发送失败 ${name}`);
-        return status === 'ok' && !this.isDisposed && this.isOwnerCurrent() ? response : null;
     }
 
+    private reportBlock(
+        name: IBigMapSlgRequestName,
+        status: Exclude<ScopedRequestStatus, 'ok'>,
+        failure: string | null,
+    ): void {
+        if (status === 'rejected') {
+            console.warn(`[BigMap] SLG ${name} 被服务端拒绝：CmdTips 已提示原因，基地快照不变`);
+            return;
+        }
+        if (failure === 'disposed') {
+            return;
+        }
+        if (failure === 'owner_switched') {
+            warnOnce('存档已切换 / 页面已关闭：请求没有发出');
+            return;
+        }
+        if (failure === 'offline') {
+            warnOnce('网络未连接：请求没有发出');
+            return;
+        }
+        if (failure === 'cancelled' || failure === 'send fail') {
+            warnOnce(`发送失败 ${name}（${failure}）：请求没有发出`);
+            return;
+        }
+        if (failure === 'owner_changed') {
+            warnOnce('存档已切换 / 页面已关闭：回包不交付');
+            return;
+        }
+        warnOnce(`未确认 ${name}（${failure ?? '超时 / 无回包'}）：回包没到，服务端可能已执行`);
+    }
 }

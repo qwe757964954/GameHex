@@ -47,8 +47,12 @@ interface IFakeNode {
 interface IPageLike {
     node: IFakeNode | null;
     qipaoTimer: unknown;
+    qipao: { active: boolean; isValid: boolean } | null;
     bagPanelComp: unknown;
-    gemTabRedDot: unknown;
+    composeBtnRedDot: unknown;
+    forgeBtnRedDot: unknown;
+    tabGroup: unknown;
+    equipSlots: unknown[];
     readonly alive: boolean;
     onDestroy(): void;
     onDisable(): void;
@@ -76,17 +80,24 @@ function harness(getChildByName: (name: string) => { active: boolean } | null): 
 
     const { exports, unresolved } = loadTsModule<{ RolePage: PageCtor }>('assets/script/app/role/RolePage.ts', {
         modules: {
-            cc: ccStub({ Component: FakeComponent }),
+            cc: ccStub({ Component: FakeComponent, sp: { Skeleton: class {} } }),
             '/RoleRepository': { roleRepository: { roleLevel: () => 1, equipParts: () => [] } },
             '/ViewLifecycle': { VIEW_LIFECYCLE },
             '/RoleEvents': { RoleEvent },
             '/RoleTypes': RoleTypes,
-            '/EventMgr': { EventMgr: { instance: { emit: (name: string, payload: { phase?: string }) => events.push({ name, payload }) } } },
+            '/EventMgr': { EventMgr: { instance: {
+                emit: (name: string, payload: { phase?: string }) => events.push({ name, payload }),
+                off: () => undefined,
+            } } },
             '/RedDot': { RedDot: class {} },
             '/CmdInterface': { CmdRedDotType: { GEM_COMPOSE: 1 } },
             '/RdServerVar': { readServerRedDot: () => 0 },
             '/RoleBagPanel': { RoleBagPanel: class {} },
+            '/RoleBagTabGroup': { RoleBagTabGroup: class {} },
+            '/RoleNavItem': { RoleNavItem: class {} },
+            '/EquipDecomposePopup': { EquipDecomposePopup: { open: async () => null } },
             '/RoleEquipSlot': { RoleEquipSlot: class {} },
+            '/RoleTexts': { ROLE_TEXTS: {} },
             '/RoleArtLoader': { loadRoleBagIcon: async () => null, loadRoleQualityFrame: async () => null },
             '/CardLineupPower': { formatPowerText: (value: number) => String(value) },
         },
@@ -100,8 +111,13 @@ function harness(getChildByName: (name: string) => { active: boolean } | null): 
 
     const page = new exports.RolePage();
     page.node = { isValid: true, activeInHierarchy: true, getChildByName };
-    page.bagPanelComp = null;
-    page.gemTabRedDot = null;
+    // prefab 绑定的引用按真实形态补桩：`onDisable` 不再对这些引用判空（绑错该当场抛），
+    // 所以「不抛」这条用例守的是 Qipao 缺失，不是「引用为 null 也能跑」。
+    page.bagPanelComp = { isDecomposing: false, hide: () => undefined };
+    page.composeBtnRedDot = { setRedDot: () => undefined };
+    page.forgeBtnRedDot = { setRedDot: () => undefined };
+    page.tabGroup = { clearRedDots: () => undefined, item: () => ({ setRedDot: () => undefined }) };
+    page.equipSlots = [];
     return { page, events, cleared };
 }
 

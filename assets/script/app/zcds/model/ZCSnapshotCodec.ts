@@ -93,7 +93,7 @@ export class ZCSnapshotCodec {
             const maxHp = homeOwner === undefined ? 0 : match.ownerHqMaxHp?.[homeOwner] ?? rules.hqMaxHp;
             const wallMaxHp = isHome ? rules.wallMaxHp : 0;
             const wallLevel = isHome ? match.ownerBuildingLevels?.[homeOwner]?.wall : undefined;
-            // 资源标记清除后仍可开发，保留与既有抽卡回退一致的全类型随机类型。
+            // 资源格沿用全类型随机地块标记，领取后的开发状态由结算流程写入。
             const tileType = isHome || !config.playable ? null
                 : neutralResourceId !== null ? ZCPvpTileType.AllRandom : tileTypes[config.id];
             return {

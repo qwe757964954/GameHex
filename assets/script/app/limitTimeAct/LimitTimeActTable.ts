@@ -40,7 +40,7 @@ import type {
 } from './LimitTimeActTypes';
 
 /** `CmdActivityTypeEnum.limit_time`。 */
-export const LIMIT_TIME_ACT_TYPE = 101;
+const LIMIT_TIME_ACT_TYPE = 101;
 
 /** 任务按钮三态（多一个 `undone`：既没完成也不知道往哪跳）。 */
 export type LimitTimeTaskPhase = 'goto' | 'claimable' | 'taken' | 'undone';

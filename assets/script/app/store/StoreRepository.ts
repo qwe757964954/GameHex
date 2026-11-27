@@ -370,7 +370,3 @@ function parseRewardRows(raw: unknown): readonly IGemBoxRewardRow[] {
 }
 
 export const storeRepository: IStoreRepository = new RuntimeStoreRepository();
-
-/** 读一次超时常量给测试用（避免测试里硬编码 800/5000）。 */
-export const STORE_READ_TIMEOUT_MS = READ_TIMEOUT_MS;
-export const STORE_WRITE_TIMEOUT_MS = WRITE_TIMEOUT_MS;

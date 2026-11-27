@@ -122,7 +122,12 @@ test('步骤表补齐关卡入口和卡牌入口，苏醒两步保持无焦点',
     const last = rows.find(row => row.stepId === '8-1');
     assert.equal(last.focusNode, 'Main/TaskEntry', '8-1 要高亮主线任务入口');
     assert.equal(last.completeCond, 'pageOpened:task', '面板一开就算完成（玩家自己点开）');
-    assert.equal(last.maskType, 'hole', '挖孔高亮：圈住入口，并让立绘按孔让位');
+    // 用户 2026-11-25：**挖孔高亮的形式不变，只在 8-1 允许点击穿透**。
+    // `hole` 的孔外那一层同时兼任点击区（点了等于点对话条），8-1 要让玩家自己点任务入口、
+    // 点错了也能切页 ⇒ 换成 `holeThrough`（压暗与孔同 `hole`，只把四块遮罩的 Button 停用）。
+    assert.equal(last.maskType, 'holeThrough', '8-1 挖孔高亮照旧，但孔外点击要穿透（弱引导）');
+    assert.ok(!rows.some(row => row.maskType === 'holeThrough' && row.stepId !== '8-1'),
+        'holeThrough 只给 8-1 用：其余步的孔外点击仍要来推进台词');
 });
 
 test('光圈与手指画在遮罩之上：孔外的压暗不许盖住高亮和手指', () => {

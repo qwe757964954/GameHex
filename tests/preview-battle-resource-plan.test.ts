@@ -63,6 +63,9 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
         './ZCClientCombatConfig': { buildZCClientCombatConfig: () => ({ config: { modifiers: { player: [{ targetUnitId: '68001', textModifiers: [{ statId: 'model', value: 'units/effects/probe/replacement' }] }] } } }) },
         '../model/ZCVisualResourcePlan': { buildZCVisualResourcePlan, resolveZCVisualUnitIds },
         '../ZCDCLogSwitch': { ZCDC_LOG_WARNINGS: false },
+        //  加载器自 11-26 起还读 `ICON_TABLE`（`core/config/TableNames`）：没给桩时
+        //  `ICON_TABLE` 是 undefined，报错点落在 `loadCardArtConfig` 内部，看不出是桩的问题。
+        '../../../core/config/TableNames': { ICON_TABLE: 'icon' },
         './ZCGuideLoader': { ZCGuideLoader: class { async prepare() { guideLoads++; return {}; } } },
     };
     const context = { exports: {} as any, setTimeout, console, require: (name: string) => dependencies[name] };
@@ -135,8 +138,8 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
     Object.assign(base.map, { cityMode: 'select' });
     await loader.prepare(undefined, { units: [{ heroes: [], heroIds: [] }, { heroes: [], heroIds: [] }] });
     assert.ok(paths.includes('image/gameui/whh/spriteFrame'));
-    assert.ok(directories.includes(ArtPaths.SPAWN_REGION_ART_ROOT), '自选主城按目录加载气泡');
-    assert.ok(!paths.some(path => path.startsWith('image/spawn-region/')), '气泡不再逐张请求');
+    assert.ok(paths.includes(resourcePlan.ZC_BATTLE_SHELL_PATHS.spawnRegionHint), '自选主城在公共外壳中加载气泡 prefab');
+    assert.ok(!directories.includes(ArtPaths.SPAWN_REGION_ART_ROOT), '气泡底图已由 prefab 自身绑定，不再手动扫目录');
     paths.length = 0;
     const offline = await loader.prepare();
     assert.equal(offline.unitVisualPrefabs.size, 5);

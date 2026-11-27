@@ -1,0 +1,48 @@
+
+ddz_sgfc_sl_ani.png
+size: 744,744
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+db
+  rotate: false
+  xy: 2, 150
+  size: 726, 257
+  orig: 743, 293
+  offset: 6, 16
+  index: -1
+db2
+  rotate: false
+  xy: 2, 409
+  size: 740, 256
+  orig: 743, 293
+  offset: 2, 17
+  index: -1
+sb
+  rotate: false
+  xy: 36, 667
+  size: 141, 75
+  orig: 142, 76
+  offset: 1, 1
+  index: -1
+sl
+  rotate: false
+  xy: 179, 667
+  size: 137, 75
+  orig: 138, 75
+  offset: 1, 0
+  index: -1
+xx
+  rotate: false
+  xy: 2, 727
+  size: 15, 15
+  orig: 15, 15
+  offset: 0, 0
+  index: -1
+xx2
+  rotate: false
+  xy: 19, 727
+  size: 15, 15
+  orig: 15, 15
+  offset: 0, 0
+  index: -1

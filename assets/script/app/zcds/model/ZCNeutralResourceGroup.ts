@@ -464,6 +464,14 @@ export function isZCNeutralResourceBuilding(item: ZCNeutralResourceItem | null |
     return item?.resourceType === ZCNeutralResourceType.Mine || item?.resourceType === ZCNeutralResourceType.Barracks;
 }
 
+/** 格上当前是否驻守着尚未被击败/归属的觉醒中立野怪。*/
+export function isZCAwakeMonster(
+    hex: Readonly<{ neutralResourceId?: number; hp: number; neutralFeature?: Readonly<{ awake?: boolean; claimed?: boolean }> }>,
+): boolean {
+    return neutralResourceItemOf(hex.neutralResourceId)?.resourceType === ZCNeutralResourceType.Monster
+        && hex.neutralFeature?.awake === true && !hex.neutralFeature.claimed && hex.hp > 0;
+}
+
 /** 抽签用随机数：[0,1) 夹紧，避免 `random()` 返回 1 时游标落在末项之外。*/
 function clampZCNeutralRandom(random: () => number): number {
     const value = random();

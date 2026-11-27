@@ -1,6 +1,6 @@
 /**
  * 邮件模块的资源路径唯一来源。
- * 弹窗底板、标题带、未读行底、按钮和关闭钮复用 friend/login 的公共图，不另存第二份。
+ * v2 底板 / 未读行卡 / 按钮改用 main 图集与邮件自有切图；不再跨模块复用 friend 图。
  * 奖励图标复用活动模块的统一解析；九宫格图必须按 SLICED 使用。
  */
 
@@ -19,13 +19,13 @@ import { MAIL_STATE_READ, MAIL_STATE_TAKEN, MAIL_STATE_UNREAD } from './MailTabl
 export const MAIL_ART_ROOT = `${ART_ROOT}/mail`;
 
 /** 行底图的两个资源名（`MailPage.loadRowArt` 直接喂给 `loadArt`）。 */
-export const MAIL_ROW_BG_UNREAD_NAME = 'fd_row_bg';
-export const MAIL_ROW_BG_READ_NAME = 'ml_row_bg_read';
+export const MAIL_ROW_BG_UNREAD_NAME = 'ml_row_v2';
+export const MAIL_ROW_BG_READ_NAME = 'ml_row_v2_read';
 
 /** 逻辑名 → 资源名（无扩展名）。 */
 export const MAIL_ART_NAMES: Readonly<Record<string, string>> = {
     /** 行底·已读 / 已领取（**九宫**）。 */
-    rowBgRead: 'ml_row_bg_read',
+    rowBgRead: 'ml_row_v2_read',
     /** 详情页分割线（**九宫**）。 */
     splitLine: 'ml_split_line',
     /** 详情页奖励底框（**九宫**）。 */
@@ -44,24 +44,12 @@ export function mailArtPath(key: string): string | null {
     return name ? spriteFramePath(MAIL_ART_ROOT, name) : null;
 }
 
-// 与好友 / 登录模块共用的公共图
+// 行底（未读）复用本模块自有图。
 
-/**
- * 弹窗底板 / 标题飘带 / 行底（未读）/ 两个按钮底 / 关闭钮，与 friend 模块**同源同 md5**
- * （都来自 FGUI `公用0` 包）⇒ 直接引用 friend / login 目录那一份，**不另存第二份**。
- * `tmp/_copy_mail_art.py` 会逐张校验 **md5 + 九宫边框**，不一致就报错
- * （防止「别人改了那份图 / friend 那轮被回滚」导致邮件九宫静默变形）。
- *
- * 一律是 `{ root, name }`（`loadArt(name, root)` 口径），**不是**裸路径 ——
- * `resources` 的索引里只登记 `<path>/spriteFrame`，裸路径 load 不到。
- */
-export const MAIL_SHARED_PANEL_BG = { root: `${ART_ROOT}/friend`, name: 'fd_panel_bg' } as const;
-export const MAIL_SHARED_ROW_BG_UNREAD = { root: `${ART_ROOT}/friend`, name: MAIL_ROW_BG_UNREAD_NAME } as const;
-export const MAIL_SHARED_BTN_GOLD = { root: `${ART_ROOT}/friend`, name: 'fd_btn_gold' } as const;
-export const MAIL_SHARED_BTN_DARK = { root: `${ART_ROOT}/friend`, name: 'fd_btn_dark' } as const;
+const MAIL_SHARED_ROW_BG_UNREAD = { root: `${ART_ROOT}/mail`, name: MAIL_ROW_BG_UNREAD_NAME } as const;
 
 /** 行底·已读 / 已领取（本模块自有图，`_b` 版）。 */
-export const MAIL_ROW_BG_READ = { root: `${ART_ROOT}/mail`, name: MAIL_ROW_BG_READ_NAME } as const;
+const MAIL_ROW_BG_READ = { root: `${ART_ROOT}/mail`, name: MAIL_ROW_BG_READ_NAME } as const;
 
 /**
  * 行底图（`state` → 哪一张）：未读 = 复用好友那张 `fd_row_bg`；已读 / 已领取 = 本模块 `_b` 版。

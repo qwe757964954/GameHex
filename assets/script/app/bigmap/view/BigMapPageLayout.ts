@@ -43,6 +43,8 @@ export class BigMapPageLayout extends Component {
     @property({ group: '模式按钮', tooltip: '图标目标尺寸' }) private modeIconSize = 79;
     @property({ group: '模式按钮', tooltip: '图标目标 y' }) private modeIconY = 11.5;
     @property(Button) private exploreButton: Button = null!;
+    @property({ type: Button, tooltip: 'BuildEntryButton：基地左侧「建造」入口；点击呼出/收起底部建造队列' })
+    private buildEntryButton: Button = null!;
     /**
      *基地建筑卡（非模态贴底卡）。
      *
@@ -91,6 +93,8 @@ export class BigMapPageLayout extends Component {
         this.harvestButton.node.on(Button.EventType.CLICK, this.onHarvestClick, this);
         this.buildMenuButton.node.on(Button.EventType.CLICK, this.onBuildMenuClick, this);
         this.exploreButton.node.on(Button.EventType.CLICK, this.onExploreClick, this);
+        // 左侧建造入口与顶部队列卡共用同一套展开/收起逻辑，入口是两条、状态只有一份。
+        this.buildEntryButton.node.on(Button.EventType.CLICK, this.onQueueClick, this);
         this.modeNode.on(Button.EventType.CLICK, this.onModeClick, this);
         this.baseBackButton.node.on(Button.EventType.CLICK, this.onModeClick, this);
         this.upgradeTab.node.on(Button.EventType.CLICK, this.onUpgradeTabClick, this);
@@ -228,14 +232,31 @@ export class BigMapPageLayout extends Component {
         this.designDock.active = dockActive;
         if (this.dockBlankCatcher) this.dockBlankCatcher.node.active = dockActive;
         this.modeNode.active = !base || !dockActive;
-        if (this.art) {
-            const icon = this.art.hud.get(this.mode === 'world' ? 'mode_base' : 'mode_world') ?? null;
-            fitBigMapSprite(this.modeIcon, icon, this.modeIconSize, 0, this.modeIconY);
-            const frame = this.art.hud.get('mode_frame') ?? null;
-            fitBigMapSprite(this.modeFrame, frame, this.modeFrameWidth, 0, this.modeFrameY);
-            this.modeFallback.node.active = !frame;
-            this.modeLabel.string = this.mode === 'world' ? BIGMAP_PRESENTATION_TEXT.baseToggle : BIGMAP_PRESENTATION_TEXT.worldToggle;
-        }
+        this.refreshModeButton(this.mode);
+    }
+
+    /**
+     * 模式按钮的图标 / 底框 / 文案（`applyMode` 与 `applyDockVisibility` 共用一套口径）。
+     *
+     * 🔴 2026-11-25 事故：prefab 里 `ModeIcon` / `ModeLabel` 两个子节点是**关**的。
+     * 图标靠 `fitBigMapSprite` 里的 `node.active = !!frame` 顺带打开了，文案没有人开 ——
+     * 结果就是「基地 / 大地图」四个字整条消失（用户截图：图标在、文字没了）。
+     * ⇒ 文案的显隐必须由这里显式写，别再指望 prefab 的 `_active`（深覆盖同理）。
+     *
+     * 文案先于美术写：`modeLabel.string` 是纯文本，不依赖任何贴图，
+     * 否则美术没加载完的那几帧，基地模式会停在 prefab 默认的「基地」两个字上。
+     */
+    private refreshModeButton(mode: BigMapMode): void {
+        this.modeLabel.node.active = true;
+        this.modeLabel.string = mode === 'world'
+            ? BIGMAP_PRESENTATION_TEXT.baseToggle
+            : BIGMAP_PRESENTATION_TEXT.worldToggle;
+        if (!this.art) return;
+        const icon = this.art.hud.get(mode === 'world' ? 'mode_base' : 'mode_world') ?? null;
+        fitBigMapSprite(this.modeIcon, icon, this.modeIconSize, 0, this.modeIconY);
+        const frame = this.art.hud.get('mode_frame') ?? null;
+        fitBigMapSprite(this.modeFrame, frame, this.modeFrameWidth, 0, this.modeFrameY);
+        this.modeFallback.node.active = !frame;
     }
 
     private onDesignCardClick(button: Button): void {
@@ -263,6 +284,12 @@ export class BigMapPageLayout extends Component {
         const exploreWidget = this.exploreButton.node.getComponent(Widget);
         exploreWidget.bottom = navigationHeight + 128;
         exploreWidget.updateAlignment();
+        // 锤子入口与探索按钮共用同一槽位（基地/世界互斥显示），
+        // 底边必须跟着 navigationHeight 一起抬高；写死 216 会在刘海屏
+        // （navigationHeight=150）压到下方「基地/大地图」切换按钮。
+        const buildWidget = this.buildEntryButton.node.getComponent(Widget);
+        buildWidget.bottom = navigationHeight + 128;
+        buildWidget.updateAlignment();
     }
 
     renderPlotCard(content: IBigMapPlotCardContent | null): void {
@@ -286,17 +313,12 @@ export class BigMapPageLayout extends Component {
         if (this.dockBlankCatcher) this.dockBlankCatcher.node.active = dockActive;
         this.modeNode.active = !base || !dockActive;
         this.exploreButton.node.active = !base;
+        //「建造」是基地专属入口：世界模式没有建造队列，锤子跟着收起。
+        this.buildEntryButton.node.active = base;
         //「一键收获」是世界玩法入口：基地模式收起，世界模式恢复。
         // prefab 中该按钮 right=70：给 Canvas/GMButton（52 宽 + 右 10）再留 8px 间隙，避免压住 GM 入口。
         this.harvestButton.node.active = !base;
-        if (this.art) {
-            const icon = this.art.hud.get(mode === 'world' ? 'mode_base' : 'mode_world') ?? null;
-            fitBigMapSprite(this.modeIcon, icon, this.modeIconSize, 0, this.modeIconY);
-            const frame = this.art.hud.get('mode_frame') ?? null;
-            fitBigMapSprite(this.modeFrame, frame, this.modeFrameWidth, 0, this.modeFrameY);
-            this.modeFallback.node.active = !frame;
-            this.modeLabel.string = mode === 'world' ? BIGMAP_PRESENTATION_TEXT.baseToggle : BIGMAP_PRESENTATION_TEXT.worldToggle;
-        }
+        this.refreshModeButton(mode);
     }
 
     /**

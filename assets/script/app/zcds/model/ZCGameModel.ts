@@ -2,9 +2,9 @@ import {
     HEX_GRID_LOGICAL_COLUMN_STEP, HEX_GRID_LOGICAL_ROW_STEP,
     HEX_GRID_VIEW_COLUMN_SPACING, HEX_GRID_VIEW_ROW_SPACING,
 } from '../../../core/hex/HexGridLayout';
-import { ZCDC_LOG_DAMAGE_FLOAT } from '../ZCDCLogSwitch';
+import { ZCDC_LOG_DAMAGE_FLOAT, ZCDC_LOG_SKILL_ANNOUNCE } from '../ZCDCLogSwitch';
 import { missileLog, zcIsMissileWatchUnit } from '../ZCMissileSkillDiagnostics';
-import { skillCastLog, zcSkillCastWatched } from '../ZCSkillCastDiagnostics';
+import { announceLog, announceLogOnce, skillCastLog, zcSkillCastWatched } from '../ZCSkillCastDiagnostics';
 import { ZCCaptureSystem } from './systems/ZCCaptureSystem';
 import { ZCCombatSystem } from './systems/ZCCombatSystem';
 import type { IZCModelServices } from './systems/ZCModelServices';
@@ -15,15 +15,18 @@ import { ZCTileSystem } from './systems/ZCTileSystem';
 import { ZCUnitRegistry } from './systems/ZCUnitRegistry';
 import { ZCUnitSystem, type IZCUnitContext } from './systems/ZCUnitSystem';
 import { ZCUnitTargeting } from './systems/ZCUnitTargeting';
+import { ZCSkillResolutionSystem } from './systems/ZCSkillResolutionSystem';
 import {
     ZC_CHAIN_SEGMENT_ANGLE_OFFSET_DEGREES, zcChainArcPieceLayout,
 } from './ZCChainLightningFx';
 import { zcCombatEffectFadeSecondsOf } from './ZCCombatEffectFlight';
-import { ZC_EFFECT_PATHS } from './ZCEffectCatalog';
+import { ZC_EFFECT_PATHS, ZC_EFFECT_BEHAVIOR_KEYS, zcEffectDurationOf } from './ZCEffectCatalog';
 import { ZC_EFFECT_SCALE } from './ZCEffectTuning';
+import { zcAnnounceActiveNames, zcAnnounceSkillNameIndex, type IZCAnnounceSkillPlanLike } from './ZCSkillAnnounceStyle';
 import type { ZCBattlePresentationEvents, ZCGameRenderFrame, ZCGameRenderHex } from './ZCGameRenderFrame';
 import type { IZCPendingSummon } from './ZCGameTypes';
 import { ZCMapGeometry } from './ZCMapGeometry';
+import type { IZCMonsterFocusToggleResult } from './ZCMonsterPresentation';
 import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig, type ZCMatchMap } from './ZCMatchConfig';
 import { ZCSnapshotCodec } from './ZCSnapshotCodec';
 
@@ -164,6 +167,7 @@ import type {
     ZCActionFailureReason,
     ZCActionResult,
     ZCBuildingCooldownState, ZCCardReveal,
+    ZCCombatEvent,
     ZCCombatTarget,
     ZCDamageSource,
     ZCDevelopResult,
@@ -254,6 +258,49 @@ const FLOAT_TEXT_GOLD_SECONDS = 0.62;
  * 与击杀掉落的 0.62s 拆开，两者表现不同。
 */
 const FLOAT_TEXT_GOLD_INCOME_SECONDS = 0.9;
+/**
+ * 治疗飘字存活时长（秒）：直线上升 75px 走完（2026-11-25 第 47 批）。
+ *
+ * 与伤害的 0.85s **刻意不同源**：治疗数字要「啪一下弹走」报喜，伤害数字要「慢慢坠下去」
+ * 才读得出掉了多少。曾把它跟 `floatTextDamageSeconds` 共用，结果 75px 被拉成 0.85s 的慢飘。
+ * 配表里的 `pvpGlobal.floatTextDamageSeconds` 只作用于伤害，别再把它接回来。
+ */
+const FLOAT_TEXT_HEAL_SECONDS = 0.2;
+/**
+ * 治疗光环的竖直抬升（视图 px）：单位根节点是逻辑脚点，光环要罩在**身体中心**。
+ * 兵种视觉画布 98 ⇒ 中心 +49，与飘字的 `damageTargetSize * 0.5` 同一口径。
+ */
+const HEAL_AURA_LIFT_PX = 49;
+/**
+ * 治疗光环跟随体型的「轻微」程度：0.5 = 半程跟随（体型 1→1、体型 2→1.5）。
+ *
+ * 全跟随（= `bodyScale`）会让战神附体 / 生命爆发那类巨型单位出现一张比人还大的光斑；
+ * 完全不跟随又会让缩小过的单位「光环套不住人」。所以只跟一半，并钳在 [0.75, 2]。
+ */
+const HEAL_AURA_BODY_FOLLOW = 0.5;
+const HEAL_AURA_SCALE_MIN = 0.75;
+const HEAL_AURA_SCALE_MAX = 2;
+/**
+ * 同一单位两次治疗光环的最小间隔（秒）。
+ *
+ * `presentHeal` 是所有治疗的**唯一出口**（吸血每砍一刀算一次、持续伤害每跳算一次），
+ * 不节流就是「刀刀闪一下」，反而看不出是一次治疗。
+ * 0.35s：短于它算同一次回血的多段结算，长于它就是新的一次治疗。
+ */
+const HEAL_AURA_MIN_INTERVAL_SECONDS = 0.35;
+/**
+ * 通用治疗特效的 Spine 动画名。
+ * 素材 `eff_cost_01.skel` 里**只有这一个**动画（动画段 count = 1，名字紧跟其后）。
+ * 写错不会报错，只是骨架一动不动 —— 换素材必须重新确认。
+ */
+const HEAL_AURA_CLIP = 'eff_buff_heal';
+
+/** 治疗光环的体型倍率：半程跟随 `bodyScale`，钳在 [0.75, 2]（口径见常量注释）。*/
+function healAuraScaleOf(unit: Readonly<ZCUnitState>): number {
+    const body = Number.isFinite(unit.bodyScale) ? (unit.bodyScale as number) : 1;
+    const followed = 1 + (body - 1) * HEAL_AURA_BODY_FOLLOW;
+    return Math.max(HEAL_AURA_SCALE_MIN, Math.min(HEAL_AURA_SCALE_MAX, followed));
+}
 /**
  * 受击特效存活时长（秒），队列保留时长与拿不到 clip 时的兜底共用这个值。
  * 正常播放由 `ZCEffectPool.HIT_FX_TARGET_SECONDS` 压到 0.15s，两处必须同值
@@ -511,7 +558,47 @@ export class ZCGameModel {
     private readonly deferredBarracksSpawns: Array<{ atSeconds: number; hexId: number }> = [];
 
     private readonly presentation = new ZCBattlePresentationQueue();
-
+    /**
+     * 已经播过大招通报的 `cardId` —— **一张卡一局只播一次**（2026-11-25 用户口径，最新）。
+     *
+     * 口径变过两次，别再按旧注释改回去：
+     * 1. 最初「一张卡一局只播一次」；
+     * 2. 2026-11-25 早先改成「每条主动技各播一次」（科学家两个主动技都弹）⇒ 记账键带上
+     *    `skillId` / `behaviorKey`；
+     * 3. **现在是第 1 条**：用户口径「技能触发类型是主动冷却 / 主动累计普攻的都播报 1 次，
+     *    同卡只放 1 次」⇒ 记账键只留 `cardId`，同一张卡第二个主动技不再弹。
+     *
+     * 记账放模型而不是视图：视图侧的池化节点随时可能因为切后台 / 结算而丢掉，
+     * 让视图去重就是「丢一次节点 ⇒ 下次同技能又通报一遍」。
+     * 仍不进快照：重开清零、与伤害统计同生命周期。
+    */
+    private readonly announcedActiveSkills = new Set<string>();
+    /**
+     * `unitId:behaviorKey` → 主动技名（构筑期 `pvpSkillPlan.skillName` 冻结过来的索引）。
+     *
+     * 只服务大招通报：行为车道结算时套的是普攻行的名字，事件层读不到真名（详见
+     * `zcAnnounceSkillNameIndex` 的表）。懒建 —— 大部分对局一张传说卡都没有，
+     * 不必为每局都扫一遍技能计划；`null` = 还没建（空 Map 也合法：没有名字就不通报）。
+     *
+     * 索引**只收 `active_cd` / `active_attack`**，被动行（含共用同一个 `behaviorKey`
+     * 的 `skill_params`）进不来 —— 用户口径「只报主动技能名字」。
+     */
+    private announceSkillNames: ReadonlyMap<string, string> | null = null;
+    /**
+     * 全表主动技能名集合（事件路径的放行名单，与上面那张索引同源同一次扫描）。
+     *
+     * 事件路径只拿得到事件上写的名字（可能是「豌豆普攻」「·强化」变体，甚至是 `behaviorKey`
+     * 原文），靠这份名单把普攻名 / 被动 / 特效名挡在外面。不按 unitId 分桶的理由见
+     * `zcAnnounceActiveNames`（副轨是跨卡借用的）。
+     */
+    private announceActiveNames: ReadonlySet<string> | null = null;
+    /**
+     * 每个单位上一次治疗光环的时刻（`unit.id → elapsedSeconds`），**只做节流**。
+     *
+     * 不进快照 / 不存档：丢了最坏也只是多闪一次光环，而把它写进快照反而要处理
+     * 「读档后时间轴回退 ⇒ 永远 -Infinity 差值」这种没人会想到的坑。
+     */
+    private readonly healAuraAt = new Map<number, number>();
     /**
      * `random` 是整局唯一的随机源：初始地块分布（`ZCSnapshotCodec.createInitialState`
      * → `createPvpTileTypes`）、抽地块与金币保底（`drawPvpTile`）、AI 选格、单位出生抖动
@@ -579,6 +666,7 @@ export class ZCGameModel {
         this.neutralFeatures = new ZCNeutralFeatureSystem(this.config.map, {
             random: this.random,
             definition: unit => this.effectiveUnitDefinition(unit),
+            ownerBuildingLevels: this.config.ownerBuildingLevels,
             monsterDefinition: card => this.unitDefinition(card.unitId),
             rules: this.rules,
             cloneUnit: unit => this.cloneGateUnit(unit),
@@ -805,6 +893,7 @@ export class ZCGameModel {
             drawRulesOf: (owner) => (owner === ZCOwner.Player
                 ? null
                 : { rarityModifier: this.npcRarityModifier, goldPity: false, rarityFallback: true }),
+            ownerBuildingLevels: this.config.ownerBuildingLevels,
             onNeutralReward: (hexId, itemId, owner, item) => {
                 this.pushNeutralReward(hexId, itemId, owner, item);
             },
@@ -823,12 +912,72 @@ export class ZCGameModel {
             damageUnit: this.services.damageUnit,
             presentHeal: (unit, amount) => {
                 const position = this.unitPosition(unit);
+                //  治疗飘字走自己的一档（2026-11-25 第 47 批）：直线上升 75px、0.2s 走完。
+                //  🔴 不能跟伤害同源（0.85s）：那样 75px 会被拉到 0.85s，读起来是「慢慢飘」，
+                //  与伤害数字的「啪一下弹走」是两种手感。两个数各在各的常量里，别合并。
                 this.pushFloatText({
                     kind: 'heal', owner: unit.owner, value: amount,
-                    x: position.x, y: position.y, durationSeconds: this.rules.floatTextDamageSeconds ?? FLOAT_TEXT_DAMAGE_SECONDS,
+                    x: position.x, y: position.y,
+                    durationSeconds: FLOAT_TEXT_HEAL_SECONDS,
                 });
+                this.presentHealAura(unit, position);
             },
         };
+    }
+
+    /**
+     * 通用治疗光环（2026-11-25 第 47 批）。
+     *
+     * 用户口径：「释放治疗类技能时…播放【通用治疗特效】，制作统一格式的预制体，
+     * 特效大小跟随角色模型大小轻微调整」。
+     *
+     * 🔴 挂在这里而不是某个 `castXxx` 里：治疗在 `ZCStatusResolutionSystem.healUnit` 汇成一次
+     * `presentHeal`，上游却有四条完全不同的路 —— 吸血（普攻每刀）、吃口菠萝、群体治疗、贯穿滋养。
+     * 挂在任一条技能车道上都只覆盖四分之一。代价是普攻类吸血会高频触发，所以配了
+     * `HEAL_AURA_MIN_INTERVAL_SECONDS` 节流；节流表**不进快照**（纯表现，丢了顶多早闪一下）。
+     *
+     * 事件形状（照抄 `pushSummonSpawnFx` 那条「纯表现 area 事件」）：
+     * · `type: 'area'` + `from == to` ⇒ 原地播，不参与弹道与碰撞；
+     * · `damage: 0` + `skillId: 0` ⇒ 不结算、也不进大招通报（`isActiveSkillCast` 要求 `skillId > 0`）；
+     * · `visualLiftPx` 抬到身体中心 —— `area` 分支读的是**事件级** `visualLiftPx`，
+     *   不是目录里的 `liftY`（那个只有弹道分支读），写错位置的表现是「光环贴在地面上」；
+     * · `spineAnimation` + `spineLoop: false` ⇒ 一次性播完就停，不循环。
+     */
+    private presentHealAura(unit: ZCUnitState, position: Readonly<{ x: number; y: number }>): void {
+        const now = this.state.elapsedSeconds;
+        const last = this.healAuraAt.get(unit.id);
+        if (last !== undefined && now - last < HEAL_AURA_MIN_INTERVAL_SECONDS) return;
+        this.healAuraAt.set(unit.id, now);
+        const scale = healAuraScaleOf(unit);
+        this.state.combatEvents.push({
+            id: this.state.nextCombatEventId++,
+            type: 'area',
+            owner: unit.owner,
+            sourceUnitId: unit.id,
+            targetUnitId: unit.id,
+            skillId: 0,
+            skillName: '治疗',
+            effectKey: null,
+            projectileKey: null,
+            effectPrefabPath: ZC_EFFECT_PATHS.healAura,
+            fromX: position.x,
+            fromY: position.y,
+            toX: position.x,
+            toY: position.y,
+            radius: 0,
+            damage: 0,
+            empowered: false,
+            startedAt: now,
+            //  寿命 = clip 时长（目录里的 `healAuraSeconds`）。短了会「播一半没了」，
+            //  长了会在末帧停住 —— 两个方向都不报错，所以只认目录那一格。
+            durationSeconds: zcEffectDurationOf(ZC_EFFECT_PATHS.healAura),
+            spineAnimation: HEAL_AURA_CLIP,
+            spineLoop: false,
+            visualLiftPx: HEAL_AURA_LIFT_PX * scale,
+            //  尺寸 = 目录 `nodeScale`（1.0，核心光斑 ≈ 一个角色宽）× 这一格体型微调。
+            //  `area` 类从不按 `radius` 缩放（§43），唯一入口就是它。
+            effectScale: scale,
+        });
     }
 
     private registerRuntimeStatuses(): void {
@@ -958,40 +1107,67 @@ export class ZCGameModel {
             runtimeOf: (unit) => (unit.neutralReinforcement ? this.neutralSkillRuntime : this.skillRuntime[unit.owner])
                 .get(`${unit.unitId}:${this.effectiveUnitDefinition(unit).attackProfile.skillId}`),
             fireBurst: (unit) => ZCAttackResolutionSystem.sendBurstShot(this.state, unit, this.attackResolutionContext),
-            castSecondary: (unit) => ZCAttackResolutionSystem.castFanSkill(this.state, unit, this.attackResolutionContext),
-            castSelfAura: (unit) => ZCAttackResolutionSystem.castSelfAura(this.state, unit, this.attackResolutionContext),
-            castBolt: (unit) => ZCAttackResolutionSystem.castBoltLine(this.state, unit, this.attackResolutionContext),
-            castChainLightning: (unit) => ZCAttackResolutionSystem.castChainLightning(
-                this.state, unit, this.attackResolutionContext),
-            castSummon: (unit) => this.summonUnits(unit),
-            castRoar: (unit) => ZCAttackResolutionSystem.castRoar(this.state, unit, this.attackResolutionContext),
-            castStorm: (unit) => ZCAttackResolutionSystem.castStorm(this.state, unit, this.attackResolutionContext),
-            castRayBeam: (unit, vulnStatusId) => ZCAttackResolutionSystem.castRayBeam(
-                this.state, unit, this.attackResolutionContext, vulnStatusId),
-            castFireZone: (unit) => ZCAttackResolutionSystem.castFireZone(
-                this.state, unit, this.attackResolutionContext),
-            castTrap: (unit) => ZCAttackResolutionSystem.castTrap(this.state, unit, this.attackResolutionContext),
-            castSplashShot: (unit, slowStatusId) => ZCAttackResolutionSystem.castSplashShot(
-                this.state, unit, this.attackResolutionContext, slowStatusId),
-            castBurstSkill: (unit, guardStatusId, lane) => ZCAttackResolutionSystem.castBurstSkill(
-                this.state, unit, this.attackResolutionContext, guardStatusId, lane),
-            castFanSweep: (unit, slowStatusId) => ZCAttackResolutionSystem.castFanSweep(
-                this.state, unit, this.attackResolutionContext, slowStatusId),
-            castChargeDash: (unit, options) => ZCAttackResolutionSystem.castChargeDash(
-                this.state, unit, this.attackResolutionContext, options),
-            castWindBolt: (unit) => ZCAttackResolutionSystem.castWindBolt(
-                this.state, unit, this.attackResolutionContext),
-            castBarrageShot: (unit) => ZCAttackResolutionSystem.castBarrageShot(
-                this.state, unit, this.attackResolutionContext),
+            //  ── 主动技车道：成功即通报（`castWithAnnounce` 的说明见方法注释）──
+            //  统一切口而不是在事件层猜：这些车道结算时套的是普攻行的 `skillId / name`，
+            //  事件里根本分不出「文明之火」和「科学家普攻」。
+            castSecondary: (unit) => ZCSkillResolutionSystem.castFanSkill(this.state, unit, this.attackResolutionContext),
+            castSelfAura: (unit) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.selfAura, unit,
+                () => ZCSkillResolutionSystem.castSelfAura(this.state, unit, this.attackResolutionContext)),
+            castBolt: (unit) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.boltStrike, unit,
+                () => ZCSkillResolutionSystem.castBoltLine(this.state, unit, this.attackResolutionContext)),
+            castChainLightning: (unit) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.chainDamage, unit,
+                () => ZCSkillResolutionSystem.castChainLightning(this.state, unit, this.attackResolutionContext)),
+            castSummon: (unit) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.summonUnit, unit,
+                () => this.summonUnits(unit)),
+            castRoar: (unit) => ZCSkillResolutionSystem.castRoar(this.state, unit, this.attackResolutionContext),
+            castStorm: (unit) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.stormZone, unit,
+                () => ZCSkillResolutionSystem.castStorm(this.state, unit, this.attackResolutionContext)),
+            castRayBeam: (unit, vulnStatusId) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.rayBeam, unit,
+                () => ZCSkillResolutionSystem.castRayBeam(
+                    this.state, unit, this.attackResolutionContext, vulnStatusId)),
+            castFireZone: (unit) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.fireZone, unit,
+                () => ZCSkillResolutionSystem.castFireZone(this.state, unit, this.attackResolutionContext)),
+            castTrap: (unit) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.trapPlace, unit,
+                () => ZCSkillResolutionSystem.castTrap(this.state, unit, this.attackResolutionContext)),
+            castSplashShot: (unit, slowStatusId) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.splashShot, unit,
+                () => ZCSkillResolutionSystem.castSplashShot(
+                    this.state, unit, this.attackResolutionContext, slowStatusId)),
+            //  爆发/毒液共用一条车道，行为键按 lane 分开（名字索引也是按行为键存的）。
+            castBurstSkill: (unit, guardStatusId, lane) => this.castWithAnnounce(
+                lane === 'venom' ? ZC_EFFECT_BEHAVIOR_KEYS.burstAura : ZC_EFFECT_BEHAVIOR_KEYS.sporeBurst, unit,
+                () => ZCSkillResolutionSystem.castBurstSkill(
+                    this.state, unit, this.attackResolutionContext, guardStatusId, lane)),
+            castFanSweep: (unit, slowStatusId) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.fanSlow, unit,
+                () => ZCSkillResolutionSystem.castFanSweep(
+                    this.state, unit, this.attackResolutionContext, slowStatusId)),
+            castChargeDash: (unit, options) => this.dashWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.chargeShield, unit,
+                () => ZCSkillResolutionSystem.castChargeDash(
+                    this.state, unit, this.attackResolutionContext, options)),
+            castWindBolt: (unit) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.windBolt, unit,
+                () => ZCSkillResolutionSystem.castWindBolt(this.state, unit, this.attackResolutionContext)),
+            castBarrageShot: (unit) => this.castWithAnnounce(ZC_EFFECT_BEHAVIOR_KEYS.missileBarrage, unit,
+                () => ZCSkillResolutionSystem.castBarrageShot(this.state, unit, this.attackResolutionContext)),
             // 冲锋定长位移边界校验，防止冲出可玩区域
             hexIdAt: (x, y) => this.geometry.hexIdAt(x, y),
             currentTarget: (unit) => this.unitTargeting.current(unit),
             distanceScale: this.rules.combatDistanceScale,
             healUnit: (unit, amount) => ZCStatusResolutionSystem.healUnit(unit, amount, this.statusResolutionContext),
-            strike: (unit, options) => ZCAttackResolutionSystem.strikeTargets(
+            strike: (unit, options) => ZCSkillResolutionSystem.strikeTargets(
                 this.state, unit, options, this.attackResolutionContext),
             // 经 placeAt 更新坐标与地块索引
-            blinkTo: (unit, x, y) => { this.movement.placeAt(unit, x, y); },
+            //  「移形换影」这类闪现车道是**内联**在触发系统里的（不用 castXxx 回调），
+            //  唯一的外呼就是这个 `blinkTo` ⇒ 通报只能挂在这里。
+            //  往返闪现会调第二次，被 `announcedActiveSkills`（每卡每车道一次）挡掉。
+            //  🔴 行为键必须由调用方透传：这条回调同时服务 `blink_strike`（移形换影）与
+            //  `dash_chain`（腾云驾雾）。写死 `blink_strike` 会让 `dash_chain` 那张橙卡
+            //  「查不到名字 ⇒ 不播」，且两种表现都零报错。
+            blinkTo: (unit, x, y, behaviorKey) => {
+                this.announceActiveCast(unit, behaviorKey ?? ZC_EFFECT_BEHAVIOR_KEYS.blinkStrike);
+                this.movement.placeAt(unit, x, y);
+            },
+            //  self_cast / random_strike 没有 castXxx 回调（一个自己挂增益、一个走 strike），
+            //  由触发系统在「CD 已消费 / 开火命中」那一拍回调过来，口径与其它车道一致。
+            announceCast: (unit, behaviorKey) => this.announceActiveCast(unit, behaviorKey),
             unitPosition: (unit) => this.services.unitPosition(unit),
             inAttackRange: (unit) => this.unitTargeting.hasTargetInAttackRange(unit),
             attackReachOf: (unit) => this.unitTargeting.attackReachOf(unit),
@@ -1008,6 +1184,16 @@ export class ZCGameModel {
             const restored = ZCSnapshotCodec.decode(snapshot, this.config);
             if (restored.ok === false) throw new Error(`无效对局快照：${restored.errors.join(', ')}`);
             this.state = restored.snapshot;
+            // 上一版领完的一次性资源保留可开发状态。只修正能从地图确认的已消费空格。
+            for (const point of this.config.map.resolvedResources ?? []) {
+                const hex = this.state.hexes[point.hexId];
+                const item = neutralResourceItemOf(point.itemId);
+                if (item && !item.feature && !isZCNeutralResourceBuilding(item)
+                    && hex && hex.owner !== 'neutral' && !hex.neutralResourceId && !hex.developmentResolved
+                    && hex.building === 'none' && hex.state !== 'ruins') {
+                    ZCTileSystem.finishDevelopment(hex, this.rules.wallMaxHp, this.config.ownerBuildingLevels?.[hex.owner]?.wall);
+                }
+            }
         } else {
             this.state = ZCSnapshotCodec.createInitialState(this.config, this.random);
             //  `openGrideTime` 约束的是「两次点击之间的最小间隔」，计时从第一次翻格之后开始（用户 2026-11-11）：
@@ -1083,6 +1269,7 @@ export class ZCGameModel {
             cardReveals: this.presentation.cardReveals,
             hexActivations: this.presentation.hexActivations,
             neutralRewards: this.presentation.neutralRewards,
+            skillAnnounces: this.presentation.skillAnnounces,
         };
     }
 
@@ -1161,6 +1348,225 @@ export class ZCGameModel {
         }
         return { trait, attackSkillId: profile.skillId, activeSkillIds };
     }
+    /**
+     * 玩家方传说卡放主动技能时，推一条「卡面形象 + 技能名」通报（事件路径）。
+     *
+     * 与 `ZCBattleAudio` 同一套「真正施法那一拍」判据（`empowered` / `activeSkillIds` /
+     * 0 伤害的地面表现不算），刻意不另立第二份：音效那边一旦放宽或收紧，这里跟着变，
+     * 否则会出现「听见技能音但没通报」或反过来的错位。
+     *
+     * 三道门：本机玩家席位 → 卡品级顶档（`gold`）→ **这条技能**还没通报过。
+     * 行为车道（`fire_zone` 这类基表没有行的）走另一条通道 `announceActiveCast`。
+     */
+    private announceLegendSkillCasts(scanFromEventId: number): void {
+        const playerCards = this.cards[ZCOwner.Player];
+        for (const event of this.state.combatEvents) {
+            if (event.id < scanFromEventId) continue;
+            if (event.owner !== ZCOwner.Player) continue;
+            const unit = this.units.byId.get(event.sourceUnitId);
+            if (!unit) continue;
+            const card = playerCards.get(unit.cardId);
+            if (!card || card.rarity !== 'gold') continue;
+            if (!this.isActiveSkillCast(event)) continue;
+            if (this.announcedActiveSkills.has(unit.cardId)) continue;
+            const skillKey = `skill:${event.skillId}`;
+            const skillName = this.announceSkillNameOf(unit, event);
+            if (!skillName) {
+                announceLogOnce(`${unit.cardId}:${skillKey}:noname`, `事件路径取不到技能名：${unit.cardId} skillId=${event.skillId}`);
+                continue;
+            }
+            //  🔴 只认「主动技能名字」：事件上写的可能是「豌豆普攻」/「·强化」变体 / `behaviorKey`
+            //  原文。名单来自同一次技能计划扫描（`active_cd` / `active_attack` 才有），
+            //  不在名单里就不播 —— 这是用户口径「普通攻击和特效名字不需要」的唯一实现处。
+            if (!this.announceNameAllowed(skillName)) {
+                announceLogOnce(`${unit.cardId}:${skillKey}:passive`,
+                    `事件路径不通报（不是主动技名字）：${unit.cardId}「${skillName}」skillId=${event.skillId}`);
+                continue;
+            }
+            const announced = this.presentation.pushSkillAnnounce({
+                now: this.state.elapsedSeconds,
+                cardId: unit.cardId,
+                skillId: event.skillId,
+                skillName,
+                x: event.fromX,
+                y: event.fromY,
+            });
+            if (!announced) {
+                announceLogOnce(`${unit.cardId}:${skillKey}:rejected`,
+                    `事件路径通报被队列拒收（坐标/名字非法，或队列已满）：${unit.cardId} ${skillName}`);
+                continue;
+            }
+            announceLog(`事件路径通报入队：${unit.cardId} ${skillName}（skillId=${event.skillId}）`);
+            // 只有真正入队才算「播过」：坐标非有限 / 队列满被拒时，这条技能还要留着下次机会。
+            this.announcedActiveSkills.add(unit.cardId);
+        }
+    }
+
+    /**
+     * 这一条战斗事件是不是「主动技能真正施法那一拍」。
+     *
+     * 判据与 `ZCBattleAudio.clipOf` 逐条对齐（那边是唯一既有口径，别在这里重造一套）：
+     *  - `empowered` 武将技那一击：直接算；
+     *  - 普攻行（`attackSkillId`）：不算技能；
+     *  - 其余只认 `activeSkillIds` 里登记的行，且必须真的结算了伤害 ——
+     *    冲锋护盾 / 召唤 / 践踏落点这些被动表现也带着自己的 `skillId` 走同一条 `combatEvents`，
+     *    只看「skillId 不是普攻」会在一批根本没施法的表现上弹通报。
+     */
+    private isActiveSkillCast(event: Readonly<ZCCombatEvent>): boolean {
+        if (event.beamHold || event.effectKey === 'hit') return false;
+        if (event.empowered) return true;
+        const info = this.attackInfoForUnit(event.sourceUnitId);
+        if (!info || event.skillId <= 0) return false;
+        if (event.skillId === info.attackSkillId) return false;
+        if (!info.activeSkillIds.includes(event.skillId)) return false;
+        return event.type !== 'area' || (event.damage ?? 0) > 0;
+    }
+
+    /**
+     * 通报要写的技能名。
+     *
+     * 武将技那一击的事件名是「<普攻名>·强化」（见 `ZCAttackResolutionSystem` 建事件处），
+     * 那不是技能表里的名字 —— 通报要的是武将技自己的名（如「天降神拳」），从
+     * `empoweredProfile.name` 取。取不到才退回事件名并剥掉变体后缀。
+     */
+    private announceSkillNameOf(unit: ZCUnitState, event: Readonly<ZCCombatEvent>): string {
+        if (event.empowered) {
+            const name = this.unitDefinition(unit.unitId).empoweredProfile?.name;
+            if (name) return name;
+        }
+        return stripSkillVariantSuffix(event.skillName);
+    }
+
+    /**
+     * 行为车道施法成功那一拍：给玩家方橙卡补一条通报。
+     *
+     * 🔴 为什么不能只靠战斗事件（2026-11-25 用户报「新加的橙卡播报不展示」）
+     *
+     * 事件路径（`announceLegendSkillCasts`）的两条腿都要求「技能身份写在 `pvpSkill` 行上」：
+     * `event.empowered`，或 `event.skillId` 命中普攻行的 `empoweredSkillId / secondarySkillId`。
+     * 新加的橙卡（科学家「文明之火」/「精密陷阱」、魔术师「移形换影」）是 `fire_zone` /
+     * `trap_place` / `blink_strike` 这类**基表里没有行**的车道：`ZCSkillResolutionSystem`
+     * 结算时拿的是 `definition.attackProfile` ⇒ 事件 `skillId` = 本卡普攻行、`skillName` =
+     * 「科学家普攻」，第一道排除条件（`skillId === attackSkillId`）直接当成普攻丢掉；
+     * 它们的 `empoweredEvery` 又都是 0 ⇒ 强化那一击永远不来。结果就是一次都不播、零报错。
+     *
+     * ⇒ 改在「施法真的放出去了」那一刻发起，判据与 `markCastAction` 同源（车道回调返回成功
+     * ⇒ 消费了 CD / 次数）。名字只能从构筑期冻结的技能计划里取（`announceSkillNames`）。
+     *
+     * 三道门与事件路径完全一致：本机玩家席位 → 卡品级顶档（gold）→ **这张卡**还没通报过。
+     * 取不到名字就**不播** —— 通报只写「形象 + 技能名」，宁可没有也不能拿「XX普攻」冒充。
+     * 每一道门挡住都会打一行 `[大招通报]`：这条链路不播时没有任何异常，光看屏幕分不清是哪一道。
+     */
+    private announceActiveCast(unit: ZCUnitState, behaviorKey: string): void {
+        if (unit.owner !== ZCOwner.Player) return;
+        const cardId = unit.cardId;
+        if (!cardId) return;
+        const skillKey = `behavior:${behaviorKey}`;
+        //  用户口径「同卡只放 1 次」⇒ 记账键只有 cardId（这张卡第一条主动技播完就静音）。
+        if (this.announcedActiveSkills.has(cardId)) {
+            announceLogOnce(`${cardId}:announced`, `本卡已通报过：${cardId}（${behaviorKey} 不再弹）`);
+            return;
+        }
+        const card = this.cards[ZCOwner.Player].get(cardId);
+        if (!card || card.rarity !== 'gold') {
+            announceLogOnce(`${cardId}:notgold`, `车道技不通报：${cardId} 卡面品级 ${card?.rarity ?? '（本局卡池里没有这张卡）'}，只认 gold`);
+            return;
+        }
+        //  🔴 必须走 `.get()`：`announceSkillNamesOf()` 是 `ReadonlyMap`，写成 `map[key]`
+        //  编译器不报、运行期恒 `undefined` ⇒ 三道门全过、一条都不播（2026-11-25 本批实测踩到）。
+        const nameKey = `${unit.unitId}:${behaviorKey}`;
+        const skillName = this.announceSkillNamesOf().get(nameKey);
+        if (!skillName) {
+            announceLogOnce(`${cardId}:${skillKey}:noname`,
+                `车道技不通报：名字索引里没有 ${nameKey}（本局技能计划里没有这条车道 / 还没解锁）`);
+            return;
+        }
+        const position = this.services.unitPosition(unit);
+        const announced = this.presentation.pushSkillAnnounce({
+            now: this.state.elapsedSeconds,
+            cardId,
+            // 车道级技能在基表里没有独立行，没有可记的 skillId；视图也不用它。
+            skillId: 0,
+            skillName,
+            x: position.x,
+            y: position.y,
+        });
+        if (!announced) {
+            announceLogOnce(`${cardId}:${skillKey}:rejected`,
+                `车道技通报被队列拒收（坐标非法或队列已满）：${cardId} ${skillName}`);
+            return;
+        }
+        announceLog(`车道路径通报入队：${cardId} ${skillName}（${behaviorKey}）`);
+        //  只有真正入队才算「播过」：坐标非有限被队列拒收时留着下次机会（与事件路径同口径）。
+        this.announcedActiveSkills.add(cardId);
+    }
+
+    /** 车道技能名索引（懒建；整局只扫一次技能计划）。*/
+    private announceSkillNamesOf(): ReadonlyMap<string, string> {
+        if (this.announceSkillNames) return this.announceSkillNames;
+        const plans: IZCAnnounceSkillPlanLike[] = [];
+        for (const loadouts of Object.values(this.config.modifiers ?? {})) {
+            for (const loadout of loadouts ?? []) plans.push(...(loadout.skillPlans ?? []));
+        }
+        this.announceSkillNames = zcAnnounceSkillNameIndex(plans);
+        this.announceActiveNames = zcAnnounceActiveNames(plans);
+        this.logAnnounceCatalog(this.announceSkillNames);
+        return this.announceSkillNames;
+    }
+
+    /**
+     * 事件路径的名字放行判断：这个名字是不是本卡某个**主动技能**的名字。
+     *
+     * 名单为空（这张卡一个主动技都没有 / 构筑期没带技能计划）⇒ 一律不放行。
+     * 不能反过来「名单空就放行」—— 那等于回到「有 skillId 就播」，普攻名会漏进来。
+     */
+    private announceNameAllowed(skillName: string): boolean {
+        this.announceSkillNamesOf();  // 触发一次懒建（两张索引同一次扫描产出）
+        return this.announceActiveNames?.has(skillName) === true;
+    }
+
+    /**
+     * 把「本局橙卡能通报哪些技能名」打一行出来。
+     *
+     * 这条日志是给「明明放了技能却没弹」这种工单用的：一眼就能分清是
+     * 「索引里压根没有这个名字」（构筑期没带上 / 没解锁 / 表没更新）还是
+     * 「名字在、但触发没走到」（车道没回调 / 卡面品级不对 / 已经播过）。
+     * 只打一次（索引懒建），不在每帧路径上。
+     */
+    private logAnnounceCatalog(index: ReadonlyMap<string, string>): void {
+        if (!ZCDC_LOG_SKILL_ANNOUNCE) return;
+        const lines: string[] = [];
+        for (const card of this.cards[ZCOwner.Player].values()) {
+            if (card.rarity !== 'gold' || !card.unitId) continue;
+            const names: string[] = [];
+            for (const [key, name] of index) {
+                if (key.startsWith(`${card.unitId}:`)) names.push(`${key.slice(card.unitId.length + 1)}=${name}`);
+            }
+            lines.push(`${card.id}${card.name ? `(${card.name})` : ''} → ${names.join(' / ') || '（无）'}`);
+        }
+        announceLog(`技能名索引就绪（${index.size} 条）| 本局橙卡：${lines.join('；') || '（无）'}`);
+    }
+
+    /**
+     * 包一层车道回调：施法成功（返回 `true`，冲锋返回位移格数 `> 0`）才通报。
+     *
+     * 为什么要包在回调上而不是在各车道里各写一次：`ZCSkillTriggerSystem` 的 15 条车道
+     * 都是「`context.castXxx(...)` 返回真 ⇒ 消费 CD」，那是全工程唯一的「施法成功」信号；
+     * 在这里包一层，新增车道只要补一条包装，不必再去事件层猜。
+     */
+    private castWithAnnounce(behaviorKey: string, unit: ZCUnitState, cast: () => boolean): boolean {
+        const casted = cast();
+        if (casted) this.announceActiveCast(unit, behaviorKey);
+        return casted;
+    }
+
+    /** 冲锋那条车道返回的是位移格数（0 = 没冲），口径同上。*/
+    private dashWithAnnounce(behaviorKey: string, unit: ZCUnitState, dash: () => number): number {
+        const moved = dash();
+        if (moved > 0) this.announceActiveCast(unit, behaviorKey);
+        return moved;
+    }
+
     /** UI/调试读取本局最终属性；基础目录仍可用 definitionForUnit 查询。*/
     effectiveDefinitionForUnit(owner: ZCOwner, id: string): ZCUnitDefinition {
         return this.effectiveUnitDefinitionFor(owner, id);
@@ -1575,6 +1981,7 @@ export class ZCGameModel {
             this.damageTaken[owner] = 0;
         }
         this.cardDamage.clear();
+        this.announcedActiveSkills.clear();
         this.unitCards.clear();
         this.refreshTileStates();
         this.checkOutcome();
@@ -1584,6 +1991,10 @@ export class ZCGameModel {
         this.captureSystem.beginStep(this.state.units);
         this.neutralFeatures.beginStep(this.state);
         this.state.elapsedSeconds = Math.round((this.state.elapsedSeconds + dt) * 1e9) / 1e9;
+        //  大招通报只扫「本步新产生」的战斗事件：`nextCombatEventId` 单调递增，拿它当水位
+        //  比逐条比 `startedAt` 稳 —— 同一步里前半段（出手）与后半段（技能触发 / 弹道命中）
+        //  产生的事件都能收到，也不会把上一帧残留的事件重扫一遍。
+        const announceScanFromId = this.state.nextCombatEventId;
         this.flushDeferredBarracksSpawns();
         //  排队中的召唤物（2026-11-20 第 33 批 101404 分裂菇）：「先特效、后出现」的两个时刻
         //  到点了就地兑现。排在 `updateUnits` 之前 —— 这一帧生出来的分身当帧就能索敌 / 出手，
@@ -1634,6 +2045,7 @@ export class ZCGameModel {
         //  渲染读到的就是「弧粘在人身上」的当下位置。排在 AI 之后、`checkOutcome` 之前 ——
         //  与渲染同帧，且不会因为单位阵亡引发的移除而算到半路。
         this.syncFollowingCombatEvents();
+        this.announceLegendSkillCasts(announceScanFromId);
         this.checkOutcome();
     }
 
@@ -1853,15 +2265,15 @@ export class ZCGameModel {
      * 这类弹体整段不参与碰撞。
      */
     private resolveProjectileArrival(projectile: ZCProjectileState): void {
-        ZCAttackResolutionSystem.resolveProjectileArrival(this.state, projectile, this.attackResolutionContext);
+        ZCSkillResolutionSystem.resolveProjectileArrival(this.state, projectile, this.attackResolutionContext);
     }
 
     private ensureMoveSpeedStatus(id: string, moveSpeedPct: number, durationSeconds: number): void {
-        ZCAttackResolutionSystem.ensureMoveSpeedStatus(this.attackResolutionContext, id, moveSpeedPct, durationSeconds);
+        ZCSkillResolutionSystem.ensureMoveSpeedStatus(this.attackResolutionContext, id, moveSpeedPct, durationSeconds);
     }
 
     private ensureBannerStatus(rawRate: number): string {
-        return ZCAttackResolutionSystem.ensureBannerStatus(this.attackResolutionContext, rawRate);
+        return ZCSkillResolutionSystem.ensureBannerStatus(this.attackResolutionContext, rawRate);
     }
 
     private registerDynamicSnapshotStatuses(): void {
@@ -2223,16 +2635,47 @@ export class ZCGameModel {
         if (result.killed) this.invalidateTerrain();
     }
 
-    toggleMonsterFocus(hexId: number, owner: ZCOwner = ZCOwner.Player): boolean {
+    /**
+     * 这一格是不是「已苏醒、还没被拆掉的野怪」。
+     *
+     * 只服务点击路由（2026-11-25 用户「点击整个野怪和按钮都会集火」）：控制器拿到地块点击后
+     * 先问这里，是野怪就转成 `toggleMonsterFocus`，不再走翻地 / 选点。
+     * 能不能真的集火（解锁 + 冷却）仍由 `toggleMonsterFocus` 判 —— 这里只回答"是不是野怪格"。
+    */
+    isMonsterFocusHex(hexId: number): boolean {
         const hex = this.state.hexes[hexId];
-        if (this.state.status !== 'playing' || !this.activeOwners.includes(owner) || !hex) return false;
-        const changed = this.neutralFeatures.toggleFocus(this.state, hex, owner);
-        if (changed) for (const unit of this.state.units) {
+        return hex !== undefined && isZCAwakeMonster(hex);
+    }
+
+    toggleMonsterFocus(hexId: number, owner: ZCOwner = ZCOwner.Player): boolean {
+        return this.toggleMonsterFocusResult(hexId, owner).ok;
+    }
+
+    /**
+     * 集火切换的**带原因**版本：控制器拿它决定弹哪句提示。
+     *
+     * 2026-11-26 第 56 批用户：「点击特效按钮后弹出提示UI，地块相邻后才能集火野怪 ……
+     * 激活野怪后，点击按钮，弹出屏幕中央文字提示，开始激活野怪，点击取消集火时提示【集火取消】」。
+     * 三种结局分别对应 `reason`（被拦）/ `kind = started` / `kind = cancelled`；
+     * 两个都是 `null` 表示"这一下什么都不该发生"（非对局中、不是我的棋子回合等），
+     * 控制器据此不弹任何东西。
+     *
+     * `kind` 靠**切换前** `focusOwners` 里有没有本方来判，不看返回值 —— 开和关都回 `true`。
+     */
+    toggleMonsterFocusResult(hexId: number, owner: ZCOwner = ZCOwner.Player): IZCMonsterFocusToggleResult {
+        const idle: IZCMonsterFocusToggleResult = { ok: false, kind: null, reason: null };
+        const hex = this.state.hexes[hexId];
+        if (this.state.status !== 'playing' || !this.activeOwners.includes(owner) || !hex) return idle;
+        const wasFocused = hex.neutralFeature?.focusOwners?.includes(owner) === true;
+        const reason = this.neutralFeatures.focusBlockReason(this.state, hex, owner);
+        if (reason !== null) return { ok: false, kind: null, reason };
+        if (!this.neutralFeatures.toggleFocus(this.state, hex, owner)) return idle;
+        for (const unit of this.state.units) {
             if (unit.owner === owner && this.unitTargeting.refreshPriorityTarget(unit)) {
                 ZCCombatSystem.switchState(unit, 'target');
             }
         }
-        return changed;
+        return { ok: true, kind: wasFocused ? 'cancelled' : 'started', reason: null };
     }
 
     private damageBuilding(unit: IZCStructureDamageSource, building: ZCHexState, damage: number): void {
@@ -2788,7 +3231,13 @@ export class ZCGameModel {
             sourceUnitId: master.id,
             skillId,
             skillName,
-            effectPrefabPath: (params as any)?.summonAuraFx ?? ZC_EFFECT_PATHS.sustainedAura,
+            //  🔴 这里原来写的是 `(params as any)?.summonAuraFx ?? …` —— `params` 是
+            //  `summonUnits` 的局部变量（技能参数 `runtime.parameters`，全是数值），
+            //  在本方法里根本不在作用域内 ⇒ 运行时 `ReferenceError: params is not defined`。
+            //  之前一直没炸，是因为线上表 `pvpSkillPlan` 里舞王 103103 没有 `summonAuraRadius`
+            //  （旧快照缺列），这段一次都没进过；2026-11-25 数据同步后一放技能就抛。
+            //  也没有「按技能覆写光圈 prefab」这个需求来源（`parameters` 是数值表），故直接取默认。
+            effectPrefabPath: ZC_EFFECT_PATHS.sustainedAura,
             //  整段持有：一条事件跟着区域走，消散时摘掉（不是按波次频闪）。
             holdVisual: true,
             //  每帧把圆心拍回本体脚下；本体阵亡后停在最后位置，光圈到时自己消失。
@@ -3324,11 +3773,10 @@ export class ZCGameModel {
 
     private refreshTileStates(): void {
         if (!this.tileStatesDirty) return;
-        ZCTileSystem.refresh(this.state, this.config.map);
         this.tileStatesDirty = false;
-        //  必须在 refresh 之后判断：邻接关系依赖「上一轮算出来的 state」，
-        //    先判就会慢一拍（第一片资源点要等到下一次脏刷新才入袋）。
         this.claimAdjacentNeutralResources();
+        // 领取形成的新锚点应在同一次刷新中开放相邻空地。
+        ZCTileSystem.refresh(this.state, this.config.map);
         // 邻接资源领取可能改多格 owner，统一在这里失效一次。
         this.territoryCountsReady = false;
     }
@@ -3463,4 +3911,24 @@ export class ZCGameModel {
         return { ok: false, message, reason };
     }
 
+}
+
+/**
+ * 战斗事件里的技能名去变体后缀。
+ *
+ * `ZCAttackResolutionSystem` 建事件时会把同一行的两种形态写成 `<名>·强化` / `<名>·投枪`
+ * （见那里的 `skillName` 三元式）。通报展示的是技能本身，不是「这一个变体」，
+ * 所以剥掉后缀。只认这两个后缀 —— 技能表里本来就有带「·」的正式名，不能按第一个「·」截断。
+ *
+ * 导出给用例直接断言，不复制算法。
+ */
+export function stripSkillVariantSuffix(raw: string): string {
+    if (typeof raw !== 'string') return '';
+    for (const suffix of ['·强化', '·投枪'] as const) {
+        if (raw.endsWith(suffix)) {
+            const base = raw.slice(0, -suffix.length);
+            if (base) return base;
+        }
+    }
+    return raw;
 }

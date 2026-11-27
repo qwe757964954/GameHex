@@ -2,14 +2,14 @@ import { _decorator, Button, Color, instantiate, Label, Node, SpriteFrame, UITra
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { loadArt } from '../card/CardLineupIcons';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
+import { ACTIVITY_ART_ROOT } from '../ArtPaths';
+import { qualityFrameName } from '../common/QualityFrameArt';
 import {
     ACTIVITY_ART_NAMES,
-    ACTIVITY_ART_ROOT,
     ACTIVITY_TITLE_ART,
     ACTIVITY_TITLE_ART_ROOT,
     boxArtKey,
     buttonArtKey,
-    qualityFrameName,
 } from './LayerActivityArt';
 import { resolveRewardIconRef } from '../common/RewardIcon';
 import { activityRepository } from './LayerActivityRepository';

@@ -1,8 +1,9 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
+import { EventMgr } from '../../framework/event/EventMgr';
 import {
     LeagueCreateEvent,
     type ILeagueCreateIntent,
-    type ILeagueCreateViewState,
+    type LeagueCreateOutput,
 } from './LeagueCreateEvents';
 import type { LeagueCreateModel } from './LeagueCreateModel';
 import type { ILeagueRepository } from './LeagueRepository';
@@ -17,18 +18,8 @@ import {
 } from './LeagueTexts';
 
 export interface ILeagueCreateControllerOptions {
-    readonly owner: object;
     readonly model: LeagueCreateModel;
     readonly repository: Pick<ILeagueRepository, 'createCost' | 'requestCreat'>;
-    readonly view: {
-        readonly render: (state: ILeagueCreateViewState) => void;
-        readonly close: () => void;
-    };
-    readonly feedback: {
-        readonly tip: (text: string) => void;
-        readonly notifyJoined: () => void;
-    };
-    readonly requests: { readonly removeCaller: (caller: object) => void };
 }
 
 /**
@@ -38,21 +29,24 @@ export interface ILeagueCreateControllerOptions {
  * 关闭即 `dispose()`，`removeCaller(this)` 作废在飞请求，迟到回包不再上屏。
  */
 export class LeagueCreateController extends ControllerBase {
-    private started = false;
     private submitting = false;
 
     constructor(context: IControllerContext, private readonly options: ILeagueCreateControllerOptions) {
         super(context, 'league-create');
-        this.own(() => options.requests.removeCaller(this));
     }
 
     start(): void {
-        if (this.started || this.isDisposed) return;
-        this.started = true;
         this.listen(LeagueCreateEvent.Intent, this.onIntent);
         // PopupManager 在 view.onOpen 之后才打开组合会话 ⇒ 首屏状态与取数都由这里主动推。
         this.publish();
         void this.refreshCost();
+    }
+
+    private emitOutput(output: LeagueCreateOutput): void {
+        if (this.isDisposed) {
+            return;
+        }
+        EventMgr.instance.emit(LeagueCreateEvent.Output, output, this);
     }
 
     private readonly onIntent = (event: ILeagueCreateIntent): void => {
@@ -90,11 +84,11 @@ export class LeagueCreateController extends ControllerBase {
      */
     private async submit(name: string, quickJoin: boolean): Promise<void> {
         if (this.submitting) return;
-        const { model, repository, view, feedback } = this.options;
+        const { model, repository } = this.options;
         model.name = name;
         model.quickJoin = quickJoin;
         if (!model.canSubmit) {
-            feedback.tip(LEAGUE_TIP_UNION_NAME_EMPTY);
+            this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_UNION_NAME_EMPTY });
             return;
         }
         this.submitting = true;
@@ -105,21 +99,21 @@ export class LeagueCreateController extends ControllerBase {
             model.cost = cost;
             this.publish();
             if (!cost.enough) {
-                feedback.tip(this.costTip(cost));
+                this.emitOutput({ kind: 'tip', text: this.costTip(cost) });
                 return;
             }
             const result = await repository.requestCreat(model.banner, name, quickJoin, this);
             if (this.isDisposed || model.name !== name) return;
             if (result === 'ok') {
-                view.close();
-                feedback.notifyJoined();
+                this.emitOutput({ kind: 'close' });
+                this.emitOutput({ kind: 'joined' });
                 return;
             }
-            feedback.tip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+            this.emitOutput({ kind: 'tip', text: result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED });
         } catch (error) {
             if (!this.isDisposed && model.name === name) {
                 console.warn('[LeagueCreateController] 创建请求失败', error);
-                feedback.tip(LEAGUE_TIP_FAILED);
+                this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_FAILED });
             }
         } finally {
             this.submitting = false;
@@ -136,12 +130,15 @@ export class LeagueCreateController extends ControllerBase {
 
     private publish(): void {
         const model = this.options.model;
-        this.options.view.render({
-            name: model.name,
-            selectIndex: model.selectIndex,
-            quickJoin: model.quickJoin,
-            cost: model.cost,
-            submitting: this.submitting,
+        this.emitOutput({
+            kind: 'render',
+            state: {
+                name: model.name,
+                selectIndex: model.selectIndex,
+                quickJoin: model.quickJoin,
+                cost: model.cost,
+                submitting: this.submitting,
+            },
         });
     }
 }

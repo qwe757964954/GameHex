@@ -1,4 +1,4 @@
-import { _decorator, Button, Node } from 'cc';
+import { _decorator, Button } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { militiaRepository } from './MilitiaRepository';
@@ -20,84 +20,41 @@ const { ccclass, property } = _decorator;
 export class MilitiaTalentOverviewPage extends PopupBase {
     static prefabPath = 'ui/Role/MilitiaTalentOverview';
 
-    @property({ type: Node, tooltip: 'AttrList：属性聚合列表（其上挂 VirtualScrollView，gridCount=1）' })
-    attrListNode: Node = null;
+    @property({ type: VirtualScrollView, tooltip: '属性聚合列表' })
+    private attrList: VirtualScrollView = null!;
 
-    @property({ type: Node, tooltip: 'List：已解锁描述列表（其上挂 VirtualScrollView，gridCount=1）' })
-    descListNode: Node = null;
+    @property({ type: VirtualScrollView, tooltip: '已解锁描述列表' })
+    private descList: VirtualScrollView = null!;
 
-    @property({ type: Node, tooltip: 'Popup/CloseBtn：右上角关闭（挂 cc.Button）' })
-    closeButton: Node = null;
-
-    /** 缓存：两个列表组件。 */
-    private attrList: VirtualScrollView = null;
-    private descList: VirtualScrollView = null;
+    @property({ type: Button, tooltip: '右上角关闭按钮' })
+    private closeButton: Button = null!;
 
     /** 当前数据（铺格时按 index 现取）。 */
     private attrs: string[] = [];
     private descs: string[] = [];
 
-    /** {@link ensureInit} 是否跑过（幂等标记）。 */
-    private inited = false;
-
     protected onInit(): void {
-        this.ensureInit();
+        this.attrList.renderItemFn = (node, index) => node.getComponent(MilitiaAttrItem).render(this.attrs[index]);
+        this.descList.renderItemFn = (node, index) => node.getComponent(MilitiaAttrItem).render(this.descs[index]);
+        this.closeButton.node.on(Button.EventType.CLICK, this.closeByButton, this);
     }
 
     protected onOpen(): void {
-        this.ensureInit();
         void this.refresh();
-    }
-
-    /** 取组件 + 接回调（幂等：宿主可能初始非激活 ⇒ `onInit` 未必先跑，见规则 108）。 */
-    private ensureInit(): void {
-        if (this.inited) return;
-        this.inited = true;
-
-        this.attrList = this.attrListNode.getComponent(VirtualScrollView);
-        this.descList = this.descListNode.getComponent(VirtualScrollView);
-        this.attrList.renderItemFn = (node: Node, index: number) => this.renderAttr(node, index);
-        this.descList.renderItemFn = (node: Node, index: number) => this.renderDesc(node, index);
-
-        this.closeButton.getComponent(Button).node.on(Button.EventType.CLICK, this.closeByButton, this);
     }
 
     /** 读表 → 聚合 → 铺两个列表。 */
     private async refresh(): Promise<void> {
+        const context = this.popupOpenContext;
         await militiaRepository.loadTables();
-        if (!this.alive) return;
+        if (!this.isValid || !context || context.cancelled) return;
 
-        const overview = militiaRepository.overview();
-        this.attrs = overview.attrs;
-        this.descs = overview.descs;
-        this.attrList.refreshList(this.attrs.length);
-        this.descList.refreshList(this.descs.length);
+        const { attrs, descs } = militiaRepository.overview();
+        this.attrs = attrs.length || descs.length ? attrs : [ROLE_TEXTS.talentEmpty];
+        this.descs = descs;
+        this.attrList.setTotalCount(this.attrs.length);
+        this.descList.setTotalCount(this.descs.length);
         this.attrList.scrollToTop(false);
         this.descList.scrollToTop(false);
-
-        // 一格数据都没有：明说「还没解锁」，不留两个空列表（界面看着像坏了）。
-        if (!this.attrs.length && !this.descs.length) {
-            this.attrList.refreshList(1);
-            this.attrs = [ROLE_TEXTS.talentEmpty];
-        }
-    }
-
-    private renderAttr(node: Node, index: number): void {
-        const item = node.getComponent(MilitiaAttrItem);
-        const text = this.attrs[index];
-        if (!item || text === undefined) return;
-        item.render(text);
-    }
-
-    private renderDesc(node: Node, index: number): void {
-        const item = node.getComponent(MilitiaAttrItem);
-        const text = this.descs[index];
-        if (!item || text === undefined) return;
-        item.render(text);
-    }
-
-    /** 组件所在节点是否仍然有效（弹窗随时可能被关，`close()` 是直接 destroy）。 */
-    private get alive(): boolean {
-        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

@@ -49,7 +49,7 @@ const SELF_HEAL_PCT = [8, 10, 15];
 const ALLY_HEAL_PCT = [4, 5, 8];
 const CLEANSE = [0, 0, 1];
 const ALLY_RADIUS = 252;
-const UNLOCKS = [9, 18, 27];
+const UNLOCKS = [5, 18, 27];
 
 function readRows(name: string): Array<Record<string, unknown>> {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as
@@ -235,7 +235,7 @@ test('没有群体半径 ⇒ 一条护盾事件都不推（嗜血 / 迅击不会
 
 // ────────────────────────────────────────────── 三、本局资源清单
 
-test('资源清单按单位补收：68006 收刀盾兵_护盾，同车道的 68007 零资源', () => {
+test('资源清单按单位补收：68006 收刀盾兵_护盾，同车道的 68007 只多自己的破阵术子弹', () => {
     const adapters = (unitId: string) => ({
         skillPlans: [{ enabled: true, unitId, behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.selfCast }],
         textOverrides: new Map(),
@@ -247,10 +247,15 @@ test('资源清单按单位补收：68006 收刀盾兵_护盾，同车道的 680
     const plan = buildZCVisualResourcePlan(definitions as never, adapters(UNIT_ID) as never);
     assert.ok(plan.effectPaths.includes(ZC_EFFECT_PATHS.dashGuard), '漏收 = 预热有、实战没有');
 
+    //  同一条车道上的其它卡不该被连带预载一张护盾。
+    //  2026-11-26 第 57 批：68007 吞噬大嘴花的破阵术弹体从「投枪弹体」换成「大嘴花_子弹」，
+    //  走的是 `ZCLanceFx` 那条按单位登记的覆盖通道 ⇒ 它不再是零资源，但**只能多这一条**。
+    //  这条 `deepEqual` 就是那个守卫：多出护盾 = 连带预载，多出别的子弹 = 覆盖表写串了。
     const other = buildZCVisualResourcePlan(
         [{ unitId: '68007', prefabPath: 'unit/68007', attackProfile: { effectPrefabPath: 'a' } }] as never,
         adapters('68007') as never);
-    assert.deepEqual(other.effectPaths, ['a'], '嗜血在这条车道不该被连带预载一张护盾');
+    assert.deepEqual(other.effectPaths, ['a', ZC_EFFECT_PATHS.cardBulletMouth],
+        '68007 只该多出破阵术子弹这一条，护盾不能连带');
 });
 
 test('护盾 prefab 仍在全局预热里（charge_shield 组），本批只补本局清单', () => {

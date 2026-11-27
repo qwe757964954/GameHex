@@ -1,4 +1,5 @@
-import { _decorator, Component, Label, Node, SpriteFrame } from 'cc';
+import { _decorator, Component, Label, SpriteFrame } from 'cc';
+import { RedDot } from '../common/RedDot';
 import { Toast } from '../common/Toast';
 import { GoodsBox } from '../itemdetail/GoodsBox';
 import { ItemInfoPage } from '../itemdetail/ItemInfoPage';
@@ -22,8 +23,8 @@ export class GetHeroEntry extends Component {
     @property({ type: Label, tooltip: 'ValueLabel：进度文案 `(7/10)`' })
     valueLabel: Label = null!;
 
-    @property({ type: Node, tooltip: 'RedDot：可领取红点（只有 `FINISH` 才亮）' })
-    redDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'RedDot：可领取红点（工程通用红点，只有 `FINISH` 才亮）' })
+    redDot: RedDot = null!;
 
     /** 数据端口；测试可替换。 */
     private repo: IMainTaskRepository = mainTaskRepository;
@@ -80,7 +81,7 @@ export class GetHeroEntry extends Component {
     applySnapshot(snapshot: IHeroTaskSnapshot): void {
         this.node.active = snapshot.visible;
         this.valueLabel.string = snapshot.configured ? snapshot.progressText : '';
-        this.redDot.active = snapshot.showRedDot;
+        this.redDot.setRedDot(snapshot.showRedDot);
         // 奖励物品框：老端 `com_hero.UpdateByGoods(good)`，格子里不显示数量。
         this.goods.render(this.qualityFrame, this.iconFrame, '', false);
     }

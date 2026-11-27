@@ -106,7 +106,7 @@ test('封顶仍然生效：治疗削弱后也不会超过最大生命', () => {
 // ────────────────────────────────────────────── 二、车道接线（源码守卫）
 
 test('爆发车道按 lane 取前缀，两条技能不抢同一袋参数', () => {
-    const source = readSource('assets/script/app/zcds/model/systems/ZCAttackResolutionSystem.ts');
+    const source = readSource('assets/script/app/zcds/model/systems/ZCSkillResolutionSystem.ts');
     assert.match(source, /lane: 'burst' \| 'venom' = 'burst'/, 'castBurstSkill 必须带 lane');
     for (const key of ['DamageRate', 'Radius', 'ShieldRatio', 'ShieldSeconds', 'KnockbackCells']) {
         assert.match(source, new RegExp('parameters\\?\\.\\[`\\$\\{lane\\}' + key + '`\\]'),
@@ -116,7 +116,7 @@ test('爆发车道按 lane 取前缀，两条技能不抢同一袋参数', () =>
 });
 
 test('命中时按计划行的 statusId 给圈内目标挂状态', () => {
-    const source = readSource('assets/script/app/zcds/model/systems/ZCAttackResolutionSystem.ts');
+    const source = readSource('assets/script/app/zcds/model/systems/ZCSkillResolutionSystem.ts');
     assert.match(source, /const hitStatusId = runtime\?\.statusId/, '读计划行的 statusId');
     assert.match(source, /statusSystem\.apply\(String\(victim\.id\), hitStatusId/, '挂给被打的人，不是施法者');
     assert.match(source, /hitStatusId && victim\.hp > 0 && victim\.battleState !== 'dead'/, '死人不挂毒');
@@ -148,7 +148,7 @@ test('101803 三档：venom 前缀 + 各指一条中毒状态 + 解锁 9/18/27',
             assert.equal(bag.venomRadius, 150);
             assert.equal(bag.venomCooldown, 12);
             assert.equal(row.statusId, `poison_venom_l${index + 1}`, '各档指自己那条中毒');
-            assert.equal(Number(row.unlockHeroLevel), [9, 18, 27][index]);
+            assert.equal(Number(row.unlockHeroLevel), [5, 18, 27][index]);
             assert.match(String(row.desc), new RegExp(`每秒 ${expects[index][0]}% 伤害`));
         });
         assert.match(String(plan[2].desc), /治疗降低 50%/, 'III 级文案要带减治疗');

@@ -86,7 +86,7 @@ test('阵容编辑入口不再自建状态锁，下一帧等待统一走弹窗�
     // 打开参数里带「本次会话有没有落库」的共享对象：保存后本页要重刷（八卡读的是选中阵型）。
     const composition=readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts','utf8');
     const controller=readFileSync('assets/script/app/card/CardLineupController.ts','utf8');
-    assert.match(composition,/openEditor:.*LineupBoardPage\.open\(\)/);
+    assert.match(composition, /case 'openEditor':\s*this\.openPopup\(LineupBoardPage\)/);
     assert.match(controller,/this\.listen\(CardLineupEvent\.DeckSaved, this\.onDeckSaved\)/);
     assert.match(controller,/onDeckSaved[\s\S]*?void this\.refresh\(\)/);
     assert.doesNotMatch(page,/LineupBoardPage\.open|session\.saved/);

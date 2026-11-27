@@ -36,7 +36,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": 0,
+      "y": 1.8,
       "z": 0
     },
     "_lrot": {
@@ -48,9 +48,9 @@
     },
     "_lscale": {
       "__type__": "cc.Vec3",
-      "x": 0.4,
-      "y": 0.4,
-      "z": 0.4
+      "x": 1,
+      "y": 1,
+      "z": 1
     },
     "_mobility": 0,
     "_layer": 33554432,
@@ -76,8 +76,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 458,
-      "height": 495
+      "width": 62,
+      "height": 80
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",

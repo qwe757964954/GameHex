@@ -49,7 +49,7 @@ N_TEXT = (
 
 O_TEXT = (
     '使用 units/projectiles/磁电菇_劈雷技能/磁电菇_劈雷技能 序列帧（20 帧全取、sample=30、一次性 0.667s），'
-    '画布 237×283、烘焙缩放 0.816372，地面接地点压在节点原点；'
+    '画布 193×231（2026-11-26 按屏上尺寸重烘，尺寸即贴图、根节点缩放 1），地面接地点压在节点原点；'
     '屏上爆闪直径 138.4px = boltRadius 90 × 2 × 0.76875 ⇒ 看着多大就打多大。\r\n'
     '五道雷各推一条 `area` 表现事件，`startedAt` = 出手 + 0.15×i；'
     '视图**到点才建节点**（`ZCGameRenderWorld.renderEffectSystem` 先过 `zcCombatEffectEntered`），'

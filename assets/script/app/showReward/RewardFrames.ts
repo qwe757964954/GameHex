@@ -9,8 +9,13 @@ import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 import { parseCmdGoodsList, rewardEntryOf, sortRewardEntries } from '../common/RewardEntries';
 import type { IShowRewardEntry as IRewardEntry } from '../common/RewardEntries';
-import { GEM_QUALITY_TABLE, GEM_TABLE, parseGemQualityRows, parseGemRows } from '../common/GemReward';
-import type { IGemTables } from '../common/GemReward';
+import {
+    GEM_QUALITY_TABLE,
+    GEM_TABLE,
+    parseGemQualityRows,
+    parseGemRows,
+    type IGemTables,
+} from '../common/GemReward';
 
 import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /**

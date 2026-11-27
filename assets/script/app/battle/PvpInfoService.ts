@@ -10,7 +10,7 @@ import { normalizePvpInfo } from './PvpInfoModel';
  */
 
 /** PVP 信息请求硬超时（毫秒）。 */
-export const PVP_INFO_TIMEOUT_MS = 10000;
+const PVP_INFO_TIMEOUT_MS = 10000;
 
 /** 最近一次成功响应（`null` = 从没成功过）。 */
 let lastResult: ZCPvpInfo | null = null;

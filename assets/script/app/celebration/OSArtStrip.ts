@@ -21,8 +21,8 @@ const { ccclass, property } = _decorator;
  */
 
 /** 奖励条的原生条目尺寸（`OSRankRewardItem` 的 84×85），prefab 里烘的值要与它一致。 */
-export const OS_REWARD_NATIVE_W = 84;
-export const OS_REWARD_NATIVE_H = 85;
+const OS_REWARD_NATIVE_W = 84;
+const OS_REWARD_NATIVE_H = 85;
 
 @ccclass('OSArtStrip')
 export class OSArtStrip extends Component {

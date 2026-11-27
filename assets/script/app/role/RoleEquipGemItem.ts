@@ -36,27 +36,22 @@ export class RoleEquipGemItem extends Component {
     actionLabel: Label = null!;
 
     private currentSocket: IRoleGemSocket | null = null;
-    private actionCallback?: (socket: IRoleGemSocket) => void;
+    private actionCallback: (socket: IRoleGemSocket) => void = null!;
     private renderRevision = 0;
 
     protected onLoad(): void {
-        this.actionButton?.node.on(Button.EventType.CLICK, this.onActionClick, this);
+        this.actionButton.node.on(Button.EventType.CLICK, this.onActionClick, this);
     }
 
-    public setData(socket: IRoleGemSocket | null | undefined, onAction?: (socket: IRoleGemSocket) => void): void {
+    public setData(socket: IRoleGemSocket | null | undefined, onAction: (socket: IRoleGemSocket) => void): void {
         const revision = ++this.renderRevision;
         this.currentSocket = socket ?? null;
         this.actionCallback = onAction;
         this.node.active = true;
 
-        if (!socket) {
-            this.renderEmpty(false);
-            return;
-        }
-
-        const gem = socket.gemId ? roleRepository.findGem(socket.gemId) : null;
+        const gem = socket?.gemId ? roleRepository.findGem(socket.gemId) : null;
         if (!gem) {
-            this.renderEmpty(true);
+            this.renderEmpty(!!socket);
             return;
         }
 
@@ -65,40 +60,38 @@ export class RoleEquipGemItem extends Component {
     }
 
     private renderEmpty(showAction: boolean): void {
-        if (this.qualitySprite) this.qualitySprite.node.active = false;
-        if (this.gemSprite) {
-            this.gemSprite.node.active = false;
-            this.gemSprite.spriteFrame = null;
-        }
-        if (this.emptyRing) this.emptyRing.active = true;
-        if (this.nameLabel) this.nameLabel.string = '';
-        if (this.attrLabel) this.attrLabel.string = '';
-        if (this.actionButton) this.actionButton.node.active = showAction;
-        if (this.actionLabel) this.actionLabel.string = '镶嵌';
+        this.qualitySprite.node.active = false;
+        this.gemSprite.node.active = false;
+        this.gemSprite.spriteFrame = null;
+        this.emptyRing.active = true;
+        this.nameLabel.string = '';
+        this.attrLabel.string = '';
+        this.actionButton.node.active = showAction;
+        this.actionLabel.string = '镶嵌';
     }
 
     private renderGem(gem: IRoleGemEntry): void {
-        if (this.qualitySprite) this.qualitySprite.node.active = true;
-        if (this.gemSprite) this.gemSprite.node.active = true;
-        if (this.emptyRing) this.emptyRing.active = false;
-        if (this.nameLabel) this.nameLabel.string = gem.name;
-        if (this.attrLabel) this.attrLabel.string = gem.desc;
-        if (this.actionButton) this.actionButton.node.active = true;
-        if (this.actionLabel) this.actionLabel.string = '替换';
+        this.qualitySprite.node.active = true;
+        this.gemSprite.node.active = true;
+        this.emptyRing.active = false;
+        this.nameLabel.string = gem.name;
+        this.attrLabel.string = gem.desc;
+        this.actionButton.node.active = true;
+        this.actionLabel.string = '替换';
     }
 
     private async loadGemArt(gem: IRoleGemEntry, revision: number): Promise<void> {
         const [quality, icon] = await Promise.all([
-            loadRoleQualityFrame(gem.quality || 1),
+            loadRoleQualityFrame(gem.quality),
             gem.iconKey ? loadRoleBagIconSprite('gem', gem.iconKey) : Promise.resolve(null),
         ]);
         if (!this.isValid || revision !== this.renderRevision) return;
-        if (this.qualitySprite && quality) this.qualitySprite.spriteFrame = quality;
-        if (this.gemSprite && icon) this.gemSprite.spriteFrame = icon;
+        if (quality) this.qualitySprite.spriteFrame = quality;
+        if (icon) this.gemSprite.spriteFrame = icon;
     }
 
     private onActionClick(): void {
-        if (this.currentSocket && this.actionCallback) {
+        if (this.currentSocket) {
             this.actionCallback(this.currentSocket);
         }
     }

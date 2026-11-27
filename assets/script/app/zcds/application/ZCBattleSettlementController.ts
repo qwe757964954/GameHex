@@ -1,24 +1,12 @@
 import { EventMgr } from '../../../framework/event/EventMgr';
-import { ZC_BATTLE_EVENTS } from './ZCBattleEvents';
+import { ZC_BATTLE_EVENTS, type IZCBattleDamagePopupState } from './ZCBattleEvents';
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
 import type { IZCChapterBattleOutcome } from '../../battle/BattleResultService';
 import type { IRankSeat, RankSeatProfiles } from '../model/ZCRankBoard';
 import type { IZCSettlementMvp } from '../model/ZCSettlementMvp';
+import type { IZCDamageStatsSeats, IZCDamageStatsUnit } from '../model/ZCDamageStats';
 import { ZCGameUiEvent } from '../view/ZCGameHudEvents';
-import type { IZCDamageStatsPopup, IZCDamageStatsSeats, IZCDamageStatsUnit } from './ZCBattleRuntimeContract';
 import type { IZCSettlementOptions, IZCSettlementReward } from '../ui/ZCSettlementPage';
-
-export interface IZCBattlePopup {
-    close(reason?: 'manual' | 'force'): void;
-    /** 弹窗被玩家关掉后兑现（点空白 / 关闭按钮 / 被强制关掉都算）。没有这个语义时省略。*/
-    readonly whenClosed?: Promise<void>;
-    /**
-     * 询问类弹窗（确认框）的作答：确定 `true`，取消 / 点空白 / 被 `close()` 一律 `false`。
-     *
-     * 没有作答语义的弹窗不提供本字段；调用方拿不到时按「没确认」处理。
-    */
-    readonly answered?: Promise<boolean>;
-}
 
 /** 结算前的排行榜数据（`ZCGameRankBoard` 的入参）。*/
 export interface IZCBattleSettlementRank {
@@ -52,7 +40,7 @@ export interface IZCBattleSettlementRequest {
      *
      * 结算期不再回读模型，所以头像 / 名字必须在 `start` 时随请求一起交过来；缺省 ⇒
      * 「查看完整队伍」的统计面板不画头像栏、敌方列按老口径合并。
-     */
+    */
     readonly seats?: IZCDamageStatsSeats;
     /**
      * 本局 MVP 卡片（赢家阵营输出最高的卡：骨骼模型 + 卡名 + 等级 + 输出/承伤占比）。
@@ -62,8 +50,14 @@ export interface IZCBattleSettlementRequest {
     */
     readonly mvp?: IZCSettlementMvp | null;
 }
+
+/** 结算前置排行榜的阻塞等待端口；Popup 实例生命周期留在组合层。*/
+export interface IZCBattleRankDialogPort {
+    present(seats: readonly IRankSeat[], profiles: RankSeatProfiles): Promise<void>;
+    cancel(): void;
+}
+
 export interface IZCBattleSettlementServices {
-    readonly playOutcome?: (victory: boolean) => void;
     readonly results: {
         waitResult(battleType: number, caller: object): Promise<IZCChapterBattleOutcome | null>;
         finish(request: IZCBattleSettlementRequest, caller: object): Promise<unknown>;
@@ -72,36 +66,21 @@ export interface IZCBattleSettlementServices {
     readonly rewards: {
         loadRewards(result: IZCChapterBattleOutcome): Promise<IZCSettlementReward[]>;
     };
-    readonly popup: {
-        open(options: IZCSettlementOptions): Promise<IZCBattlePopup | null>;
-        /** 结算前的排行榜弹窗（复用 `ui/game/ZCGameRankBoard`）。*/
-        openRank(seats: readonly IRankSeat[], profiles: RankSeatProfiles): Promise<IZCBattlePopup | null>;
-        /**
-         * 伤害统计弹窗（`ui/game/GameRunAway`），结算页「查看完整队伍」用。
-         *
-         * 与运行期的 `popups.openDamage` 同一个实现（`BATTLE_POPUPS`），只是入口换成结算控制器 ——
-         * 结算期运行入口已被 `phase.isSettled` 拦掉。
-        */
-        openDamage(units: readonly IZCDamageStatsUnit[], seats?: IZCDamageStatsSeats): Promise<IZCDamageStatsPopup | null>;
-    };
+    readonly rank: IZCBattleRankDialogPort;
     readonly flow: {
         watchSwitch(callback: (entered: boolean) => void): () => void;
     };
     failed(error: unknown): void;
 }
 
-/** 结算编排只依赖服务契约，自身持有请求、弹窗和退订句柄。*/
+/** 结算编排只依赖服务契约，展示型弹窗通过事件交由组合层托管。*/
 export class ZCBattleSettlementController extends ControllerBase {
     private started = false;
-    private popup: IZCBattlePopup | null = null;
     private options: IZCSettlementOptions | null = null;
-    private opening = false;
     private returning = false;
     private stopSwitch: (() => void) | null = null;
-    /** 结算前的排行榜弹窗（玩家读完关掉才继续弹结算页）。*/
-    private rankPopup: IZCBattlePopup | null = null;
-    /** 「查看完整队伍」打开的统计弹窗（结算页后面，关掉结算页时一并收掉）。*/
-    private teamPopup: IZCDamageStatsPopup | null = null;
+    private teamOpening = false;
+    private teamActive = false;
     /** 本局逐单位统计的冻结副本（请求在 `start` 时给一次，之后不回读模型）。*/
     private units: readonly IZCDamageStatsUnit[] = [];
     /** 席位上下文（敌方头像栏），与 {@link units} 同一时点冻结。*/
@@ -112,13 +91,20 @@ export class ZCBattleSettlementController extends ControllerBase {
     */
     private readonly disposed: Promise<void>;
     private resolveDisposed: () => void = () => {};
-    constructor(context: IControllerContext, private readonly services: IZCBattleSettlementServices,
-        private readonly host: { readonly owner: object; readonly hasPveContext: boolean }) {
+    constructor(
+        context: IControllerContext,
+        private readonly services: IZCBattleSettlementServices,
+        private readonly host: { readonly owner: object; readonly hasPveContext: boolean },
+    ) {
         super(context, 'battle-settlement');
-        this.disposed = new Promise<void>(resolve => { this.resolveDisposed = resolve; });
+        this.disposed = new Promise<void>(resolve => {
+            this.resolveDisposed = resolve;
+        });
         // 结算页的「查看完整队伍」走结算自己的事件（运行期入口在 `isSettled` 后被拦掉）。
         this.listen(ZCGameUiEvent.SettlementViewTeam, this.onViewTeam);
+        this.listen(ZC_BATTLE_EVENTS.DAMAGE_POPUP_STATE, this.onDamagePopupState);
     }
+
     start(request: IZCBattleSettlementRequest): void {
         if (this.started || this.isDisposed) return;
         this.started = true;
@@ -126,10 +112,18 @@ export class ZCBattleSettlementController extends ControllerBase {
         this.seats = request.seats;
         // 等待必须早于上报，避免同步广播丢失。
         const result = request.battleType === null ? null : this.services.results.waitResult(request.battleType, this);
-        void this.services.results.finish(request, this).catch(error => { if (!this.isDisposed) this.services.failed(error); });
-        void this.present(request, result).catch(error => { if (!this.isDisposed) this.services.failed(error); });
+        void this.services.results.finish(request, this).catch(error => {
+            if (!this.isDisposed) this.services.failed(error);
+        });
+        void this.present(request, result).catch(error => {
+            if (!this.isDisposed) this.services.failed(error);
+        });
     }
-    private async present(request: IZCBattleSettlementRequest, pending: Promise<IZCChapterBattleOutcome | null> | null): Promise<void> {
+
+    private async present(
+        request: IZCBattleSettlementRequest,
+        pending: Promise<IZCChapterBattleOutcome | null> | null,
+    ): Promise<void> {
         const result = pending ? await pending : null;
         if (this.isDisposed) return;
         // 广播 code 1 表示获胜；服务端结果覆盖本地模拟结果。
@@ -146,102 +140,109 @@ export class ZCBattleSettlementController extends ControllerBase {
             if (this.isDisposed) return;
         }
         this.options = Object.assign({
-            victory: result ? result.code === 1 : request.localVictory, rewards,
+            victory: result ? result.code === 1 : request.localVictory,
+            rewards,
             // 运行期已算好 MVP（空 ⇒ 页面整组收起，不留空框）。
             mvp: request.mvp ?? null,
         }, result?.warScore !== undefined ? {
-            rankName: '战功', scoreText: String(result.warScore), addScoreText: `+${result.warScore}`,
+            rankName: '战功',
+            scoreText: String(result.warScore),
+            addScoreText: `+${result.warScore}`,
             rankHint: `本次战斗获得 ${result.warScore} 战功`,
         } : {});
-        await this.open();
-        if (this.popup) this.services.playOutcome?.(this.options.victory);
+        this.open(true);
     }
+
     /**
      * 弹结算前的排行榜并等玩家关掉。
      *
-     * 三个出口都必须落定：弹窗打开失败（null）、玩家关掉（`whenClosed`）、本局被 dispose。
-     * 少一个就是整条结算流程卡死 —— 而且是零报错的（`await` 永远不返回）。
+     * 三个出口都必须落定：弹窗打开失败、玩家关掉、本局被 dispose。
     */
     private async presentRank(rank: IZCBattleSettlementRank | null): Promise<void> {
         if (!rank || rank.seats.length < 3) return;
-        const popup = await this.services.popup.openRank(rank.seats, rank.profiles);
-        if (this.isDisposed) { popup?.close('force'); return; }
-        if (!popup) return;
-        this.rankPopup = popup;
-        try {
-            await Promise.race([popup.whenClosed ?? Promise.resolve(), this.disposed]);
-        } finally {
-            if (this.rankPopup === popup) this.rankPopup = null;
-        }
+        await Promise.race([
+            this.services.rank.present(rank.seats, rank.profiles),
+            this.disposed,
+        ]);
     }
-    private async open(): Promise<void> {
-        if (this.isDisposed || this.opening || this.popup || !this.options) return;
-        this.opening = true;
-        try {
-            const popup = await this.services.popup.open(this.options);
-            if (this.isDisposed) { popup?.close(); return; }
-            this.popup = popup;
-        } finally { this.opening = false; }
+
+    private open(playOutcome: boolean): void {
+        if (this.isDisposed || !this.options) return;
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.POPUP_COMMAND, {
+            kind: 'openSettlement',
+            options: this.options,
+            playOutcome,
+        }, this.host.owner);
     }
+
     confirm(): void {
         if (this.isDisposed || !this.options || this.returning) return;
         this.returning = true;
-        const popup = this.popup;
-        this.popup = null;
-        popup?.close('manual');
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.POPUP_COMMAND, {
+            kind: 'closeSettlement',
+            reason: 'manual',
+        }, this.host.owner);
         this.stopSwitch?.();
         const stop = this.services.flow.watchSwitch(entered => {
             stop();
             if (this.stopSwitch === stop) this.stopSwitch = null;
             if (!this.isDisposed && !entered) {
                 this.returning = false;
-                void this.open().catch(error => { if (!this.isDisposed) this.services.failed(error); });
+                this.open(false);
             }
         });
         this.stopSwitch = stop;
         EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, undefined, this.host.owner);
     }
+
     /**
      * 「查看完整队伍」：用本局冻结的单位统计数据弹战斗统计面板。
      *
-     * 页面只在 `options` 就绪后才存在，所以「还没结算就收到事件」不可能点得出来；
-     * 连点两下用 `teamPopup.isOpen` 挡住（结算页不关，弹窗会叠在它上面）。
+     * 连点两下与已展开态由 `teamOpening` / `teamActive` 挡住（结算页不关，弹窗会叠在它上面）。
     */
     private onViewTeam(): void {
-        if (!this.options || this.teamPopup?.isOpen) return;
-        void this.services.popup.openDamage(this.units, this.seats)
-            .then(popup => {
-                if (!popup) return;
-                if (this.isDisposed) { popup.close(); return; }
-                this.teamPopup = popup;
-            })
-            .catch(error => { if (!this.isDisposed) this.services.failed(error); });
+        if (!this.options || this.teamOpening || this.teamActive) return;
+        this.teamOpening = true;
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.POPUP_COMMAND, {
+            kind: 'openDamage',
+            phase: 'settlement',
+            units: this.units,
+            seats: this.seats,
+        }, this.host.owner);
     }
+
+    private onDamagePopupState({ phase, open }: IZCBattleDamagePopupState, source: object): void {
+        if (source !== this.host.owner || phase !== 'settlement') return;
+        this.teamOpening = false;
+        this.teamActive = open;
+    }
+
     dispose(): void {
         if (this.isDisposed) return;
         this.releaseInputs();
         const stopSwitch = this.stopSwitch;
         this.stopSwitch = null;
-        const popup = this.popup;
-        const rankPopup = this.rankPopup;
-        const teamPopup = this.teamPopup;
-        this.popup = null;
-        this.rankPopup = null;
-        this.teamPopup = null;
         this.options = null;
         this.units = [];
+        this.teamOpening = false;
+        this.teamActive = false;
         // 先解除「等排行榜关闭」的等待，再关弹窗：两条路都要落定，缺一个 present 就悬着。
         this.resolveDisposed();
-        try { stopSwitch?.(); }
-        finally {
-            try { this.services.results.cancelRequests(this); }
-            finally {
-                try { teamPopup?.close(); }
-                finally {
-                    try { rankPopup?.close('force'); }
-                    finally {
-                        try { popup?.close(); }
-                        finally { super.dispose(); }
+        try {
+            stopSwitch?.();
+        } finally {
+            try {
+                this.services.results.cancelRequests(this);
+            } finally {
+                try {
+                    this.services.rank.cancel();
+                } finally {
+                    try {
+                        EventMgr.instance.emit(ZC_BATTLE_EVENTS.POPUP_COMMAND, {
+                            kind: 'closeSettlementPopups',
+                        }, this.host.owner);
+                    } finally {
+                        super.dispose();
                     }
                 }
             }

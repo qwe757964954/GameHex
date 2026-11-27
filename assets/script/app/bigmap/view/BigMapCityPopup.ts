@@ -42,10 +42,10 @@ export interface IBigMapCityPopupContent {
 }
 
 /** 弹窗内固定槽位数量 —— 与 prefab 里预先摆好的节点数一致，多出来的数据直接丢弃。 */
-export const BIGMAP_CITY_POPUP_BUFF_SLOTS = 2;
-export const BIGMAP_CITY_POPUP_RANK_SLOTS = 3;
+const BIGMAP_CITY_POPUP_BUFF_SLOTS = 2;
+const BIGMAP_CITY_POPUP_RANK_SLOTS = 3;
 /** 排行榜每行「积分」前缀 —— 设计稿里是独立文本节点（与数值分两段）。 */
-export const BIGMAP_CITY_POPUP_SCORE_LABEL = '积分';
+const BIGMAP_CITY_POPUP_SCORE_LABEL = '积分';
 
 /**
  *城池弹窗 —— 蓝湖「城池弹窗3」（山猫 2026-11-02 口径：「弹窗按照设计稿，尺寸按照设计稿 1:1」）。

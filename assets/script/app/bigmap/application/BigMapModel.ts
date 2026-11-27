@@ -67,10 +67,11 @@ import type { ITerritoryColorRegion, BigMapTerritoryOwner } from '../model/BigMa
 import { bigMapTerritoryOwnerOf } from '../model/BigMapTerritoryColor';
 import type { IBigMapCampInfo } from '../model/BigMapCampInfo';
 import { BIGMAP_CAMP_QUERY_TEXT } from '../model/BigMapCampInfo';
+import { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { IBigMapCampRoleInfo, BigMapCampRoleStatus } from '../model/BigMapCampRoleInfo';
-import { BIGMAP_CAMP_MOVE_TEXT } from '../model/BigMapCampMove';
+import type { IBigMapCampMoveResult } from '../model/BigMapCampMove';
 import type { BigMapCampRepository } from './BigMapCampRepository';
-import type { IBigMapSlgReward, BigMapSlgRepository } from './BigMapSlgRepository';
+import type { BigMapSlgActionKind, BigMapSlgResultStatus, IBigMapSlgReward, BigMapSlgRepository } from './BigMapSlgRepository';
 import { projectBigMapServerBase } from '../model/BigMapServerState';
 import { ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER } from '../../battle/BattleStartModel';
 import type { IZCSlgBattleType } from '../../battle/BattleStartModel';
@@ -133,6 +134,7 @@ export interface IBigMapModelDeps {
     readonly slgRepository?: BigMapSlgRepository;
     readonly selfRoleId?: string;
     readonly canRequestBattle?: boolean;
+    readonly scope?: ResourceScope;
 }
 
 /**
@@ -303,6 +305,17 @@ export interface IBigMapCityView {
     readonly layer: number;
     readonly level: number;
     readonly state: BigMapCityState;
+    /**
+     *配置层「这块地打不了」：本期未开放（`available=false`，如军团 / 战盟层）或未解锁
+     *（章节 / 开服天数 / 前置城池）—— 判据就是 `bigMapCityUnlock` 有没有给出理由。
+     *
+     * 🔴 **必须与 `state` 分开**（2026-11-26 用户 bug：*「拖动地图以后叠加的灰色会消失，
+     * 又变回了原本的颜色」*）。联机档只要收到服务器快照，`state` 就会被改写成 `open` / `occupied`
+     *（本函数的口径「服务器能下发就说明已开放」）⇒ 势力范围若按 `state` 铺灰，
+     * 地图一拖、新据点进视野、`CmdSlgCampSimpleInfoRspMsg` 一回包，那片灰当场变回色板色。
+     * `unplayable` 只看配置，跨快照恒定，才是「这块地打不了」的真源。
+     */
+    readonly unplayable: boolean;
     readonly reason: string;
     readonly hpRatio: number;
     readonly warScore: number;
@@ -387,10 +400,12 @@ export interface IBigMapQueueUnlockInfo {
     readonly reason: string;
 }
 
-/** 动作结果：`message` 直接丢给 toast，`ok=false` 时是失败原因。 */
+/** 动作结果：本地规则可直接给出 `message`，服务端写操作透传 `status/action` 由 Controller 查文案表。 */
 export interface IBigMapActionFeedback {
     readonly ok: boolean;
-    readonly message: string;
+    readonly status?: BigMapSlgResultStatus;
+    readonly action?: BigMapSlgActionKind;
+    readonly message?: string;
     readonly rewards?: readonly IBigMapSlgReward[];
 }
 
@@ -399,6 +414,7 @@ export interface IBigMapAttackResult extends IBigMapActionFeedback {
 }
 
 export class BigMapModel {
+    readonly scope: ResourceScope;
     private config: IBigMapConfig;
     private worldInstance: IBigMapWorld;
     private data: IBigMapSaveData;
@@ -408,7 +424,6 @@ export class BigMapModel {
     private readonly rankBoards = new Map<number, IBigMapCityRankBoard>();
     private readonly deps: IBigMapModelDeps;
     private readonly territories: readonly ITerritoryColorRegion[];
-    private isDisposed = false;
     private isStartingBattle = false;
     private readonly campDetailStatuses = new Map<number, BigMapCampDetailStatus>();
     /** 角色列表的查询状态（与据点状态分开记，见 `IBigMapCityView.campRoles`）。 */
@@ -424,6 +439,16 @@ export class BigMapModel {
 
     constructor(deps: IBigMapModelDeps) {
         this.deps = deps;
+        this.scope = deps.scope ?? new ResourceScope('bigmap-model');
+        this.scope.defer(() => {
+            this.listeners.clear();
+            this.campDetailStatuses.clear();
+            this.campRoleStatuses.clear();
+            this.deps.campRepository?.dispose();
+            this.campIdByHex.clear();
+            this.deps.slgRepository?.dispose();
+            this.deps.rankProvider?.dispose?.();
+        });
         this.config = deps.config;
         this.worldInstance = createBigMapWorldInstance(deps.config, deps.seed, deps.layout);
         this.territories = Array.from(this.worldInstance.cities.values()).map((site) => {
@@ -452,7 +477,7 @@ export class BigMapModel {
 
     /** Controller 在仓库变更后提交服务端事实；Model 不自行订阅外部事件。 */
     syncServerBase(): void {
-        if (this.isDisposed) return;
+        if (this.scope.disposed) return;
         const base = this.deps.slgRepository?.projectBase();
         if (base) this.applyBase(base);
         this.emit();
@@ -461,7 +486,7 @@ export class BigMapModel {
     notifyCampChanged(): void { this.emit(); }
 
     applyRoleEvent(event: import('../model/BigMapCampRoleInfo').IBigMapRoleEvent): void {
-        if (this.isDisposed) return;
+        if (this.scope.disposed) return;
         const campId = this.campIdByHex.get(event.role.pos) ?? 0;
         const repository = this.deps.campRepository;
         repository?.applyRoleEvent(campId, event);
@@ -593,7 +618,7 @@ export class BigMapModel {
 
     /**
      *资源类型 → 背包道具图标路径（`item.icon`）。没配 itemId / 图标为空时是空表，
-     *视图退回 `image/concept/sprites/<resType>` 概念图。
+     *视图退回 `image/concept/ui/top_*`（与顶栏同一套图）。
      */
     get resourceIcons(): ReadonlyMap<BigMapResType, string> {
         return this.config.resourceIcons;
@@ -619,13 +644,13 @@ export class BigMapModel {
     }
 
     private emit(): void {
-        if (this.isDisposed) return;
+        if (this.scope.disposed) return;
         this.version += 1;
         for (const listener of this.listeners) listener();
     }
 
     private persist(): void {
-        if (this.isServerBase || this.isDisposed) return;
+        if (this.isServerBase || this.scope.disposed) return;
         this.data = { ...this.data, savedAt: this.deps.now() };
         this.deps.storage.write(this.deps.saveKey, serializeBigMapSave(this.data));
     }
@@ -1143,7 +1168,7 @@ export class BigMapModel {
     //-------------------------------------------------------------- 动作：战斗
 
     async refreshVisibleCamps(campIds: readonly number[]): Promise<void> {
-        if (this.isDisposed || !this.deps.campRepository) return;
+        if (this.scope.disposed || !this.deps.campRepository) return;
         const ids = campIds.filter((id) => this.worldInstance.cities.has(id));
         const repository = this.deps.campRepository;
         //口径（2026-11-11 山猫）：「据点名单要跟据点信息一样，滑动的时候请求，然后把玩家摆放在
@@ -1158,10 +1183,10 @@ export class BigMapModel {
             ...ids.filter((id) => this.deps.rankProvider && !this.rankBoards.has(id))
                 .map((id) => this.refreshCityRank(id)),
             repository.refreshSimple(ids, true).then((loaded) => {
-                if (!this.isDisposed && loaded) this.emit();
+                if (!this.scope.disposed && loaded) this.emit();
             }),
             repository.refreshRolesFor(ids).then((loaded) => {
-                if (this.isDisposed || !loaded) return;
+                if (this.scope.disposed || !loaded) return;
                 //预取到名单就把状态推到 ready：否则「滑动进来过的城」打开驻守面板，
                 //空名单会一直显示「加载中」（没人 ≠ 没查过）。
                 for (const id of ids) {
@@ -1174,7 +1199,7 @@ export class BigMapModel {
 
     async refreshCampDetail(campId: number, force = false): Promise<void> {
         const repository = this.deps.campRepository;
-        if (this.isDisposed || !repository) return;
+        if (this.scope.disposed || !repository) return;
         //早退必须逐条留痕：这里以前是一行 `if (...) return`，点据点没反应时完全看不出
         //卡在哪一条（2026-10-30 排查「没看到发 CmdSlgCampInfoReqMsg」时踩的）。
         if (!this.worldInstance.cities.has(campId)) {
@@ -1193,7 +1218,7 @@ export class BigMapModel {
             repository.refreshDetail([campId], force),
             rolesCached ? Promise.resolve(true) : repository.refreshRoles(campId, force),
         ]);
-        if (this.isDisposed) return;
+        if (this.scope.disposed) return;
         this.campDetailStatuses.set(campId, detailLoaded ? 'ready' : 'failed');
         this.campRoleStatuses.set(campId, rolesLoaded ? 'ready' : 'failed');
         this.emit();
@@ -1213,30 +1238,30 @@ export class BigMapModel {
      *@param campId 据点 id
      *@param pos 目标位置（协议"下标"；客户端不做换算，谁选的格谁负责）
      */
-    async requestMoveCamp(campId: number, pos: number): Promise<IBigMapActionFeedback> {
-        if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
+    async requestMoveCamp(campId: number, pos: number): Promise<IBigMapCampMoveResult> {
+        if (this.scope.disposed) {
+            return { ok: false, status: 'disposed' };
+        }
         const repository = this.deps.campRepository;
-        if (!repository) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.offline };
+        if (!repository) {
+            return { ok: false, status: 'offline' };
+        }
         const oldCampId = this.playerCampId;
         const result = await repository.moveCamp(campId, pos);
-        if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
-        //未确认也重拉：超时并不代表服务端没有迁城，写请求不能靠重发恢复。
-        void this.deps.slgRepository?.refreshGame(true);
-        if (oldCampId > 0 && oldCampId !== campId) void this.refreshCampDetail(oldCampId, true);
-        void this.refreshCampDetail(campId, true);
+        if (this.scope.disposed) {
+            return { ok: false, status: 'disposed' };
+        }
+        if (result.status !== 'rejected' && result.status !== 'offline') {
+            //未确认也重拉：超时并不代表服务端没有迁城，写请求不能靠重发恢复。
+            void this.deps.slgRepository?.refreshGame(true);
+            if (oldCampId > 0 && oldCampId !== campId) void this.refreshCampDetail(oldCampId, true);
+            void this.refreshCampDetail(campId, true);
+        }
         return result;
     }
 
     dispose(): void {
-        if (this.isDisposed) return;
-        this.isDisposed = true;
-        this.listeners.clear();
-        this.campDetailStatuses.clear();
-        this.campRoleStatuses.clear();
-        this.deps.campRepository?.dispose();
-        this.campIdByHex.clear();
-        this.deps.slgRepository?.dispose();
-        this.deps.rankProvider?.dispose?.();
+        this.scope.dispose();
     }
 
     /**
@@ -1264,7 +1289,7 @@ export class BigMapModel {
      *联机失败保留旧榜；离线样本仍回退到 NPC 榜。退出后不应用异步结果。
      */
     async refreshCityRank(cityId: number): Promise<void> {
-        if (this.isDisposed || !this.config.cities.has(cityId)) return;
+        if (this.scope.disposed || !this.config.cities.has(cityId)) return;
         if (this.deps.campRepository && !this.deps.rankProvider) return;
         const warScore = this.data.battle.cityWarScore[cityId] ?? 0;
         let board: IBigMapCityRankBoard;
@@ -1276,7 +1301,7 @@ export class BigMapModel {
             if (this.deps.campRepository) return;
             board = buildBigMapCityRankBoard(this.config, cityId, warScore);
         }
-        if (this.isDisposed || !board) return;
+        if (this.scope.disposed || !board) return;
         this.rankBoards.set(cityId, board);
         this.emit();
     }
@@ -1293,7 +1318,7 @@ export class BigMapModel {
         info: IBigMapCampInfo | null,
         timeline: IBigMapCityTimeline,
     ): string {
-        if (this.isDisposed) return BIGMAP_BATTLE_TEXT.closed;
+        if (this.scope.disposed) return BIGMAP_BATTLE_TEXT.closed;
         if (this.isStartingBattle) return BIGMAP_BATTLE_TEXT.pending;
         if (!this.config.camps.has(campId)) return BIGMAP_BATTLE_TEXT.campMissing;
         if (!this.deps.canRequestBattle) return BIGMAP_CAMP_QUERY_TEXT.attackUnavailable;
@@ -1330,6 +1355,8 @@ export class BigMapModel {
             ? (campInfo.opType === 1 ? 'occupied' : 'open')
             : bigMapCityState(city, context);
         const reason = bigMapCityUnlock(city, context).reason;
+        //配置层「打不了」与「此刻什么状态」是两件事：前者跨服务器快照稳定（见字段注释）。
+        const unplayable = reason !== '' || state === 'unavailable' || state === 'locked';
         const gate = bigMapCityAttackGate(state, timeline);
         const board = this.cityRankBoard(cityId);
         const distance = bigMapHexDistance(
@@ -1357,6 +1384,7 @@ export class BigMapModel {
             layer: camp ? camp.occupyType : city.layer,
             level: city.cityLevel,
             state,
+            unplayable,
             reason,
             hpRatio: bigMapCityHpRatio(this.data.battle, city),
             warScore: this.deps.campRepository ? board.playerWarScore ?? 0
@@ -1417,7 +1445,7 @@ export class BigMapModel {
             respawnInSeconds,
             battle: monster.battle,
             canAttack: (!!monster.offlineBattle || !!this.deps.canRequestBattle && !!monster.battle)
-                && unlock.unlocked && respawnInSeconds === 0 && !this.isStartingBattle && !this.isDisposed,
+                && unlock.unlocked && respawnInSeconds === 0 && !this.isStartingBattle && !this.scope.disposed,
             attackReason: !unlock.unlocked ? unlock.reason : this.isStartingBattle ? BIGMAP_BATTLE_TEXT.pending
                 : monster.battle && !this.deps.canRequestBattle ? BIGMAP_MONSTER_BATTLE_UNAVAILABLE : '',
         };
@@ -1434,7 +1462,7 @@ export class BigMapModel {
      *返回 `null` = 一只都打不了（全锁 / 全在刷新 / 正在开战）。
      */
     bestMonsterToFarm(): IBigMapMonsterView | null {
-        if (this.isStartingBattle || this.isDisposed) return null;
+        if (this.isStartingBattle || this.scope.disposed) return null;
         let best: IBigMapMonsterView | null = null;
         let bestDistance = Number.POSITIVE_INFINITY;
         for (const site of this.worldInstance.monsters) {
@@ -1451,7 +1479,7 @@ export class BigMapModel {
     }
 
     requestAttackCity(cityId: number): IBigMapAttackResult {
-        if (this.isDisposed) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
+        if (this.scope.disposed) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
         if (!this.deps.campRepository) return this.attackCity(cityId);
         const view = this.cityView(cityId);
         const camp = this.config.camps.get(cityId);
@@ -1461,7 +1489,7 @@ export class BigMapModel {
     }
 
     requestAttackMonster(instanceId: number): IBigMapAttackResult {
-        if (this.isDisposed) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
+        if (this.scope.disposed) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
         const site = this.worldInstance.monsters.find((item) => item.instanceId === instanceId);
         const monster = site ? this.config.monsters.get(site.monsterId) : null;
         if (!monster) return { ok: false, message: BIGMAP_BATTLE_TEXT.monsterMissing };

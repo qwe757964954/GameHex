@@ -278,7 +278,7 @@ test('榜单端口抛错不炸界面：回退本地 NPC 榜', async () => {
 
 test('联机榜单初始为空，个人积分和名单来自服务器，失败保留旧榜且退出丢弃迟到结果', async () => {
     const repository = new BigMapCampRepository({ fetchSimple: async () => null, fetchDetail: async () => null,
-        fetchRoles: async () => null, requestMove: async () => null });
+        fetchRoles: async () => null, requestMove: async () => ({ status: 'unconfirmed' }) });
     let finish: (board: IBigMapCityRankBoard | null) => void = () => {};
     let disposed = false;
     const { presenter } = makeHarness(3, createMemoryBigMapStorage(), CLOCK_PREPARE, null, {
@@ -311,7 +311,7 @@ test('进入视野即预取真实榜一并缓存，多城均能更新且失败�
     let fail = true;
     const repository = new BigMapCampRepository({ fetchSimple: async () => ({ infos: [] }),
         fetchDetail: async () => null, fetchRoles: async (campId) => ({ campId, infos: [] }),
-        requestMove: async () => null });
+        requestMove: async () => ({ status: 'unconfirmed' }) });
     const { presenter } = makeHarness(3, createMemoryBigMapStorage(), CLOCK_PREPARE, null, {
         campRepository: repository,
         rankProvider: { fetchCityRank: async (cityId) => {

@@ -9,16 +9,11 @@
  */
 
 import {
-    CHAT_ART_ROOT as ART_CHAT_ROOT,
+    CHAT_ART_ROOT,
     FIRST_RECHARGE_ART_ROOT,
     FRIEND_ART_ROOT,
-    GAMEUI_ART_ROOT,
-    LOGIN_ART_ROOT,
     spriteFramePath,
 } from '../ArtPaths';
-
-/** 聊天自有图目录（不带 `resources/` 前缀）。 */
-export const CHAT_ART_ROOT = ART_CHAT_ROOT;
 
 /** 表情图名前缀（`ct_emoji_<n>`）。 */
 export const CHAT_EMOJI_PREFIX = 'ct_emoji_';
@@ -28,31 +23,20 @@ export const CHAT_ART_BLACK_BOX = 'ct_black_box';
 /** 输入框底：公共 / 私聊两个输入条共用。 */
 export const CHAT_ART_INPUT_BG = 'ct_input_bg';
 /** 招募项底板。 */
-export const CHAT_ART_RECRUIT_BG = 'ct_recruit_bg';
+const CHAT_ART_RECRUIT_BG = 'ct_recruit_bg';
 /** 左右气泡底。 */
 export const CHAT_ART_BUBBLE_BG = 'ct_bubble_bg';
-/** 输入条上的「艾特」按钮图标。 */
-export const CHAT_ART_AT_BTN = 'ct_at_btn';
-/** 输入条上的「表情」按钮图标。 */
-export const CHAT_ART_BQ_BTN = 'ct_bq_btn';
 /** 招募项「点击加入」按钮底图。 */
-export const CHAT_ART_JOIN_BTN = 'ct_join_btn';
-/** 私聊项「删除」按钮。 */
-export const CHAT_ART_CLOSE_02 = 'ct_close_02';
+const CHAT_ART_JOIN_BTN = 'ct_join_btn';
 
 /** 复用外模块的图（目录 + 图名分开给，加载时要两个参数）。 */
 export const CHAT_SHARED_HEAD_BOX_ROOT = FRIEND_ART_ROOT;
 export const CHAT_SHARED_HEAD_BOX_NAME = 'fd_row_bg';
 export const CHAT_SHARED_POPUP_BG_ROOT = FRIEND_ART_ROOT;
 export const CHAT_SHARED_POPUP_BG_NAME = 'fd_panel_bg';
-export const CHAT_SHARED_HEAD_FRAME_ROOT = GAMEUI_ART_ROOT;
-export const CHAT_SHARED_HEAD_FRAME_NAME = 'img_Touxiang_01';
-export const CHAT_SHARED_TITLE_BG_ROOT = FIRST_RECHARGE_ART_ROOT;
-export const CHAT_SHARED_TITLE_BG_NAME = 'title_brown';
-
-/** 弹窗右上「关闭」按钮：与好友弹窗同一个 FGUI 模板，直接复用那张图。 */
-export const CHAT_SHARED_CLOSE_ROOT = LOGIN_ART_ROOT;
-export const CHAT_SHARED_CLOSE_NAME = '公用_按钮_关闭01';
+const CHAT_SHARED_HEAD_FRAME_NAME = 'img_Touxiang_01';
+const CHAT_SHARED_TITLE_BG_ROOT = FIRST_RECHARGE_ART_ROOT;
+const CHAT_SHARED_TITLE_BG_NAME = 'title_brown';
 
 /**
  * 页签两态底图：与好友模块同一张图（FGUI 模板同源），页签组件类也复用
@@ -63,7 +47,7 @@ export const CHAT_SHARED_TAB_ON = 'fd_tab_on';
 export const CHAT_SHARED_TAB_OFF = 'fd_tab_off';
 
 /** 「发送」按钮底图：复用好友模块的金色按钮（FGUI `按钮_公用_9Gone` 同款）。 */
-export const CHAT_SHARED_SEND_ROOT = FRIEND_ART_ROOT;
+const CHAT_SHARED_SEND_ROOT = FRIEND_ART_ROOT;
 export const CHAT_SHARED_SEND_NAME = 'fd_btn_gold';
 
 /** 九宫格图名 → 所在目录（要按图名去核 `.png.meta` 的边框）。 */

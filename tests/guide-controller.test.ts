@@ -14,7 +14,7 @@ import { reportGuideComplete, reportBattleGuideSettled } from '../assets/script/
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { CardLineupEvent } from '../assets/script/app/card/CardLineupEvents';
 import type { IGuideViewState } from '../assets/script/app/guide/application/GuideController';
-import { GuideEvent, GuideDebugEvent } from '../assets/script/app/guide/application/GuideEvents';
+import { GuideEvent, GuideDebugEvent, type GuideOutput } from '../assets/script/app/guide/application/GuideEvents';
 import type { IGuideGateway } from '../assets/script/app/guide/application/GuideGateway';
 import { GuideSyncOutbox } from '../assets/script/app/guide/model/GuideSyncOutbox';
 import { parseGuideSteps } from '../assets/script/app/guide/model/GuideStepConfig';
@@ -55,15 +55,28 @@ function makeController(roleId: string, overrides: {
         overrides.storage ?? createMemoryGuideStorage(),
     );
     const states: IGuideViewState[] = [];
+    const outputOwner = {};
     const controller = new GuideController(CONTEXT, {
         store,
         steps: overrides.steps ?? STEPS,
         gateway: overrides.gateway,
         outbox: overrides.outbox,
-        view: { owner: states, render: (state) => { states.push(state); overrides.view?.(state); } },
-        failed: overrides.failed,
-        now: overrides.now ?? (() => 1000),
+        clock: { now: overrides.now ?? (() => 1000) },
     });
+    EventMgr.instance.on(GuideEvent.Output, (output: GuideOutput, source: object) => {
+        if (source !== controller) return;
+        if (output.kind === 'render') {
+            states.push(output.state);
+            overrides.view?.(output.state);
+            return;
+        }
+        overrides.failed?.(output.error);
+    }, outputOwner);
+    const originalDispose = controller.dispose.bind(controller);
+    controller.dispose = () => {
+        EventMgr.instance.offTarget(outputOwner);
+        originalDispose();
+    };
     return { controller, store, states };
 }
 
@@ -875,4 +888,98 @@ test('无 outbox 直连模式也补推本地进度', async () => {
     await tick();
     assert.deepEqual(updates, ['6-3']);
     controller.dispose();
+});
+
+test('GuideOutput.render 仅在真实完成步骤时携带 completedStepId，start 与 skip 不误发', () => {
+    const store = new GuideSaveStore(
+        { roleId: 'c-completed-step-id', serverId: 's1' },
+        createMemoryGuideStorage(),
+    );
+    const controller = new GuideController(CONTEXT, {
+        store,
+        steps: STEPS,
+        clock: { now: () => 1000 },
+    });
+    const emitted: Array<{ stepId: string; finished: boolean; completedStepId?: string }> = [];
+    const owner = {};
+    EventMgr.instance.on(GuideEvent.Output, (output: GuideOutput, source: object) => {
+        if (source !== controller || output.kind !== 'render') return;
+        emitted.push({
+            stepId: output.state.stepId,
+            finished: output.state.finished,
+            completedStepId: output.completedStepId,
+        });
+    }, owner);
+    try {
+        controller.start();
+        assert.equal(emitted.at(-1)?.completedStepId, undefined, 'start 不应带 completedStepId');
+        for (const step of STEPS) {
+            if (step.stepId === '8-1') break;
+            const [name, arg] = step.completeCond.split(':');
+            assert.equal(controller.notify(name, arg), true);
+            assert.equal(emitted.at(-1)?.completedStepId, step.stepId);
+        }
+        assert.equal(controller.currentStepId, '8-1');
+        assert.equal(controller.notify('pageOpened', 'task'), true);
+        const last = emitted.at(-1);
+        assert.equal(last?.finished, true);
+        assert.equal(last?.completedStepId, '8-1', '8-1 真实完成时必须带 completedStepId');
+    } finally {
+        EventMgr.instance.offTarget(owner);
+        controller.dispose();
+    }
+
+    const skipStore = new GuideSaveStore(
+        { roleId: 'c-skip-no-completed', serverId: 's1' },
+        createMemoryGuideStorage(),
+    );
+    const [step1, step2] = STEPS;
+    const skippable = new GuideController(CONTEXT, {
+        store: skipStore,
+        steps: [
+            { ...step1, skipAble: true },
+            { ...step2, skipAble: true, nextStep: 'end' },
+        ],
+        clock: { now: () => 1000 },
+    });
+    const skipEmitted: Array<string | undefined> = [];
+    const skipOwner = {};
+    EventMgr.instance.on(GuideEvent.Output, (output: GuideOutput, source: object) => {
+        if (source !== skippable || output.kind !== 'render') return;
+        skipEmitted.push(output.completedStepId);
+    }, skipOwner);
+    try {
+        skippable.start();
+        assert.equal(skippable.skip(), true);
+        assert.equal(skippable.isFinished, true);
+        assert.equal(skipEmitted.at(-1), undefined, 'skip 不应带 completedStepId');
+    } finally {
+        EventMgr.instance.offTarget(skipOwner);
+        skippable.dispose();
+    }
+
+    const forceStore = new GuideSaveStore(
+        { roleId: 'c-skipall-no-completed', serverId: 's1' },
+        createMemoryGuideStorage(),
+    );
+    const forced = new GuideController(CONTEXT, {
+        store: forceStore,
+        steps: STEPS,
+        clock: { now: () => 1000 },
+    });
+    const forceEmitted: Array<string | undefined> = [];
+    const forceOwner = {};
+    EventMgr.instance.on(GuideEvent.Output, (output: GuideOutput, source: object) => {
+        if (source !== forced || output.kind !== 'render') return;
+        forceEmitted.push(output.completedStepId);
+    }, forceOwner);
+    try {
+        forced.start();
+        assert.equal(forced.skipAll(), true);
+        assert.equal(forced.isFinished, true);
+        assert.equal(forceEmitted.at(-1), undefined, 'skipAll 不应带 completedStepId');
+    } finally {
+        EventMgr.instance.offTarget(forceOwner);
+        forced.dispose();
+    }
 });

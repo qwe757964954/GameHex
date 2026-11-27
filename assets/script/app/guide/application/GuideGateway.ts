@@ -1,7 +1,7 @@
 import { RequestMsg } from '../../../framework/net/RequestMsg';
 import { GameNet } from '../../net/GameNet';
 
-export const GUIDE_FUNCTION_ID = 1;
+const GUIDE_FUNCTION_ID = 1;
 
 /**
  * 上报结果：`ok` 业务确认；`retry` 网络/服务端暂时失败，保留待发；

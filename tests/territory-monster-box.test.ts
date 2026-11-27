@@ -333,32 +333,43 @@ test('★Model / Controller 接线：意图 → 网关 → 仓储，三层都在
 });
 
 /**
- * 结果提示（通用系统 toast）的**时机**：演完才弹。
+ * 结果提示的**时机**：演完才落地。
  *
- * 回包只要 100~300ms、动画要 1.2s + 顿 + 褪白 ⇒ 在回包那一刻弹提示等于剧透。
- * 视图只报「这一格演完了」，文案由 Model 按 `monsterBoxAttempt` 决定。
+ * 回包只要 100~300ms、动画要 1.2s + 顿 + 褪白 ⇒ 在回包那一刻提示等于剧透。
+ * 视图只报「这一格演完了」，成功/失败与文案由 Model 按 `monsterBoxAttempt` 决定。
+ *
+ * 2026-11-25 起成功的**主反馈**换成屏正中的 spine「升级成功」：
+ * 视图演到了就带 `fxPlayed = true`，Model 不再补 toast（两份反馈不能同时出现）。
  */
-test('★★ 升级结果提示挂「演完」而不是回包：视图发 settled，Model 取文案', () => {
+test('★★ 升级结果挂「演完」而不是回包：视图发 settled，Model 取文案', () => {
     const PANEL_SRC = readFileSync('assets/script/app/territory/view/TerritoryMonsterBoxPanel.ts', 'utf8');
     const EVENTS_SRC = readFileSync('assets/script/app/territory/application/TerritoryEvents.ts', 'utf8');
-    // ① 意图类型与 Controller 分支都在。
-    assert.match(EVENTS_SRC, /kind: 'monsterBoxRollSettled'; readonly cellId: number/);
-    assert.match(CONTROLLER_SRC, /case 'monsterBoxRollSettled': this\.model\.notifyMonsterBoxRollSettled\(intent\.cellId\)/);
-    // ② 视图在收尾那一刻发（而不是回包 / 点击时发）。
-    assert.match(PANEL_SRC, /private notifyRollSettled\(\): void \{[\s\S]{0,220}?kind: 'monsterBoxRollSettled'/,
+    // ① 意图类型与 Controller 分支都在，且带着「字特效演没演」。
+    assert.match(EVENTS_SRC, /kind: 'monsterBoxRollSettled'; readonly cellId: number; readonly fxPlayed: boolean/);
+    assert.match(CONTROLLER_SRC, /case 'monsterBoxRollSettled': this\.model\.notifyMonsterBoxRollSettled\(intent\.cellId, intent\.fxPlayed\)/);
+    // ② 视图在收尾那一刻发（而不是回包 / 点击时发），并汇报字特效有没有起播。
+    assert.match(PANEL_SRC, /private notifyRollSettled\(\): void \{[\s\S]{0,320}?kind: 'monsterBoxRollSettled'/,
         '面板收尾要发 settled');
+    assert.match(PANEL_SRC, /const fxPlayed = roll\.success \? this\.playUpgradeFx\(\) : false/,
+        '成功先起演字特效，把结果带进 settled');
     assert.match(PANEL_SRC, /private finishRoll\(\): void \{[\s\S]{0,400}?this\.notifyRollSettled\(\)/,
         'finishRoll 必须先发 settled 再清 roll（否则拿不到 cellId）');
     // ③ 回包路径不再直接弹提示：把 `upgradeMonsterBox` 到 `notifyMonsterBoxRollSettled` 之间那段切出来，
     //    里面一个字都不许出现结果 toast（否则回包抢在动画前面剧透）。
     const upgradeStart = MODEL_SRC.indexOf('async upgradeMonsterBox(');
-    const notifyStart = MODEL_SRC.indexOf('notifyMonsterBoxRollSettled(cellId: number): void');
+    const notifyStart = MODEL_SRC.indexOf('notifyMonsterBoxRollSettled(cellId: number');
     assert.ok(upgradeStart > 0 && notifyStart > upgradeStart, '两个方法都该在 Model 里');
     assert.doesNotMatch(MODEL_SRC.slice(upgradeStart, notifyStart), /showTip\(TERRITORY_TEXTS\.monsterBoxUpgrade/,
         '失败/成功提示都不能在回包时弹（会抢在动画前面剧透）');
-    // ④ Model 侧：成功/失败都要有一条，等级取快照、拿不到就报「升级成功」。
-    assert.match(MODEL_SRC, /notifyMonsterBoxRollSettled\(cellId: number\): void/);
+    // ④ Model 侧：失败一条 toast；成功要看字特效演没演 —— 演了就不吭声，没演才退回文案。
+    assert.match(MODEL_SRC, /notifyMonsterBoxRollSettled\(cellId: number, fxPlayed = false\): void/);
     assert.match(MODEL_SRC, /this\.showTip\(TERRITORY_TEXTS\.monsterBoxUpgradeFailed\)/);
+    assert.match(MODEL_SRC, /if \(fxPlayed\) return;/,
+        '字特效已经演了，不能再补一条 toast');
     assert.match(MODEL_SRC, /TERRITORY_TEXTS\.monsterBoxUpgraded\(box\.lv\) : TERRITORY_TEXTS\.monsterBoxUpgradeSucceeded/,
-        '拿不到等级不能瞎猜，退回「升级成功」');
+        '字特效没演成时仍要退回文案；拿不到等级不能瞎猜');
+    // ⑤ 顺序：先判 `fxPlayed` 再取文案，否则「演了特效」也会白算一遍快照。
+    const settledBody = MODEL_SRC.slice(notifyStart, notifyStart + 1600);
+    assert.ok(settledBody.indexOf('if (fxPlayed) return;') < settledBody.indexOf('monsterBoxUpgraded(box.lv)'),
+        '`fxPlayed` 的短路必须在取成功文案之前');
 });

@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { LoginController } from '../assets/script/app/login/LoginController';
-import { LoginUiEvent, type ILoginViewState } from '../assets/script/app/login/LoginEvents';
+import { LoginUiEvent, type ILoginViewState, type LoginOutput } from '../assets/script/app/login/LoginEvents';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { createControllerContext } from './helpers/controller-context';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function deferred<T>() { let resolve: (value: T) => void = () => {}; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 function fixture(agreementStorage = { value: false }) {
-    const owner = {}, states: ILoginViewState[] = [], tips: string[] = [], routes: unknown[] = [];
+    const owner = {}, outputOwner = {}, states: ILoginViewState[] = [], tips: string[] = [], routes: unknown[] = [];
     const timers = new Set<() => void>();
     const credentials: unknown[] = [];
     let logins = 0, registrations = 0, disposed = 0, opened = 0, closed = 0, platformLogins = 0;
@@ -25,16 +25,28 @@ function fixture(agreementStorage = { value: false }) {
         setSelectedServer(id: number) { this.selectedServerId_ = id; },
         dispose() { disposed++; },
     };
-    const options = { owner, service,
+    const options = { service,
         config: { loadVersion: async () => ({ version: '1', url: 'url', index: 'index' }) },
-        view: { restoreCredentials: (value: unknown) => credentials.push(value), render: (state: ILoginViewState) => states.push(state) },
-        feedback: { tip: (message: string) => tips.push(message) },
-        servers: { openServers: async () => { opened++; }, closeServers: () => { closed++; } },
         clock: { schedule: (callback: () => void, _seconds: number) => { timers.add(callback); return () => { timers.delete(callback); }; } },
-        navigation: { navigate: (_route: string, params?: unknown) => routes.push(params) },
         channel: { platformLoginVisible: false, gmVisible: true },
     };
     const controller = new LoginController(createControllerContext(), options);
+    EventMgr.instance.on(LoginUiEvent.Output, (output: LoginOutput, source: object) => {
+        if (source !== controller) return;
+        switch (output.kind) {
+            case 'restoreCredentials': credentials.push(output.value); return;
+            case 'render': states.push(output.state); return;
+            case 'tip': tips.push(output.message); return;
+            case 'openServers': opened++; return;
+            case 'closeServers': closed++; return;
+            case 'navigate': routes.push(output.params); return;
+        }
+    }, outputOwner);
+    const dispose = controller.dispose.bind(controller);
+    controller.dispose = () => {
+        dispose();
+        EventMgr.instance.offTarget(outputOwner);
+    };
     const intent = (kind: 'login' | 'register' | 'servers' | 'select' | 'platform-login' | 'toggle-agreement' | 'toggle-password-visibility', extra = {}) => EventMgr.instance.emit(LoginUiEvent.Intent, { kind, account: 'testuser', password: 'secret123', ...extra });
     return { controller, service, options, owner, states, tips, routes, timers, credentials, intent, get logins() { return logins; }, get registrations() { return registrations; }, get disposed() { return disposed; }, get opened() { return opened; }, get closed() { return closed; }, get platformLogins() { return platformLogins; } };
 }

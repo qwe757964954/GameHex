@@ -1,4 +1,4 @@
-import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 
 /** 一次阵容界面会话内的上阵单位预制体缓存；加载失败时交给站台静态图兜底。 */
 export class CardUnitPreviewAssets<T> {

@@ -46,10 +46,18 @@ export class RedDot extends Component {
     /** spine 是否已经在播（避免每次 apply 都把动画打回第一帧）。 */
     private spinePlaying = false;
     private loadGeneration = 0;
-    private iconTransform: UITransform;
+    private iconTransform: UITransform | null = null;
+    /** 是否已经落过一次状态（父链未激活时先写过红点的场合，onLoad 要补一遍）。 */
+    private applied = false;
 
     protected onLoad(): void {
         this.iconTransform = this.icon.getComponent(UITransform);
+        // 宿主可能在节点进激活树之前就写过红点（入口先被引导藏起、再按快照刷新）：
+        // 这时按当前状态补一遍，否则下面「默认收起子节点」会把刚写好的红点抹掉。
+        if (this.applied) {
+            this.applyState();
+            return;
+        }
         // 默认收起三个子节点，但不动根节点：根节点显隐归宿主 / `setRedDot`。
         // 不在 onLoad 里调 `setRedDot(0)`，否则根节点被置成 inactive，
         // 宿主再写 `node.active = true` 就会带着上一帧的子节点状态复现残影。
@@ -101,6 +109,7 @@ export class RedDot extends Component {
     // ============================================================
 
     private applyState(): void {
+        this.applied = true;
         const state = this.state;
         this.node.active = state.visible;
 
@@ -119,7 +128,10 @@ export class RedDot extends Component {
             return;
         }
         const [width, height] = redDotIconSize(key);
-        this.iconTransform.setContentSize(width, height);
+        // 宿主可能在父链未激活时就来写红点（先收入口、再刷红点），此时 onLoad 还没跑，
+        // `iconTransform` 为空 —— 这里补一次，避免在隐藏入口上直接抛 TypeError。
+        const transform = this.iconTransform ?? (this.iconTransform = this.icon.getComponent(UITransform));
+        transform.setContentSize(width, height);
         if (this.appliedArtKey === key) return;
         this.appliedArtKey = key;
         const generation = this.loadGeneration;
@@ -135,6 +147,12 @@ export class RedDot extends Component {
     private applySpine(useSpine: boolean): void {
         this.spine.node.active = this.state.visible && useSpine;
         if (!useSpine) {
+            this.spinePlaying = false;
+            return;
+        }
+        // 还没进激活树（父链被藏起）时先不起播：等 onLoad 里的状态补写再来一次，
+        // 否则 `sp.Skeleton` 尚未初始化，setAnimation 静默不生效且会被「已在播」挡住。
+        if (!this.spine.node.activeInHierarchy) {
             this.spinePlaying = false;
             return;
         }

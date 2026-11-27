@@ -1,8 +1,9 @@
 /**
  * 「邮件」主容器（老端 `LayerMail`）。
  *
- * 结构逐节点对齐 FGUI `邮件/组件/组件_邮件_主界面.xml`：
- * `PanelBg → TitleBg → Title → CloseBtn → RowView → BatchRemoveBtn → GetOneKeyBtn → EmptyLabel → AutoDeleteLabel`
+ * v2 结构：`PanelBg(652×970) → TitleBg(420×122) → Title → CloseBtn(92×91) → MailBanner(560×106)
+ * → TagRow(200×70 标签) → RowView(560×456) → BatchRemoveBtn(231×108) → GetOneKeyBtn(321×108)
+ * → EmptyLabel / AutoDeleteLabel`。
  *
  * **不加任何整体偏移**：原稿 `popBg xy=13,128 size=680,946` 就是 **720×1280 画布坐标**。
  * 早期笔记里「原稿是 706×1202 ⇒ 整体 `(+7,+39)`」的推导**是错的** —— 那个 706 只是
@@ -19,7 +20,7 @@
  * ③ 行底图必须在 `refreshList` **之前**取完（`loadRowArt`），否则复用条目会闪上一行的图。
  */
 
-import {_decorator, Button, Label} from 'cc';
+import {_decorator, Button, Label, Node} from 'cc';
 import { loadArt } from '../card/CardLineupIcons';
 import { CommonTips } from '../common/CommonTips';
 import { FW } from '../../framework/FW';
@@ -42,6 +43,7 @@ import {
 import {
     formatText,
     MAIL_AUTO_DELETE_TEMPLATE,
+    MAIL_BANNER_SUB_TEMPLATE,
     MAIL_BTN_DELETE_ONE_KEY,
     MAIL_BTN_TAKE_ONE_KEY,
     MAIL_CONFIRM_CANCEL,
@@ -49,6 +51,7 @@ import {
     MAIL_DELETE_CONFIRM,
     MAIL_EMPTY,
     MAIL_STATE_READ,
+    MAIL_TAG_COUNT_TEMPLATE,
     MAIL_TIME_DAYS,
     MAIL_TIME_HOURS,
     MAIL_TIME_JUST_NOW,
@@ -58,7 +61,8 @@ import {
     MAIL_TIP_OFFLINE,
     MAIL_TIP_REQUEST_FAILED,
     MAIL_TIP_TAKE_NONE,
-    MAIL_TIP_TAKE_OK
+    MAIL_TIP_TAKE_OK,
+    MAIL_UNREAD_TEMPLATE,
 } from './MailTexts';
 
 const { ccclass, property } = _decorator;
@@ -91,6 +95,18 @@ export class MailPage extends PopupBase {
     @property({ type: Label, tooltip: 'AutoDeleteLabel：自动删除提示（带配置占位）' })
     autoDeleteLabel: Label = null;
 
+    @property({ type: Label, tooltip: 'MailBanner/BannerSub：收件箱摘要（共 N 封 · M 封可领取）' })
+    bannerSubLabel: Label = null;
+
+    @property({ type: Node, tooltip: 'MailBanner/UnreadChip：未读药丸（未读为 0 时隐藏）' })
+    unreadChip: Node = null;
+
+    @property({ type: Label, tooltip: 'MailBanner/UnreadChipLabel：未读数' })
+    unreadChipLabel: Label = null;
+
+    @property({ type: Label, tooltip: 'TagRow/TagCount：标签后的邮件总数' })
+    tagCountLabel: Label = null;
+
     /** 数据端口（测试 / 探针用 `setRepository` 换掉）。 */
     private repo: IMailRepository = mailRepository;
 
@@ -100,6 +116,8 @@ export class MailPage extends PopupBase {
     private rowArt: IMailRowArt = { unread: null, read: null };
     /** 同一次刷新里有并发（`onOpen` + `onClose` 回调）时只跑一趟。 */
     private busy = false;
+    /** 行内领取请求未返回时忽略连点。 */
+    private taking = false;
 
     /** 供测试 / 探针注入替身 Repository。 */
     setRepository(repository: IMailRepository): void {
@@ -194,6 +212,15 @@ export class MailPage extends PopupBase {
         this.emptyLabel.node.active = empty;
         this.autoDeleteLabel.node.active = !empty;
         this.autoDeleteLabel.string = formatText(MAIL_AUTO_DELETE_TEMPLATE, ...autoDeleteArgs(snapshot.config));
+
+        // v2 收件箱横幅 / 标签计数：只读快照，不额外请求
+        const total = this.rows.length;
+        const takeable = this.rows.filter((row) => row.takeable).length;
+        const unread = snapshot.rows.filter((row) => !row.read).length;
+        this.bannerSubLabel.string = formatText(MAIL_BANNER_SUB_TEMPLATE, total, takeable);
+        this.tagCountLabel.string = formatText(MAIL_TAG_COUNT_TEMPLATE, total);
+        this.unreadChip.active = unread > 0;
+        this.unreadChipLabel.string = formatText(MAIL_UNREAD_TEMPLATE, unread);
     }
 
     /** 渲染一条（列表在条目激活前回调；`index` 越界时整行藏掉）。 */
@@ -208,6 +235,7 @@ export class MailPage extends PopupBase {
         row.node.active = true;
         // 回调每次重设（同一实例会被复用到别的下标）
         row.onOpen = (id) => this.openDetail(id);
+        row.onClaim = (id) => void this.takeOne(id);
         row.render(view, this.rowArt);
     }
 
@@ -266,6 +294,24 @@ export class MailPage extends PopupBase {
         // 领到了东西才提示成功（`rewards` 为空 = 服务端认为没有可领的，也算成功一次请求）
         FW.showTip(MAIL_TIP_TAKE_OK);
         await this.reload();
+    }
+
+    /** 行内「领取」：只领当前这一封；成功后刷新列表（与一键领取同一套提示）。 */
+    private async takeOne(id: string): Promise<void> {
+        if (this.taking) return;
+        this.taking = true;
+        try {
+            const outcome = await this.repo.takeRewards([id], this);
+            if (!this.isValid) return;
+            if (outcome.result !== 'ok') {
+                FW.showTip(outcome.result === 'offline' ? MAIL_TIP_OFFLINE : MAIL_TIP_REQUEST_FAILED);
+                return;
+            }
+            FW.showTip(MAIL_TIP_TAKE_OK);
+            await this.reload();
+        } finally {
+            this.taking = false;
+        }
     }
 
     /** 打开详情；关掉后刷新一次（详情把它标成已读）。 */

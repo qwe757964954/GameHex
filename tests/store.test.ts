@@ -84,6 +84,7 @@ import {
 } from '../assets/script/app/store/StoreShopTable';
 import { mainTabTarget, MainTab } from '../assets/script/app/main/MainTabModel';
 import { assetExists, assetPath } from './helpers/asset-paths';
+import { applyInstanceOverrides } from './helpers/prefab-overrides';
 
 /** 段内反复出现的几个图标路径（写死在这里 = 一旦表改成别的图，B 段会立刻红）。 */
 const ICON_RES_FANTASY_JADE = 'icons/resource/图标_幻灵玉';
@@ -193,13 +194,13 @@ test('A6 美术口径：目录名 / 9 张九宫格 / 关键图名（改名会让
     assert.equal(STORE_ART_ICON_VIDEO, 'img_video');
 });
 
-test('A7 资源条不再有代码常量 —— 两格配置落在 prefab（见 C1b）', () => {
+test('A7 资源条不再有代码常量 —— 格数配置落在 prefab（见 C1b）', () => {
     // 2026-09-29：`STORE_RES_KEYS` 已删（配置只留 prefab 一处真源）。
     // 这里保留一条**反向**断言，防有人为了「测试方便」把常量加回来。
     const tableSrc = readFileSync('assets/script/app/store/StoreTable.ts', 'utf8');
     assert.ok(
         !/export\s+const\s+STORE_RES_KEYS/.test(tableSrc),
-        'STORE_RES_KEYS 不该回来：两格配置的真源是 Store.prefab 的 ResBar.resKeys',
+        'STORE_RES_KEYS 不该回来：格数配置的真源是 Store.prefab 的 ResBar.resKeys',
     );
 });
 
@@ -586,17 +587,24 @@ function rootTransform(bundle: ReturnType<typeof analyze>): Rect {
 }
 
 /**
- * 读公共货币件 `common/ResBar.prefab`：根尺寸 + 每个 `Res{n}` 相对**根中心**的偏移。
+ * 读公共货币件 `common/ResBar.prefab` **叠加商城实例的覆盖项**：根尺寸 + 每个 `Res{n}` 相对根中心的偏移。
  *
- * 为什么 store 用例要读它：`Store/ResBar` 是**嵌套实例**，两枚药丸的节点**不落 Store.prefab**
- * ⇒ 「药丸落在哪」= **实例锚点**（本文件守）⊕ **公共件内部布局**（`militia-talent-ui.test.ts` 守）。
- * 这里把两者复合起来做一次端到端对账 —— 只改实例 `_lpos`、或只改公共件布局，都会在这里显形。
+ * 为什么 store 用例要读它：`Store/ResBar` 是**嵌套实例**，三枚药丸的节点**不落 Store.prefab**
+ * ⇒ 「药丸落在哪」= **实例锚点**（本文件守）⊕ **公共件内部布局**（`militia-talent-ui.test.ts` 守）
+ * ⊕ **实例对格子位置/整条尺寸的覆盖**（商城为了塞下第三格把三格重排成 −146 / 0 / +146）。
+ * 这里把三者复合起来做一次端到端对账 —— 只改实例 `_lpos`、只改公共件布局、或漏掉格子覆盖，都会在这里显形。
  */
-function commonResBarLayout(): { width: number; height: number; cells: Map<string, { dx: number; dy: number }> } {
-    const src = JSON.parse(readFileSync(RESBAR_PREFAB, 'utf8')) as Entry[];
+function effectiveResBarLayout(): { width: number; height: number; cells: Map<string, { dx: number; dy: number }> } {
+    const common = JSON.parse(readFileSync(RESBAR_PREFAB, 'utf8')) as Entry[];
+    const uuid = (JSON.parse(readFileSync(`${RESBAR_PREFAB}.meta`, 'utf8')) as { uuid: string }).uuid;
+    const info = shell.entries.find(
+        (e) => e?.__type__ === 'cc.PrefabInfo' && (e.asset as { __uuid__?: string } | undefined)?.__uuid__ === uuid,
+    )!;
+    assert.ok(info, `Store.prefab 里找不到实例化 ${RESBAR_PREFAB} 的 PrefabInfo`);
+    const objects = applyInstanceOverrides(common, shell.entries, shell.at(info!.instance)!) as Entry[];
     const at = (ref: unknown): Entry | null =>
-        (ref && typeof ref === 'object' && '__id__' in (ref as Entry)) ? src[(ref as { __id__: number }).__id__]! : null;
-    const root = src.find((e) => e && e.__type__ === 'cc.Node' && e._parent === null)!;
+        (ref && typeof ref === 'object' && '__id__' in (ref as Entry)) ? objects[(ref as { __id__: number }).__id__]! : null;
+    const root = objects.find((e) => e && e.__type__ === 'cc.Node' && e._parent === null)!;
     const uit = ((root._components ?? []) as unknown[]).map(at).find((c) => c?.__type__ === 'cc.UITransform')!;
     const size = uit._contentSize as { width: number; height: number };
     const cells = new Map<string, { dx: number; dy: number }>();
@@ -629,18 +637,18 @@ test('C1 外壳 `Store`：结构 + 3 层背景 + 资源条 + 滚动区（几何�
     expectRect(shell, 'Store/Npc', 1, 61, 720, 329, 'NPC 金发老板 ');
     // ── 顶部资源条 = **公共件 `common/ResBar` 的嵌套实例** ──────────────────
     // 实例壳只有「锚点落点」落盘（尺寸/内部节点在其源 prefab 里）：
-    //   `_lpos=(-131,509)`、父原点 (360,640) ⇒ 锚点 (229,131)。
-    expectRect(shell, 'Store/ResBar', 229, 131, 0, 0, '资源条实例锚点 ');
-    // 两枚药丸的绝对位置 = 实例锚点 ⊕ 公共件内部布局（每格 132×40、锚点居中）：
-    //   旧「手搓 720×40 条」的中心在 x = 138 / 300；改实例后各向中间收 8px ⇒ 盒左 80 / 226、顶边 86。
-    const rb = commonResBarLayout();
-    assert.equal(rb.width, 552, '公共件整条宽 552（老端 组件_资源栏 的 mid group）');
-    assert.equal(rb.height, 106, '公共件整条高 106');
-    for (const [name, expectLeft] of [['Res0', 80], ['Res1', 226]] as const) {
+    //   `_lpos=(0,604)`、父原点 (360,640)、整条 424×40 ⇒ 锚点 (360,36)、顶边 16。
+    // 三格（铜币 / 体力 / 幻灵玉）排成 −146 / 0 / +146 ⇒ 盒左 148 / 294 / 440；
+    // 原来的两格位置（80 / 226，顶边 86）第三格会落在 NPC 立绘（x≥372）的脑袋上，所以整条上移到贴顶。
+    expectRect(shell, 'Store/ResBar', 360, 36, 0, 0, '资源条实例锚点 ');
+    const rb = effectiveResBarLayout();
+    assert.equal(rb.width, 424, '实例把整条压成 424（3×132 + 2×14）');
+    assert.equal(rb.height, 40, '整条高 = 单格高 40');
+    for (const [name, expectLeft] of [['Res0', 148], ['Res1', 294], ['Res2', 440]] as const) {
         const cell = rb.cells.get(name);
-        assert.ok(cell, `公共件 ${RESBAR_PREFAB} 里没有 ${name} —— 药丸会整格消失且不报错`);
-        assert.ok(near(229 + cell!.dx - 66, expectLeft), `${name} 药丸盒左应为 ${expectLeft}（实得 ${229 + cell!.dx - 66}）`);
-        assert.ok(near(131 - cell!.dy - 20, 86), `${name} 药丸顶边应为 86（实得 ${131 - cell!.dy - 20}）`);
+        assert.ok(cell, `实例覆盖后的 ${RESBAR_PREFAB} 里没有 ${name} —— 药丸会整格消失且不报错`);
+        assert.ok(near(360 + cell!.dx - 66, expectLeft), `${name} 药丸盒左应为 ${expectLeft}（实得 ${360 + cell!.dx - 66}）`);
+        assert.ok(near(36 - cell!.dy - 20, 16), `${name} 药丸顶边应为 16（实得 ${36 - cell!.dy - 20}）`);
     }
     // 滚动区：FGUI `xy="361,385" pivot="0.5,0"` ⇒ 盒左 28、顶 385
     expectRect(shell, 'Store/ScrollView', 28, 385, 666, 738, '滚动区 ');
@@ -649,37 +657,39 @@ test('C1 外壳 `Store`：结构 + 3 层背景 + 资源条 + 滚动区（几何�
 });
 
 /**
- * C1b 资源条 = 公共件 `common/ResBar` 的**嵌套实例**：两格配置落在覆盖项（`resKeys`）。
+ * C1b 资源条 = 公共件 `common/ResBar` 的**嵌套实例**：三格配置落在覆盖项（`resKeys`）。
  *
- * 为什么单独一条：`C1` 只守「实例摆在 (229,131)」⇒ 把实例换成内联节点树、或把 `resKeys`
- * 改成别的货币，几何全对、C1 照绿，但「顶部显示铜币 + 灵石」「改公共件穿透到这里」都会**静默失效**。
+ * 为什么单独一条：`C1` 只守「实例摆在 (360,36)」⇒ 把实例换成内联节点树、或把 `resKeys`
+ * 改成别的货币，几何全对、C1 照绿，但「顶部显示铜币 + 体力 + 幻灵玉」都会**静默失效**。
  *
- * ⚠️ `open.json` 里商城是 `refId = 1`（`url: "TabStore"`），但那行 `resShowType = [10,7]`
- *    （幻灵玉 + 铜币）与界面现状（铜币 + 灵石）**顺序与内容都不同** ⇒ 暂时不覆盖 `openRefId`
- *    （继承公共件默认 0），待策划确认。切的时候这一条会红，正好提醒同步改界面预期。
+ * 2026-11-26：商城与主界面（`ArenaRoot` 的 `gold,end`）统一货币口径，并在第三格补
+ * `coin`（`roleProperty` resId=10「金币」，充值获得）⇒ `gold,end,coin`。
+ * ⚠️ `open.json` 里商城是 `refId = 1`（`url: "TabStore"`），那行 `resShowType = [10,7]`
+ *    （幻灵玉 + 铜币）与界面现状（铜币 + 体力 + 幻灵玉）**顺序与内容都不同** ⇒ 仍不覆盖 `openRefId`
+ *    （继承公共件默认 0）。表侧待策划改成 `[7,9,10]`；切的时候这一条会红，正好提醒同步改界面预期。
  */
-test('C1b 资源条 = 公共件 `ResBar` 的嵌套实例：两格配置落在覆盖项（`resKeys`）', () => {
+test('C1b 资源条 = 公共件 `ResBar` 的嵌套实例：三格配置落在覆盖项（`resKeys`）', () => {
     const commonUuid = (JSON.parse(readFileSync(`${RESBAR_PREFAB}.meta`, 'utf8')) as { uuid: string }).uuid;
     const bar = shell.shells.get('Store/ResBar');
     assert.ok(bar, 'Store/ResBar 必须是嵌套实例壳（`shells` 里找不到 ⇒ 又变成「手抄一份 + 挂脚本」了）');
     assert.equal(bar!.uuid, commonUuid, `Store/ResBar 必须实例化 ${RESBAR_PREFAB}（uuid 不对 ⇒ 改公共件同步不过来）`);
     assert.equal(bar!.overrides._name, 'ResBar', '覆盖名应为 ResBar');
 
-    // 位置覆盖必须是 (-131,509)：丢了会落回 (0,0)、整条压到 NPC 上，且**零报错**
+    // 位置覆盖必须是 (0,604)：丢了会落回 (0,0) 并把整条压进顶部，且**零报错**
     const lpos = bar!.overrides._lpos as { x: number; y: number } | undefined;
     assert.ok(lpos, '实例必须覆盖 _lpos');
-    assert.ok(near(lpos!.x, -131) && near(lpos!.y, 509), `实例 _lpos 应为 (-131,509)，实得 (${lpos!.x},${lpos!.y})`);
+    assert.ok(near(lpos!.x, 0) && near(lpos!.y, 604), `实例 _lpos 应为 (0,604)，实得 (${lpos!.x},${lpos!.y})`);
 
-    // 格数真源 = 覆盖的 `resKeys`：商城两格 = 铜币 + 灵石（与主界面 HUD 同一套 key）
-    assert.equal(bar!.overrides.resKeys, 'gold,gem', '显示哪两格 = `resKeys`（与主界面 HUD 同一套 key）');
-    assert.equal(String(bar!.overrides.resKeys).split(',').length, 2, '商城只有两格 ⇒ resKeys 必须是 2 个键');
+    // 格数真源 = 覆盖的 `resKeys`：商城三格 = 铜币 + 体力 + 幻灵玉（前两格与主界面 HUD 同一套 key）
+    assert.equal(bar!.overrides.resKeys, 'gold,end,coin', '显示哪三格 = `resKeys`（前两格与主界面 HUD 同一套 key）');
+    assert.equal(String(bar!.overrides.resKeys).split(',').length, 3, '商城三格 ⇒ resKeys 必须是 3 个键');
     // 不覆盖 `openRefId` ⇒ 继承公共件默认 0（见上面 open.json 的口径说明）
     assert.ok(!('openRefId' in bar!.overrides), '商城暂不走 open.json 真源 ⇒ 不该覆盖 openRefId');
 
-    // 宿主**只许**覆盖「名字 / 位置 / 旋转 / 格数」——多出来的多半是想在这里私有一份布局
+    // 宿主**只许**覆盖「名字 / 位置 / 旋转 / 格数 / 整条尺寸」——多出来的多半是想在这里私有一份布局
     assert.deepEqual(
         Object.keys(bar!.overrides).sort(),
-        ['_euler', '_lpos', '_lrot', '_name', 'resKeys'],
+        ['_contentSize', '_euler', '_lpos', '_lrot', '_name', 'resKeys'],
         'Store/ResBar 的覆盖项超出预期 ⇒ 确认是有意为之',
     );
 

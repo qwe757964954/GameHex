@@ -1,4 +1,5 @@
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
+import { ResourceScope } from '../../../core/asset/ResourceScope';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { FW } from '../../../framework/FW';
 import { AudioMgr } from '../../../framework/audio/AudioMgr';
@@ -49,8 +50,9 @@ export class MainChestRewardCoordinator extends ControllerBase {
 
     private onTreasureRewards(event: { readonly goods: readonly CmdGoods[] }): void {
         if (!event.goods.length) return;
-        void TerritoryChestOpenPage.open({ userData: { goods: event.goods } }).then(popup => {
-            if (this.isDisposed) popup?.close();
+        void TerritoryChestOpenPage.open({
+            scope: this.scope,
+            userData: { goods: event.goods },
         }).catch(reportChestRewardFailure);
     }
 
@@ -79,6 +81,9 @@ export class MainChestRewardCoordinator extends ControllerBase {
             FW.ShowReward(rewards.map(reward => ({
                 resId: reward.resId,
                 number: reward.number,
+                //  宝石的品质不在 item / roleProperty 表里，必须继续往奖励窗带（否则会按品质 1 画灰框）。
+                //  非宝石条目保持原形状，避免改变既有调用方看到的字段。
+                ...(Number(reward.quality) > 0 ? { quality: reward.quality } : {}),
             })) as unknown as CmdGoods[]);
         } finally {
             if (!popupPlanned) {
@@ -139,32 +144,25 @@ export class MainChestRewardCoordinator extends ControllerBase {
             settled = true;
             resolveClosed();
         };
-        const unregisterFinish = this.scope.defer(finish);
-        let releasePopup: (() => void) | null = null;
+        const heroScope = new ResourceScope('hero-obtain');
+        const detachHost = this.scope.defer(() => heroScope.dispose());
+        heroScope.defer(finish);
         try {
             const popup = await HeroObtainPage.open({
+                scope: heroScope,
                 userData: { heroId, progressCurrent, progressMax },
                 onClose: finish,
             });
-            if (this.isDisposed || shouldAbort?.()) {
-                popup?.close();
+            if (!popup || heroScope.disposed || shouldAbort?.()) {
+                heroScope.dispose();
                 return;
             }
-            if (!popup) return;
             void AudioMgr.instance.playSound(GAME_AUDIO.goldFragment, this.scope);
-            releasePopup = this.scope.defer(() => {
-                popup.close();
-            });
             await closed;
         } finally {
-            releasePopup?.();
-            unregisterFinish();
+            detachHost();
+            heroScope.dispose();
         }
-    }
-
-    dispose(): void {
-        if (this.isDisposed) return;
-        super.dispose();
     }
 }
 

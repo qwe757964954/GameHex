@@ -1,4 +1,4 @@
-import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 import type { PostLoginIdentity } from '../loading/PostLoginContract';
 
 /**

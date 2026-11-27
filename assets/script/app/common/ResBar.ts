@@ -5,14 +5,12 @@ import { readRoleRow } from '../main/MainRoleRow';
 import { MainResBarSlot } from '../main/MainResBarSlot';
 import { buildResBarSlots, buildResBarView } from '../main/MainResBarTypes';
 import { RES_BAR_FLASH_PEAK_ALPHA, resBarFlashFx } from '../main/MainResBarFeedback';
+import { ITEM_TABLE, OPEN_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import {
     IItemRefRow,
     IOpenRefRow,
     IResPropertyRow,
-    ITEM_TABLE,
-    OPEN_TABLE,
     RES_BAR_MAX_SLOTS,
-    ROLE_PROPERTY_TABLE,
     parseResKeys,
     resIconArt,
     resolveResBarCells,
@@ -125,9 +123,9 @@ export class ResBar extends Component {
                 const cell = slots[i];
                 // 扣除反馈必须在 render 之前调：那一刻 label 上还是扣前的值，
                 // render 会把新值塞进待落地暂存，两条时间线才对得上。
-                const spent = cell ? slot.spendDeltaOf(cell.valueText) : 0;
+                const spent = cell ? slot.spendDeltaOf(cell.amount) : 0;
                 if (cell && spent > 0) {
-                    slot.playSpendFeedback(spent, cell.valueText);
+                    slot.playSpendFeedback(spent, cell);
                     this.feedbackActive = true;
                 }
                 slot.render(slots[i] ?? null);

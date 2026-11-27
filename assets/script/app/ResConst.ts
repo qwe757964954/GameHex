@@ -5,20 +5,6 @@
  * `static prefabPath`，这里只放跨模块共享项，不要硬编码业务目录。
  */
 
-/** Prefab 目录根。 */
-export const PREFAB_ROOT = 'prefab';
-/** UI Prefab 目录。 */
-export const PREFAB_UI_ROOT = `${PREFAB_ROOT}/ui`;
-/** UI 根节点预制体完整路径。 */
-export const UI_ROOT_PREFAB_PATH = `${PREFAB_UI_ROOT}/UIRoot`;
-
-/** 音频目录根。 */
-export const AUDIO_ROOT = 'audio';
-/** 音效目录。 */
-export const SFX_ROOT = `${AUDIO_ROOT}/sfx`;
-/** 受击音效完整路径。 */
-export const HIT_SFX_PATH = `${SFX_ROOT}/hit`;
-
 export const GAME_AUDIO_ROOT = 'resources://塔防/音效';
 export const GAME_AUDIO = {
     chapterMusic: `${GAME_AUDIO_ROOT}/关卡背景音乐`,
@@ -39,4 +25,13 @@ export const GAME_AUDIO = {
     drawGreenBlue: `${GAME_AUDIO_ROOT}/战斗中抽蓝绿`,
     drawPurple: `${GAME_AUDIO_ROOT}/战斗中抽紫`,
     drawGold: `${GAME_AUDIO_ROOT}/战斗中抽金`,
+    /**
+     * 养成通用反馈（用户 2026-11-26）：卡牌升级界面 / 巡逻宝箱升级 / 装备升级与强化 / 宝石镶嵌
+     * 成功都用这一条；失败只有巡逻宝箱会用（其余玩法失败仍是 toast）。
+     *
+     * 与 `drawXxx` / `xxxFixedTile` 那些「一条玩法一套」的音效不同 —— 这是**全养成通用**的一对，
+     * 加新玩法时优先复用它，别再造第三条。
+     */
+    upgradeSuccess: `${GAME_AUDIO_ROOT}/升级成功通用音效`,
+    upgradeFailure: `${GAME_AUDIO_ROOT}/升级失败通用音效`,
 } as const;

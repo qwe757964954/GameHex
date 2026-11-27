@@ -132,6 +132,13 @@ export const RD_CLIENT_VARS: Readonly<Record<string, RdClientVarSpec>> = {
         source: 'LeagueRepository.loadLeagueEntryRedDots（砍价 ∪ 任务 ∪ 北伐；老端 RDLeague.OnComputeResult）',
         impl: 'ready',
     },
+    RDEquipLevelUp: {
+        source:
+            'RoleRepository.equipRedDots（装备锻造页/角色页共用：可强化 ∪ 可升品 ∪ 可洗炼）；' +
+            '⚠️ 名字沿用老端「装备升级」，口径扩到锻造页全部可操作项 —— open.json refId=16（角色-装备页签）' +
+            '与 refId=2（角色主入口）都靠它',
+        impl: 'ready',
+    },
 
     // —— 留桩（⚠️ 名字**必须**注册：漏了会让表达式报「尚未注册该值」⇒ 红点静默不亮） ——
     // 下面这三个不是「玩法没做」，而是**取数口径还没定**，理由写在 RdVars.ts 文件头，别两处打架。
@@ -152,7 +159,6 @@ export const RD_CLIENT_VARS: Readonly<Record<string, RdClientVarSpec>> = {
     RDCity: { source: '主城（未做）', impl: 'stub' },
     RDCoinStore: { source: '金币商店（未做）', impl: 'stub' },
     RDDailyShare: { source: '分享（未做）', impl: 'stub' },
-    RDEquipLevelUp: { source: '装备升级（未做）', impl: 'stub' },
     RDFightRewards: { source: '章节奖励（未做）', impl: 'stub' },
     RDGemStore: { source: '宝石商店（未做）', impl: 'stub' },
     RDGeneral: { source: '武将（未做）', impl: 'stub' },

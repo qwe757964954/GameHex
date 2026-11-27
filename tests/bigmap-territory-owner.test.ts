@@ -21,6 +21,7 @@ import {
     BigMapSlgRepository,
     type IBigMapSlgGateway,
     type IBigMapSlgRequestName,
+    type IBigMapSlgRequestOutcome,
 } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
 import { bigMapTerritoryOwnerOf } from '../assets/script/app/bigmap/model/BigMapTerritoryColor';
 import { parseBigMapSave, serializeBigMapSave } from '../assets/script/app/bigmap/model/BigMapSaveData';
@@ -50,12 +51,12 @@ class SlgGateway implements IBigMapSlgGateway {
     readonly calls: IBigMapSlgRequestName[] = [];
     listener: ((kind: 'game' | 'build') => void) | null = null;
     constructor(private readonly toCampId: number) {}
-    request(name: IBigMapSlgRequestName): Promise<unknown> {
+    request(name: IBigMapSlgRequestName): Promise<IBigMapSlgRequestOutcome> {
         this.calls.push(name);
-        if (name === 'CmdSlgGameInfoReqMsg') return Promise.resolve({ info: { maxMonsterLevel: 5, toCampId: this.toCampId } });
-        if (name === 'CmdSlgBuildInfoReqMsg') return Promise.resolve({ info: { builds: [], queues: [], unlockQueue: 1 } });
-        if (name === 'CmdSlgActionUpdateReqMsg') return Promise.resolve({ info: { nextRevertTime: 20 } });
-        return Promise.resolve({});
+        const response = name === 'CmdSlgGameInfoReqMsg' ? { info: { maxMonsterLevel: 5, toCampId: this.toCampId } }
+            : name === 'CmdSlgBuildInfoReqMsg' ? { info: { builds: [], queues: [], unlockQueue: 1 } }
+                : name === 'CmdSlgActionUpdateReqMsg' ? { info: { nextRevertTime: 20 } } : {};
+        return Promise.resolve<IBigMapSlgRequestOutcome>({ status: 'ok', response });
     }
     subscribe(listener: (kind: 'game' | 'build') => void): () => void {
         this.listener = listener;
@@ -70,7 +71,7 @@ class CampGateway implements IBigMapCampGateway {
     }
     fetchDetail(campIds: readonly number[]): Promise<unknown> { return this.fetchSimple(campIds); }
     fetchRoles(): Promise<unknown> { return Promise.resolve({ infos: [] }); }
-    requestMove(): Promise<unknown> { return Promise.resolve({}); }
+    requestMove() { return Promise.resolve({ status: 'unconfirmed' as const }); }
     subscribeRoleEvents(): () => void { return () => undefined; }
 }
 

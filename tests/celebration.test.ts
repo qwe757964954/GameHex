@@ -85,7 +85,7 @@ import {
     osQualityFrameName,
     osSpriteType,
 } from '../assets/script/app/celebration/CelebrationArt';
-import { RL_ART_ROOT } from '../assets/script/app/role/RoleArt';
+import { ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
     osShopVisibility,
     osTabVisual,
@@ -442,10 +442,9 @@ test('庆祝 B3｜osArtPath 必须带 image/ 前缀 + /spriteFrame（漏前缀 �
     assert.equal(osArtPath('不存在的key'), '', '缺 key 返回空串，别拼出 image//spriteFrame');
 });
 
-test('庆祝 B4｜OS_ART_ROOT 与 RoleArt 的美术根同一口径（都是 image）', () => {
+test('庆祝 B4｜庆典美术使用项目的 image 根目录', () => {
     assert.equal(OS_ART_ROOT, 'image');
-    // 真源在零 cc 的 `RoleArt.RL_ART_ROOT`（`RoleArtLoader` 只是转发）⇒ 那边改了这边必须跟着改
-    assert.equal(OS_ART_ROOT, RL_ART_ROOT, 'OS_ART_ROOT 与 RL_ART_ROOT 分叉 ⇒ 又是同一类静默留白');
+    assert.equal(OS_ART_ROOT, ART_ROOT);
 });
 
 // ============================================================
@@ -702,19 +701,23 @@ test("庆祝 F'3｜RedDot：30×30 + 位置 (34,34) + 烘 false，且脚本 redD
     assert.deepEqual({ x: o[dotId]._lpos.x, y: o[dotId]._lpos.y }, { x: 34, y: 34 });
     assert.equal(o[dotId]._active, false, '设计期隐藏（页面每趟无条件改写，规则 82）');
 
-    const sprite = compOf(o, dotId, 'cc.Sprite');
-    assert.ok(sprite, 'RedDot 上缺 cc.Sprite');
-    assert.ok(sprite._spriteFrame.__uuid__, 'RedDot 没绑图');
+    // 通用 RedDot 结构：根节点保留原尺寸/位置，图在 Icon 子节点上，组件挂在根上
+    const iconId = nodeIndex(o, 'Icon', dotId);
+    assert.notEqual(iconId, -1, 'RedDot 缺 Icon 子节点');
+    const sprite = compOf(o, iconId, 'cc.Sprite');
+    assert.ok(sprite, 'RedDot/Icon 上缺 cc.Sprite');
+    assert.ok(sprite._spriteFrame.__uuid__, 'RedDot/Icon 没绑图');
 
-    // 脚本的 redDot 必须指向「节点」（指组件会静默读成 null）
+    // 脚本的 redDot 必须指向「通用 RedDot 组件」
     const btnId = nodeIndex(o, 'Btn', entryId);
     const script = scriptOf(o, btnId);
     assert.ok(script, 'Btn 上缺 OSRankEntryButton');
     assert.equal(typeof script.__type__, 'string');
     assert.equal(script.__type__.length, 23, '脚本组件 __type__ 必须是 23 位 cid');
     assert.notEqual(script.redDot, null, 'redDot 没绑上');
-    assert.equal(o[script.redDot.__id__].__type__, 'cc.Node', 'redDot 应指向节点对象');
-    assert.equal(o[script.redDot.__id__]._name, 'RedDot');
+    assert.equal(o[script.redDot.__id__].__type__, '5fa5aSCCTRI/Y8zkguS79+z', 'redDot 应指向通用 RedDot 组件');
+    const dotNodeId = (o[script.redDot.__id__].node as { __id__: number }).__id__;
+    assert.equal(o[dotNodeId]._name, 'RedDot');
 });
 
 test("庆祝 F'4｜两张红点图字节相同（所以 cu_icon_dot 与 cm_red_dot 可互换）", () => {

@@ -4,7 +4,7 @@ import type { IControllerResources } from '../../framework/controller/Controller
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 
 import { ResourceScope } from '../../core/asset/ResourceScope';
-import type { ZCDeckBonuses, ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckBonuses, ZCDeckCard } from './CardLineupTypes';
 import { cardArtProvider } from './CardArtProvider';
 import type { ICardArtConfig } from './CardArtConfig';
 import { CardLineupBond } from './CardLineupBond';

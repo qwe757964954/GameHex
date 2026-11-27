@@ -1,22 +1,16 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
+import { EventMgr } from '../../framework/event/EventMgr';
 import { GameRoute } from '../../core/runtime/GameRoute';
 import { MAIN_LOADING_EVENTS, type IMainLoadingProgress } from '../main/MainLoadingEvents';
 import { normalizedProgress, postLoginProgress, POST_LOGIN_ERROR_MESSAGE } from './PostLoginContract';
+import { PostLoginEvent, type PostLoginOutput } from './PostLoginEvents';
 
 export interface IPostLoginControllerOptions {
     readonly startRatio: number;
-    readonly failed: (error: unknown) => void;
     readonly session: {
         readonly prepare: (report: (progress: { readonly ratio: number }) => void) => Promise<void>;
         readonly bootstrapIdentity: (params: unknown) => void;
         readonly initAudio: () => void;
-    };
-    readonly view: {
-        readonly setProgress: (ratio: number) => void;
-        readonly setStatus: (message: string) => void;
-    };
-    readonly navigation: {
-        readonly navigate: (route: string) => void;
     };
 }
 export class PostLoginController extends ControllerBase {
@@ -30,30 +24,36 @@ export class PostLoginController extends ControllerBase {
         this.started = true;
         this.listen(MAIN_LOADING_EVENTS.PROGRESS, this.onMainProgress);
         this.listen(MAIN_LOADING_EVENTS.FAILED, this.onMainFailed);
-        this.options.view.setStatus('正在加载游戏资源…');
-        this.options.view.setProgress(normalizedProgress(this.options.startRatio));
+        this.emitOutput({ kind: 'status', message: '正在加载游戏资源…' });
+        this.emitOutput({ kind: 'progress', ratio: normalizedProgress(this.options.startRatio) });
         try {
             this.options.session.bootstrapIdentity(params);
             this.options.session.initAudio();
             await this.options.session.prepare(progress => {
                 if (this.isDisposed) return;
-                this.options.view.setProgress(postLoginProgress(this.options.startRatio, 'session', progress.ratio));
+                this.emitOutput({ kind: 'progress', ratio: postLoginProgress(this.options.startRatio, 'session', progress.ratio) });
             });
             if (this.isDisposed) return;
             this.navigating = true;
-            this.options.navigation.navigate(GameRoute.Main);
+            this.navigate(GameRoute.Main);
         } catch (error) {
             if (this.isDisposed) return;
-            this.options.failed(error);
-            this.options.view.setStatus(POST_LOGIN_ERROR_MESSAGE);
+            this.emitOutput({ kind: 'failed', error });
+            this.emitOutput({ kind: 'status', message: POST_LOGIN_ERROR_MESSAGE });
         }
     }
     private onMainProgress({ ratio }: IMainLoadingProgress): void {
         this.ready = this.navigating && normalizedProgress(ratio) === 1;
-        this.options.view.setProgress(postLoginProgress(this.options.startRatio, 'main', ratio));
+        this.emitOutput({ kind: 'progress', ratio: postLoginProgress(this.options.startRatio, 'main', ratio) });
     }
     private onMainFailed(): void {
         this.ready = false;
-        this.options.view.setStatus(POST_LOGIN_ERROR_MESSAGE);
+        this.emitOutput({ kind: 'status', message: POST_LOGIN_ERROR_MESSAGE });
+    }
+    private navigate(route: string): void {
+        this.emitOutput({ kind: 'navigate', route });
+    }
+    private emitOutput(output: PostLoginOutput): void {
+        EventMgr.instance.emit(PostLoginEvent.Output, output, this);
     }
 }

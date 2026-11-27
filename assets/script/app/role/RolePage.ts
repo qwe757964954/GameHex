@@ -1,134 +1,106 @@
-import { _decorator, Button, Color, Component, Label, Node, sp, UITransform } from 'cc';
+import { _decorator, Button, Component, Label, Node, sp, UITransform } from 'cc';
 import { roleRepository } from './RoleRepository';
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { RoleEvent } from './RoleEvents';
 import { EventMgr } from '../../framework/event/EventMgr';
-import type { IRoleSnapshot } from './RoleTypes';
+import type { IRoleDecomposeResult, IRoleSnapshot } from './RoleTypes';
 import { RedDot } from '../common/RedDot';
 import { CmdRedDotType } from '../generated/netProto/CmdInterface';
 import { readServerRedDot } from '../rd/RdServerVar';
-import { ROLE_EQUIP_PART_COUNT } from './RoleTypes';
-import type { RoleBagTabId, RoleNavId } from './RoleTypes';
+import type { RoleBagTabId } from './RoleTypes';
 import { RoleBagPanel } from './RoleBagPanel';
+import { EquipDecomposePopup } from './EquipDecomposePopup';
+import { RoleBagTabGroup } from './RoleBagTabGroup';
 import { RoleEquipSlot } from './RoleEquipSlot';
+import { RoleNavItem } from './RoleNavItem';
 import { loadRoleBagIcon, loadRoleQualityFrame } from './RoleArtLoader';
+import { ROLE_TEXTS } from './RoleTexts';
 import { formatPowerText } from '../card/CardLineupPower';
 
 const { ccclass, property } = _decorator;
 
-/** 背包页签节点名 → tab id（prefab 既有节点名 = 真源）。 */
-const BAG_TAB_NODES: ReadonlyArray<readonly [string, RoleBagTabId]> = [
-    ['BagTabGem', 1],
-    ['BagTabEquip', 2],
-    ['BagTabItem', 3],
-];
-
-/** 设计稿顶部「宝石背包」入口（仅在宝石页签生效，装备/道具页签隐藏）。 */
-const BAG_ENTRY_GEM = 'BagBtnGem';
-
-/** 宝石「一键合成」按钮（仅在宝石页签显示）。 */
-const BAG_ENTRY_COMPOSE = 'BagBtnCompose';
-
-/** 宝石「全部/部位筛选」按钮（仅在宝石页签显示）。 */
-const BAG_ENTRY_FILTER = 'BagBtnAll';
-
-/** 未选中页签的文字色 / 描边色（设计稿：灰底深棕字；选中态白字 + 深棕描边）。 */
-const TAB_LABEL_IDLE = new Color(74, 55, 38, 255);
-const TAB_LABEL_OUTLINE = new Color(54, 34, 17, 255);
-
-/** 左侧导航节点名 → nav id。 */
-const NAV_NODES: ReadonlyArray<readonly [string, RoleNavId]> = [
-    ['NavHero', 1],
-    ['NavMilitia', 2],
-    ['NavGongMing', 3],
-    ['NavGuards', 4],
-    ['NavPreview', 5],
-    ['NavArtifact', 6],
-    ['NavLeaderSkill', 7],
-];
-
 /**
- * 主角立绘：`skel/主角铁拳/主角铁拳.prefab` 的**嵌套实例**节点名 + 待机动画名。
- *
- * 2026-11-17 换代：原来嵌的是 `units/剑圣/剑圣.prefab`（序列帧，`cc.Sprite` + `cc.Animation`，
- * **该目录同日已 `svn delete`**，别照着路径去找）。美术给了主角本体的 Spine 版（`tqzj`，动画
- * `animation` / `attack` / `idle` / `move`，skin 只有 `default`）⇒ 统一走骨骼，
- * 与其余 36 套单位同一套口径：**根节点 + 子节点 `spine`**，动作走 `setAnimation`。
- *
- * ⚠️ 仍然在 `renderSnapshot` 里**显式播一次**：`sp.Skeleton.defaultAnimation` 的自动播
- * 依赖组件 `onLoad` 的时序，而嵌套实例的 `onLoad` 时机随宿主激活走（RolePage 的 `onLoad`
- * 可能早于骨架就绪）；显式播既确定又能被断言。
- *
- * ⚠️ `setAnimation` 在骨架还没走完 `onLoad` 时返回 `null`（与 `ZCUnitView.playClip` 同一条
- * 自愈路径）⇒ 见 {@link playHeroIdle}，补一帧重试一次，不做无限重试。
- *
- * ⚠️ 立绘**挂在 `HeroIcon` 下**（不是 `Role` 的直接子节点）：嵌套实例根**不能挂 `cc.Widget`**，
- * 而屏幕比设计分辨率高时上半屏要整体贴顶 —— 所以把它收进同样贴顶的 `HeroIcon` 里，
- * 靠宿主一起走。取它必须先下 `HeroIcon` 一层（2026-09-26 iPhone X 适配时改）。
- *
- * ⚠️ 骨架原始尺寸 942.67×769（`spine` 子节点 822×1218），实例上覆盖了 `_lscale = 0.2`
- * 才和 `HeroIcon`（209×244）对得上 —— 换美术时**先看 prefab 里的覆盖，别只看 prefab 自身尺寸**。
+ * 主角待机动画名。骨架实例由 prefab 直绑到 {@link RolePage.heroSkeleton}（不再下钻 `HeroIcon/主角铁拳`），
+ * 但首播仍可能早于嵌套实例的 `onLoad` ⇒ `playHeroIdle` 在未就绪时延后一帧重试一次。
  */
-const ROLE_HERO_HOST = 'HeroIcon';
-const ROLE_HERO_NODE = '主角铁拳';
-/** 骨架子节点名（37 套单位里 36 套都是这个；`skel/yueka` 例外，见 {@link ensureInit}）。 */
-const ROLE_HERO_SPINE = 'spine';
 const ROLE_HERO_IDLE = 'idle';
 
-/**
- * 「前期建议优先提升攻击力」气泡（文案烘在 prefab 里，这里只管显隐）。
- *
- * 口径 = 老端 `TabRoleMain.showQiPao()`：**等级 ≥ 5 永不显示**；否则进页面就亮、
- * 亮 5 秒 → 灭 5 秒 → 再亮……循环闪烁（`qipaoTimer` 嵌套 setTimeout）。
- * 切走页面要清定时器（不然回调打在已销毁的组件上）。
- */
-const QIPAO_NODE = 'Qipao';
+/** 低等级攻击力提示。文案来自 prefab，定时切换显隐，页面离开时停止计时。 */
 const QIPAO_MAX_LEVEL = 5;
 const QIPAO_INTERVAL_MS = 5000;
 
 /**
- * 角色主界面（**主界面 tab 页**，挂 `ui/Role/Role.prefab` 根节点 —— 与 `CardLineup` 同构）。
+ * 主界面角色页，由 `MainTabHost` 挂载，切走时销毁。
  *
- * 本轮落地：顶部三个背包页签（宝石 / 装备 / 道具）→ 下半屏列表 `RoleBagPanel`；
- * 左侧 7 个导航未落地，点击给「功能未接入」提示，不留死按钮。
- *
- * ⚠️ **它是 tab 页，不是弹窗**（2026-09-26 山猫定）：
- *   · 由 `MainTabHost` 在「领地」tab 上 `showPage()` 实例化到 `Content` 下，切走即销毁；
- *   · 没有关闭按钮、不响应点空白、**不进 `PopupManager` 的栈**；
- *   · 生命周期用 `onLoad`（一次性接线）+ `onEnable`（每次进页面刷数据），
- *     对应弹窗时代的 `onInit` / `onOpen`。
+ * 职责边界：页面只做**组合**（把快照分发给各子组件、按意图出口切顶部功能行）；
+ * 每个可点区域由自己的组件负责 —— 页签 `RoleBagTabItem`（选中态 + 红点 + 点击，由
+ * `RoleBagTabGroup` 统一收口选中态）、导航 `RoleNavItem`（点击）、装备格 `RoleEquipSlot`
+ * （图标 / 等级 / 红点 / 点击）。
+ * 页面里不再按节点名查节点，也不再给已绑引用判空：绑错应当在 `onLoad` 当场抛。
  */
 @ccclass('RolePage')
 export class RolePage extends Component {
     static prefabPath = 'ui/Role/Role';
 
-    // ⚠️ 两个引用在 prefab 里存的是【节点】不是组件（与项目「按钮一律绑节点」的口径一致），
-    //    所以声明一律 `Node`，组件在 {@link ensureInit} 里 `getComponent` 现取并缓存。
-    //    声明成 `Label` / `RoleBagPanel` 会拿到一个 cc.Node（truthy），
-    //    然后 `.node.on(...)` 抛 `Cannot read properties of undefined (reading 'on')`。
-    @property({ type: Node, tooltip: 'BagPanel：背包列表面板节点（其上挂 RoleBagPanel）' })
-    bagPanel: Node = null!;
+    // 引用一律按【实际形态】声明：组件绑组件（RoleBagPanel / Label / sp.Skeleton / 各 item），
+    // 按钮绑【节点】（cc.Button 的 CLICK 由节点派发）。不再用 `getComponent` 现取，也不再判空。
+    @property({ type: RoleBagPanel, tooltip: 'BagPanel：背包列表面板（RoleBagPanel）' })
+    bagPanelComp: RoleBagPanel = null!;
 
-    @property({ type: Node, tooltip: 'PowerValue：战斗力数值节点（其上挂 cc.Label）' })
-    powerValue: Node = null!;
+    @property({ type: Label, tooltip: 'PowerValue：战斗力数值（Label）' })
+    powerLabel: Label = null!;
+
+    @property({ type: sp.Skeleton, tooltip: 'HeroIcon/主角铁拳/spine：主角待机骨架' })
+    heroSkeleton: sp.Skeleton = null!;
+
+    @property({ type: Node, tooltip: 'Qipao：低等级攻击力气泡（定时显隐）' })
+    qipao: Node = null!;
+
+    // 顶部功能行（applyBagChrome）：按钮按实际形态声明 —— 按钮绑【节点】（cc.Button 的
+    // CLICK 由节点派发），文案绑 Label 【组件】。运行时不再按名字取节点，也不判空：
+    // 绑错应当在 onLoad 当场抛出来，判空只会把它变成静默死按钮。
+    @property({ type: Node, tooltip: 'BagBtnGem：宝石背包 / 装备分解入口（其上挂 cc.Button）' })
+    gemEntry: Node = null!;
+
+    @property({ type: Label, tooltip: 'BagBtnGem/title：入口文案' })
+    gemEntryTitle: Label = null!;
+
+    @property({ type: Node, tooltip: 'BagBtnCompose：一键合成 / 品质筛选（其上挂 cc.Button）' })
+    composeBtn: Node = null!;
+
+    @property({ type: Label, tooltip: 'BagBtnCompose/title：按钮文案' })
+    composeTitle: Label = null!;
+
+    @property({ type: Node, tooltip: 'BagBtnAll：部位筛选 / 全选（其上挂 cc.Button）' })
+    filterBtn: Node = null!;
+
+    @property({ type: Label, tooltip: 'BagBtnAll/title：按钮文案' })
+    filterTitle: Label = null!;
+
+    /** 一键合成按钮的角标（`BagBtnCompose/com_rd`）：老端 `TabGem` 就挂在这里，监听 `RDGemCompose`。 */
+    @property({ type: RedDot, tooltip: 'BagBtnCompose/com_rd：一键合成角标（分解模式里必须归零）' })
+    composeBtnRedDot: RedDot = null!;
 
     /** 当前选中的背包页签（null = 未选中）。 */
     private activeTab: RoleBagTabId | null = null;
 
-    /** 装备栏 6 格（下标 = 部位号 − 1）。 */
-    private readonly equipSlots: RoleEquipSlot[] = [];
+    /** 背包页签组：选中态与页签红点都由它收口，页面只报「当前 tab」。 */
+    @property({ type: RoleBagTabGroup, tooltip: 'TabGroup：背包页签组（三个 RoleBagTabItem 挂在它下面）' })
+    tabGroup: RoleBagTabGroup = null!;
 
-    /** 宝石页签的红点（`BagTabGem/com_rd`，`RedDot` 组件）。 */
-    private gemTabRedDot: RedDot = null!;
+    /** 左侧导航（7 个，各自带 `navId` 并自己派发点击）。 */
+    @property({ type: [RoleNavItem], tooltip: '左侧导航：NavHero … NavLeaderSkill' })
+    navItems: RoleNavItem[] = [];
 
-    /** 缓存：BagPanel 节点上的面板组件（{@link ensureInit} 里取）。 */
-    private bagPanelComp: RoleBagPanel = null!;
+    /** 装备栏 6 格（下标 = 部位号 − 1，顺序与 `RoleEquipRedDotTable` 一致）。 */
+    @property({ type: [RoleEquipSlot], tooltip: '装备栏 6 格：Equip1 … Equip6（顺序即部位号）' })
+    equipSlots: RoleEquipSlot[] = [];
 
-    /** 缓存：主角立绘上的 `sp.Skeleton`（进页面播 idle）。 */
-    private heroSkeleton: sp.Skeleton = null!;
+    @property({ type: Node, tooltip: 'ForgeBtn：锻造入口（其上挂 cc.Button）' })
+    forgeBtn: Node = null!;
 
-    /** 缓存：PowerValue 节点上的 Label。 */
-    private powerLabel: Label = null!;
+    @property({ type: RedDot, tooltip: 'ForgeBtn/com_rd：锻造入口红点（口径同装备页签）' })
+    forgeBtnRedDot: RedDot = null!;
 
     /** 每趟 `onEnable` 递增，丢弃过期的异步结果（切走时页面可能已被销毁）。 */
     private revision = 0;
@@ -144,81 +116,124 @@ export class RolePage extends Component {
     // ============================================================
 
     protected onLoad(): void {
-        this.ensureInit();
+        // 顶部功能行 + 锻造入口：节点由 prefab 绑好，四个入口的差异只在回调里。
+        // 页签 / 导航 / 装备格的点击由各自组件负责（见类注释），页面不再遍历节点绑事件。
+        this.gemEntry.on(Button.EventType.CLICK, this.onGemEntry);
+        this.composeBtn.on(Button.EventType.CLICK, this.onCompose);
+        this.filterBtn.on(Button.EventType.CLICK, this.onFilter);
+        this.forgeBtn.on(Button.EventType.CLICK, this.onForge);
+        EventMgr.instance.on(RoleEvent.DecomposeModeChanged, this.applyBagChrome, this);
+        this.gemHeaderHeight = this.gemEntry.getComponent(UITransform).height;
+
         EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'ready' }, this);
     }
 
-    /**
-     * 每次进页面（首次激活 / 再次切回来）都刷一遍数据。
-     *
-     * ⚠️ 用 `onEnable` 而不是 `onLoad`：tab 页切走时会被 `MainTabHost` **销毁重建**，
-     * 但同一个 tab 连点两次不会重建 —— 两种情况都要保证数据是最新的。
-     */
+    /** 顶部左侧入口：宝石页签 ›「宝石背包」；装备页签 ›「装备分解」；分解模式 ›「阶数筛选」。 */
+    private onGemEntry = (): void => {
+        if (this.bagPanelComp.isDecomposing) {
+            void this.bagPanelComp.cycleDecomposeRank();
+            return;
+        }
+        if (this.activeTab === 2) {
+            void EquipDecomposePopup.open({});
+            return;
+        }
+        EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 });
+    };
+
+    /** 一键合成；分解模式里同一节点改作「品质筛选」。 */
+    private onCompose = (): void => {
+        if (this.bagPanelComp.isDecomposing) {
+            void this.bagPanelComp.cycleDecomposeQuality();
+            return;
+        }
+        EventMgr.instance.emit(RoleEvent.Intent, { kind: 'compose' });
+    };
+
+    /** 宝石部位筛选；分解模式里同一节点改作「全选」。 */
+    private onFilter = (): void => {
+        if (this.bagPanelComp.isDecomposing) {
+            this.bagPanelComp.selectAllDecompose();
+            return;
+        }
+        EventMgr.instance.emit(RoleEvent.Intent, { kind: 'gemFilter' });
+    };
+
+    private onForge = (): void => {
+        EventMgr.instance.emit(RoleEvent.Intent, { kind: 'forge' });
+    };
+
+    /** 每次激活时通知组合层刷新角色数据。 */
     protected onEnable(): void {
         EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'enabled' }, this);
     }
 
     /**
-     * 选中指定背包页签：更新底部按钮高亮，并联动控制顶部宝石专属功能按钮（一键合成/部位筛选）显隐。
+     * 选中指定背包页签：更新底部按钮高亮，并联动顶部三个功能按钮的显隐 / 文案。
+     *
+     * 装备页签常驻一个「装备分解」入口（复用 `BagBtnGem` 的位置）；
+     * 进入分解模式后同一行三个按钮变成「阶数 ≤N / 品质 ≤X / 全选」。
      */
     selectBag(tab: RoleBagTabId): void {
+        if (tab !== 2 && this.bagPanelComp.isDecomposing) this.bagPanelComp.exitDecompose(false);
         this.activeTab = tab;
-        this.applyTabLook();
-        const isGem = tab === 1;
-        const btnGem = this.node.getChildByName(BAG_ENTRY_GEM);
-        const btnCompose = this.node.getChildByName(BAG_ENTRY_COMPOSE);
-        const btnFilter = this.node.getChildByName(BAG_ENTRY_FILTER);
-        if (btnGem) btnGem.active = isGem;
-        if (btnCompose) btnCompose.active = isGem;
-        if (btnFilter) btnFilter.active = isGem;
-        this.bagPanelComp.setTopExtra(isGem ? 0 : this.gemHeaderHeight);
+        this.tabGroup.select(tab);
+        this.applyBagChrome();
     }
+
     showBag(tab: RoleBagTabId, gemEquipId = 0, gemFilterName = '全部'): Promise<void> {
-        this.node.getChildByName(BAG_ENTRY_FILTER).getChildByName('title').getComponent(Label).string = gemFilterName;
+        if (!this.bagPanelComp.isDecomposing) this.filterTitle.string = gemFilterName;
         return this.bagPanelComp.show(tab, gemEquipId);
     }
 
-    /** 仅由 onLoad 取得 prefab 引用并绑定输入。 */
-    private ensureInit(): void {
-
-        for (const [name, tab] of BAG_TAB_NODES) {
-            const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab }));
+    /** 顶部功能行的唯一显隐 / 文案出口（普通页签与分解模式共用）。 */
+    private applyBagChrome(): void {
+        if (this.bagPanelComp.isDecomposing) {
+            // 分解模式：三个按钮全部保留，改成筛选 / 全选。
+            this.gemEntry.active = true;
+            this.composeBtn.active = true;
+            this.filterBtn.active = true;
+            this.gemEntryTitle.string = ROLE_TEXTS.decomposeRank(this.bagPanelComp.decomposeRankFilter);
+            this.composeTitle.string = ROLE_TEXTS.decomposeQuality(this.bagPanelComp.decomposeQualityFilter);
+            this.filterTitle.string = ROLE_TEXTS.decomposeSelectAll;
+            this.bagPanelComp.setTopExtra(0);
+            this.updateComposeRedDot();
+            return;
         }
 
-        for (const [name, navId] of NAV_NODES) {
-            const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'nav', navId }));
+        const tab = this.activeTab;
+        const isGem = tab === 1;
+        const isEquip = tab === 2;
+        this.gemEntry.active = isGem || isEquip;
+        this.composeBtn.active = isGem;
+        this.filterBtn.active = isGem;
+        if (isGem) {
+            this.gemEntryTitle.string = ROLE_TEXTS.gemBagEntry;
+            this.composeTitle.string = ROLE_TEXTS.gemCompose;
+            this.filterTitle.string = ROLE_TEXTS.gemFilterAll;
+        } else if (isEquip) {
+            this.gemEntryTitle.string = ROLE_TEXTS.decomposeEntry;
         }
+        // 装备页签也要保留顶部这一行（分解入口在这里），只有道具页签整体上探。
+        this.bagPanelComp.setTopExtra(tab === 3 ? this.gemHeaderHeight : 0);
+        this.updateComposeRedDot();
+    }
 
-        const gemEntry = this.node.getChildByName(BAG_ENTRY_GEM)?.getComponent(Button);
-        gemEntry?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 }));
-        this.node.getChildByName(BAG_ENTRY_COMPOSE).on(Button.EventType.CLICK,
-            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'compose' }));
-        this.node.getChildByName(BAG_ENTRY_FILTER).on(Button.EventType.CLICK,
-            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'gemFilter' }));
-        this.node.getChildByName('ForgeBtn').on(Button.EventType.CLICK,
-            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'forge' }));
+    /**
+     * 一键合成角标唯一的显隐出口：只在「宝石页签 + 非分解模式」显示。
+     *
+     * ⚠️ 分解模式会把同一节点 `BagBtnCompose` 复用成「品质筛选」，
+     * 这里不归零就会把宝石合成的红点带到装备分解里。
+     */
+    private updateComposeRedDot(value = readServerRedDot(CmdRedDotType.GEM_COMPOSE)): void {
+        const visible = this.activeTab === 1 && !this.bagPanelComp.isDecomposing;
+        this.composeBtnRedDot.setRedDot(visible ? value : 0);
+    }
 
-        // prefab 已绑好，不判空：绑错应当场抛出来，而不是静默留个死界面。
-        this.bagPanelComp = this.bagPanel.getComponent(RoleBagPanel);
-        this.powerLabel = this.powerValue.getComponent(Label);
-        this.gemHeaderHeight = this.node.getChildByName(BAG_ENTRY_GEM).getComponent(UITransform).height;
-
-        // 主角立绘（`skel/主角铁拳` 嵌套实例）上的骨架 —— 它挂在 HeroIcon 下（见文件头说明）。
-        // 布局与其余 36 套单位一致：Skeleton 在子节点 `spine` 上（`skel/yueka` 例外，直接挂在根）；
-        // 这两个分支都试，别假定唯一形态。
-        const heroRoot = this.node.getChildByName(ROLE_HERO_HOST).getChildByName(ROLE_HERO_NODE);
-        this.heroSkeleton = heroRoot.getComponent(sp.Skeleton) || heroRoot.getChildByName(ROLE_HERO_SPINE).getComponent(sp.Skeleton);
-
-        // 装备栏：6 格按部位号顺序取（老端也是 `com.tm2("equipType" + 部位号)` 现取）。
-        for (let partId = 1; partId <= ROLE_EQUIP_PART_COUNT; partId += 1) {
-            this.equipSlots.push(this.node.getChildByName(`Equip${partId}`).getComponent(RoleEquipSlot));
-        }
-
-        // 红点：18 处都挂了 `RedDot`（带 spine 闪闪），**根节点保持 active**，
-        // 显隐由 `setRedDot()` 决定 —— 不在这里写 `com_rd.active`。
-        this.gemTabRedDot = this.node.getChildByName('BagTabGem').getChildByName('com_rd').getComponent(RedDot);
+    /** 分解回包（Composition 调用）：交给面板收口，奖励弹窗由 Composition 先弹。 */
+    finishDecompose(result: IRoleDecomposeResult): Promise<void> {
+        if (!this.isValid) return Promise.resolve();
+        return this.bagPanelComp.finishDecompose(result);
     }
 
     /**
@@ -251,10 +266,14 @@ export class RolePage extends Component {
         if (!this.alive || rev !== this.revision) return;
 
         // 宝石页签红点 = 服务端 `CmdRedDotType.GEM_COMPOSE`（「有宝石可合成」）。
-        // 这是服务端唯一与背包沾边的红点类型；老端其余 17 处（导航 7 个 / 页签另 2 个 /
-        // 装备 6 格 / 锻造）走的是**客户端本地表达式**，新端 `app/rd/**` 还没实现对应变量
-        // ⇒ 那些红点保持不亮（`RedDot` 默认收起），等口径定下来再接。
-        this.gemTabRedDot.setRedDot(readServerRedDot(CmdRedDotType.GEM_COMPOSE));
+        // 一键合成按钮的角标与页签同源；老端 `TabGem` 也是把 `按钮_一键合成.com_rd`
+        // 挂到 `RDGemCompose`（同一个服务端红点）—— 这里恢复对老端的对齐。
+        // 装备相关红点（装备页签 / 锻造入口 / 6 格装备）与锻造弹窗共用 `roleRepository.equipRedDots()`；
+        // 其余导航（武将 / 天赋 / 近卫…）的客户端表达式变量在新端仍为桩，红点保持不亮。
+        const gemComposeRedDot = readServerRedDot(CmdRedDotType.GEM_COMPOSE);
+        this.tabGroup.item(1).setRedDot(gemComposeRedDot);
+        this.updateComposeRedDot(gemComposeRedDot);
+        this.refreshEquipRedDots(rev).catch(error => console.warn('[RolePage] 装备红点刷新失败', error));
 
         this.showQipao();
     }
@@ -273,40 +292,45 @@ export class RolePage extends Component {
         this.scheduleOnce(() => this.playHeroIdle(retry - 1), 0);
     }
 
-    /**
-     * ⚠️ 销毁期**只停定时器，不碰任何节点**（规则 176/278）。
-     *
-     * 引擎销毁序（`node.ts::_onPreDestroyBase` L1532→L1545）：先 `children[i]._destroyImmediate()`，
-     * 再销毁自身组件 ⇒ 轮到本组件的 `onDestroy` 时，子节点 `Qipao` 已走完 `_destruct`，
-     * 它的 `_name` 被清成 `''` ⇒ `getChildByName('Qipao')` 返回 `null`，
-     * 写 `node.active` 当场抛 `Cannot set properties of null (setting 'active')`。
-     *
-     * 🔴 这个异常不是"报一行就算了"：它从 `onDestroy` 抛回 `CCObject._deferredDestroy()`
-     * （`object.ts` L173，**没有 try/catch**）⇒ 整批延迟销毁中断，本对象拿不到 `Destroyed`
-     * 标记（永远不会 `isValid === false`）、留在 `objectsToDestroy` 里每帧重炸。
-     *
-     * 收气泡已经由 {@link onDisable} 负责，且必然早于这里：`Node.destroy()` 会先同步
-     * `active = false`（`node.ts` L1367）触发一次 `onDisable`，`NodeActivator.destroyComp`
-     * 也会在调 `onDestroy` 前先 `disableComp`。语义上也不需要 —— 整棵节点树都要没了。
-     */
+    /** 子节点可能早于本组件销毁。气泡显隐在 `onDisable` 处理，此处只解除定时器和监听，避免异常中断引擎的延迟销毁。 */
     protected onDestroy(): void {
         this.clearQipaoTimer();
+        EventMgr.instance.off(RoleEvent.DecomposeModeChanged, this.applyBagChrome, this);
         EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, this);
     }
 
     protected onDisable(): void {
         // 切 tab / 关页面：把面板收掉、红点归零（`RedDot` 复用不留残影）。
+        // 引用全是 prefab 绑的（数组默认 `[]`），onDisable 又跑在 `_destruct` 之前 ⇒ 这里不判空。
         this.revision += 1;
         EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'disabled' }, this);
-        this.bagPanelComp?.hide();
+        this.bagPanelComp.hide();
         this.activeTab = null;
-        this.gemTabRedDot?.setRedDot(0);
+        this.composeBtnRedDot.setRedDot(0);
+        this.forgeBtnRedDot.setRedDot(0);
+        this.tabGroup.clearRedDots();
+        for (const slot of this.equipSlots) slot.setRedDot(0);
         this.stopQipao();
     }
 
     // ============================================================
     // 内部
     // ============================================================
+
+    /**
+     * 装备红点：页签 / 锻造入口取整页汇总，6 格取各自部位。
+     *
+     * ⚠️ 结果回来时页面可能已切走（`revision` 变了或被销毁），必须 `alive` + revision 双重校验。
+     */
+    private async refreshEquipRedDots(revision: number): Promise<void> {
+        const dots = await roleRepository.equipRedDots();
+        if (!this.alive || revision !== this.revision) return;
+        this.tabGroup.item(2).setRedDot(dots.any);
+        this.forgeBtnRedDot.setRedDot(dots.any);
+        for (let index = 0; index < this.equipSlots.length; index += 1) {
+            this.equipSlots[index].setRedDot(dots.parts[index].any);
+        }
+    }
 
     /**
      * 装备栏 6 格：图标 + 品质框 + `Lv.x`。
@@ -337,43 +361,17 @@ export class RolePage extends Component {
     }
 
     /**
-     * 点左侧导航：已落地的打开对应界面，未落地给「功能未接入」提示。
-     *
-     * ⚠️ `ROLE_NAV_READY` 只表示「这条落地了」，**打开哪个界面由这里分发** ——
-     * 别把 prefab 路径塞进表里（视图层的事归视图层）。
-     */
-    /**
-     * 页签选中观感：选中项亮橙色高亮（`hl`）+ 白字描边，其余保持灰底深棕字。
-     *
-     * 高亮 / 文字色都烘在 prefab 的静态初值里，这里只做状态切换；不再缩放节点。
-     */
-    private applyTabLook(): void {
-        for (const [name, tab] of BAG_TAB_NODES) {
-            const node = this.node.getChildByName(name);
-            const active = this.activeTab === tab;
-            const hl = node.getChildByName('hl');
-            if (hl) hl.active = active;
-            const label = node.getChildByName('title')?.getComponent(Label);
-            if (!label) continue;
-            label.color = active ? new Color(255, 255, 255, 255) : TAB_LABEL_IDLE.clone();
-            label.enableOutline = active;
-            label.outlineColor = TAB_LABEL_OUTLINE.clone();
-            label.outlineWidth = 2;
-        }
-    }
-
-    /**
      * 「前期建议优先提升攻击力」气泡：等级 ≥ 5 永不显示，否则亮 {@link QIPAO_INTERVAL_MS}
      * → 灭同样时长 → 循环（口径照抄老端 `TabRoleMain.showQiPao`，含「先灭一次再判等级」）。
      */
     private showQipao(): void {
         this.stopQipao();
-        const node = this.node.getChildByName(QIPAO_NODE);
+        // 等级够高就永不显示（先收掉再判，与老端一致）。
         if (roleRepository.roleLevel() >= QIPAO_MAX_LEVEL) return;
-        node.active = true;
+        this.qipao.active = true;
         this.qipaoTimer = setTimeout(() => {
             if (!this.alive) return;
-            node.active = false;
+            this.qipao.active = false;
             this.qipaoTimer = setTimeout(() => {
                 if (this.alive) this.showQipao();
             }, QIPAO_INTERVAL_MS);
@@ -383,17 +381,15 @@ export class RolePage extends Component {
     /**
      * 停闪烁并把气泡收掉（进页面 / 切走都要先走这步，防定时器叠加）。
      *
-     * ⚠️ 取不到节点时**直接跳过**，不是"静默兜底"：`onDisable` 有两条触发路径 ——
-     * ① 切 tab / `Node.destroy()`：先同步 `active = false`，此时子节点都还在；
-     * ② 宿主被父节点连带销毁：引擎先拆完子节点再 `disableComp`，`Qipao` 已经没了。
-     * 只有 ②会命中 `null`，写 `active` 必抛（就是本轮 `RolePage.ts:308` 那条）。
-     * 正常运行时若 `Qipao` 被改名，{@link showQipao} 里裸写的 `node.active = true` 仍会当场抛，
-     * 不会因为这里的判空而漏掉 prefab 绑定错误。
+     * ⚠️ `isValid` 不是冗余判空：`onDisable` 有两条触发路径 ——
+     * ① 切 tab / `Node.destroy()`：先同步 `active = false`，此时节点都还在；
+     * ② 宿主被父节点连带销毁：引擎先拆完子节点再 `disableComp`，`Qipao` 已走完自己的销毁，
+     *    对它写 `active` 会打断引擎的延迟销毁（就是 2026-11-17 那条崩溃）。
+     * 运行期 `Qipao` 若没绑，{@link showQipao} 里裸写的 `this.qipao.active = true` 仍会当场抛。
      */
     private stopQipao(): void {
         this.clearQipaoTimer();
-        const node = this.node.getChildByName(QIPAO_NODE);
-        if (node) node.active = false;
+        if (this.qipao?.isValid) this.qipao.active = false;
     }
 
     /** 只停定时器（销毁期用：此时子节点已先被引擎销毁，见 {@link onDestroy}）。 */

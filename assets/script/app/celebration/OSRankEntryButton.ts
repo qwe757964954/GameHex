@@ -1,4 +1,5 @@
-import { _decorator, Button, Component, Node } from 'cc';
+import { _decorator, Button, Component } from 'cc';
+import { RedDot } from '../common/RedDot';
 import { celebrationRepository } from './CelebrationRepository';
 import type { ICelebrationSnapshot } from './CelebrationRepository';
 import { OSRankPage } from './OSRankPage';
@@ -21,8 +22,8 @@ const { ccclass, property } = _decorator;
 
 @ccclass('OSRankEntryButton')
 export class OSRankEntryButton extends Component {
-    @property({ type: Node, tooltip: 'RedDot：红点占位（老端 开服冲榜.组件_红点，值 = GetRd()）' })
-    redDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'RedDot：红点（工程通用红点；值 = GetRd()）' })
+    redDot: RedDot = null!;
 
     protected onLoad(): void {
         // 监听挂在节点上：cc.Button 的 click 本来就是 node.emit 出来的，点击区在根节点 100×100。
@@ -44,6 +45,6 @@ export class OSRankEntryButton extends Component {
     applySnapshot(snapshot: ICelebrationSnapshot): void {
         // active 无条件写：prefab 烘的是 true（为了 onLoad 能跑），只翻转时写会让首次 false 短路。
         this.node.active = snapshot.enabled;
-        this.redDot.active = snapshot.rd !== 0;
+        this.redDot.setRedDot(snapshot.rd !== 0);
     }
 }

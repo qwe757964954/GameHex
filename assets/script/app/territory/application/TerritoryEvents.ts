@@ -63,11 +63,15 @@ export type TerritoryIntent =
     /**
      * 摇奖**演完**了（面板收尾 / 中途被收掉时发）。
      *
-     * 结果提示（通用 toast）挂在这里而不是回包那一刻：回包只要 100~300ms，而宝箱要演
+     * 结果提示挂在这里而不是回包那一刻：回包只要 100~300ms，而宝箱要演
      * 1.2s + 顿 + 褪白，**提示先到就等于剧透**（玩家还没看到换图就知道成了）。
      * 视图只报「这一格演完了」，成功/失败与文案都由 Model 按 `monsterBoxAttempt` 决定。
+     *
+     * `fxPlayed`：这次成功**已经由视图播了屏正中的 spine「升级成功」** ⇒ Model 不再补 toast
+     * （2026-11-25 起成功的主反馈是字特效）。只有特效没演成（预制缺失 / 加载失败 /
+     * 弹窗正在关闭）才传 `false`，让 Model 退回原来的成功文案。
      */
-    | { readonly kind: 'monsterBoxRollSettled'; readonly cellId: number };
+    | { readonly kind: 'monsterBoxRollSettled'; readonly cellId: number; readonly fxPlayed: boolean };
 export interface ITerritoryIntentEvent { readonly intent: TerritoryIntent }
 export type TerritoryViewCommand = Exclude<TerritoryModelOutput, { readonly kind: 'changed' | 'navigate' }>
     | { readonly kind: 'navigate'; readonly payload: import('./TerritoryModel').ITerritoryNavigateBattlePayload; readonly ready?: Promise<unknown> }

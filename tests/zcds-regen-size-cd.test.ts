@@ -52,8 +52,8 @@ const SKILLS: Array<{
     chain: number; card: string; name: string; levels: [number, number, number];
     statId: string; values: [number, number, number];
 }> = [
-    { chain: 100601, card: '68006', name: '孢子回流', levels: [3, 10, 22], statId: 'hpRegenPct', values: [1.5, 1.8, 2.1] },
-    { chain: 101602, card: '68016', name: '巨囊弹体', levels: [6, 16, 26], statId: 'bulletSizeScale', values: [1.6, 1.75, 1.9] },
+    { chain: 100601, card: '68006', name: '孢子回流', levels: [2, 10, 22], statId: 'hpRegenPct', values: [1.5, 1.8, 2.1] },
+    { chain: 101602, card: '68016', name: '巨囊弹体', levels: [3, 16, 26], statId: 'bulletSizeScale', values: [1.6, 1.75, 1.9] },
 ];
 
 // ── 一、配表 ──────────────────────────────────────────────────────────────────
@@ -124,7 +124,7 @@ test('102401（现「贯穿滋养」）：旧的 critRate 20/28/36（越过上�
             .sort((left, right) => Number(left.skillLevel) - Number(right.skillLevel));
         assert.deepEqual(slot.map((row) => row.statId), ['attackSpeed', 'attackSpeed', 'attackSpeed']);
         assert.deepEqual(slot.map((row) => Number(row.value)), [0.20, 0.22, 0.24]);
-        assert.deepEqual(slot.map((row) => Number(row.unlockHeroLevel)), [3, 10, 22],
+        assert.deepEqual(slot.map((row) => Number(row.unlockHeroLevel)), [2, 10, 22],
             '子链要与主链同档，否则尾巴会晚一格生效');
     }
 });

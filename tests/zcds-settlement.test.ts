@@ -1,7 +1,5 @@
-import { runtimeFixture, deferred, flush as flushRuntime } from './helpers/battle-runtime';
+import { type ITestDamageStatsPopup, runtimeFixture, deferred, flush as flushRuntime } from './helpers/battle-runtime';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
-import type { IZCBattlePopup } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
-import type { IZCDamageStatsPopup } from '../assets/script/app/zcds/application/ZCBattleRuntimeContract';
 import { ZC_BATTLE_EVENTS } from '../assets/script/app/zcds/application/ZCBattleEvents';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -234,7 +232,7 @@ test('主动撤退冻结业务，退出统一关闭统计和指南', async () =>
 });
 test('退出后迟到的统计和指南窗口立即关闭，旧意图不再导航', async () => {
     for (const event of [ZCGameUiEvent.OpenDamageStats, ZCGameUiEvent.OpenGuide]) {
-        const pending = deferred<IZCDamageStatsPopup | null>(); let closed = 0;
+        const pending = deferred<ITestDamageStatsPopup | null>(); let closed = 0;
         const h = runtimeFixture({}, false, undefined, { openDamage: () => pending.promise, openGuide: () => pending.promise });
         EventMgr.instance.emit(event); await flushRuntime(); h.dispose();
         pending.resolve({ isOpen: true, refresh() {}, close: () => closed++ }); await flushRuntime();

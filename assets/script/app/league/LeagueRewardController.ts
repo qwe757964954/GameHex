@@ -1,13 +1,15 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
 import { EventMgr } from '../../framework/event/EventMgr';
-import { LeagueRewardEvent, type ILeagueRewardIntent, type LeagueRewardAction } from './LeagueRewardEvents';
+import {
+    LeagueRewardEvent,
+    type ILeagueRewardIntent,
+    type LeagueRewardAction,
+    type LeagueRewardOutput,
+} from './LeagueRewardEvents';
 import type { ILeagueRepository, ILeagueRewardResult } from './LeagueRepository';
 
-interface ILeagueRewardControllerOptions {
-    readonly owner: object;
+export interface ILeagueRewardControllerOptions {
     readonly repository: Pick<ILeagueRepository, 'buyStoreGoods' | 'requestBargain' | 'requestTaskReward' | 'requestTaskProgressReward' | 'requestSweep'>;
-    readonly feedback: { readonly reward: (goods: CmdGoods[]) => void };
-    readonly requests: { readonly removeCaller: (caller: object) => void };
 }
 
 /** 弹窗会话持有请求与奖励展示；页面只发意图、接收刷新结果。 */
@@ -16,7 +18,6 @@ export class LeagueRewardController extends ControllerBase {
 
     constructor(context: IControllerContext, private readonly options: ILeagueRewardControllerOptions) {
         super(context, 'league-reward');
-        this.own(() => options.requests.removeCaller(this));
     }
 
     start(): void {
@@ -39,7 +40,9 @@ export class LeagueRewardController extends ControllerBase {
             this.busy = false;
         }
         if (this.isDisposed) return;
-        if (result.status === 'ok' && result.rewards.length > 0) this.options.feedback.reward(result.rewards);
+        if (result.status === 'ok' && result.rewards.length > 0) {
+            EventMgr.instance.emit(LeagueRewardEvent.Output, { kind: 'reward', rewards: result.rewards } satisfies LeagueRewardOutput, this);
+        }
         EventMgr.instance.emit(LeagueRewardEvent.Completed, { status: result.status });
     }
 

@@ -1,8 +1,9 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
+import { EventMgr } from '../../framework/event/EventMgr';
 import {
     LeagueDonateEvent,
     type ILeagueDonateIntent,
-    type ILeagueDonateViewState,
+    type LeagueDonateOutput,
 } from './LeagueDonateEvents';
 import type { LeagueDonateModel } from './LeagueDonateModel';
 import type { ILeagueRepository, ILeagueRewardResult } from './LeagueRepository';
@@ -18,19 +19,10 @@ import {
 } from './LeagueTexts';
 
 export interface ILeagueDonateControllerOptions {
-    readonly owner: object;
     readonly model: LeagueDonateModel;
     readonly repository: Pick<ILeagueRepository, 'loadDonate' | 'requestDonate'>;
-    readonly view: { readonly render: (state: ILeagueDonateViewState) => void };
-    readonly feedback: {
-        readonly tip: (text: string) => void;
-        readonly reward: (goods: CmdGoods[]) => void;
-        /** 二次确认框端口；回调由控制器自己给，视图不持有控制器。 */
-        readonly confirm: (content: string, onSure: () => void) => void;
-    };
     /** 广告播放端口；返回「是否真的看完了」，没看完绝不发包。 */
     readonly ads: { readonly play: () => Promise<boolean> };
-    readonly requests: { readonly removeCaller: (caller: object) => void };
 }
 
 /**
@@ -40,27 +32,35 @@ export interface ILeagueDonateControllerOptions {
  * `removeCaller(this)` 作废在飞请求 —— 与联盟编辑 / 创建同构。
  */
 export class LeagueDonateController extends ControllerBase {
-    private started = false;
     private busy = false;
 
     constructor(context: IControllerContext, private readonly options: ILeagueDonateControllerOptions) {
         super(context, 'league-donate');
-        this.own(() => options.requests.removeCaller(this));
     }
 
     start(): void {
-        if (this.started || this.isDisposed) return;
-        this.started = true;
         this.listen(LeagueDonateEvent.Intent, this.onIntent);
         // 组合会话晚于 view.onOpen ⇒ 首屏与取数都由这里主动推。
         this.publish();
         void this.reload();
     }
 
+    private emitOutput(output: LeagueDonateOutput): void {
+        if (this.isDisposed) {
+            return;
+        }
+        EventMgr.instance.emit(LeagueDonateEvent.Output, output, this);
+    }
+
     private readonly onIntent = (event: ILeagueDonateIntent): void => {
         if (this.busy) return;
-        if (event.kind === 'free') void this.donateFree();
-        else void this.donateByCoin();
+        if (event.kind === 'free') {
+            void this.donateFree();
+        } else if (event.kind === 'confirmCoin') {
+            this.confirmCoinDonate();
+        } else {
+            this.donateByCoin();
+        }
     };
 
     /** 读一次快照（不发包）；成功后由 `afterWrite` 再读一次，等价老端靠推送刷新。 */
@@ -82,9 +82,9 @@ export class LeagueDonateController extends ControllerBase {
      * 这里自己管 `busy` 而不是转 `sendDonate()`，否则会二次加锁把自己锁死。
      */
     private async donateFree(): Promise<void> {
-        const { model, repository, feedback, ads } = this.options;
+        const { model, repository, ads } = this.options;
         if (!model.freeAvailable) {
-            feedback.tip(LEAGUE_TIP_AD_DONATE_LIMIT);
+            this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_AD_DONATE_LIMIT });
             return;
         }
         if (!this.beginWrite()) return;
@@ -92,7 +92,7 @@ export class LeagueDonateController extends ControllerBase {
             const watched = await ads.play();
             if (this.isDisposed) return;
             if (!watched) {
-                feedback.tip(LEAGUE_TIP_FAILED);
+                this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_FAILED });
                 return;
             }
             const result = await repository.requestDonate(true, this);
@@ -100,7 +100,7 @@ export class LeagueDonateController extends ControllerBase {
         } catch (error) {
             if (!this.isDisposed) {
                 console.warn('[LeagueDonateController] 广告捐献失败', error);
-                feedback.tip(LEAGUE_TIP_FAILED);
+                this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_FAILED });
             }
         } finally {
             this.busy = false;
@@ -111,24 +111,30 @@ export class LeagueDonateController extends ControllerBase {
     /**
      * 点「金币」—— 老端 `onClickDonate()` 的三道关：次数 → 钱 → 确认。
      *
-     * 确认框的 `onSure` 是延迟触发的：会话可能已经关闭，必须在这里再判 `isDisposed`。
+     * 确认弹窗回传 `{ kind: 'confirmCoin' }` 意图；会话关闭后输入监听已卸载。
      */
     private donateByCoin(): void {
-        const { model, feedback } = this.options;
+        const { model } = this.options;
         const snapshot = model.snapshot;
         if (!snapshot) return;
         if (!snapshot.hasTimes) {
-            feedback.tip(LEAGUE_TIP_DONATE_LIMIT);
+            this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_DONATE_LIMIT });
             return;
         }
         if (!snapshot.enough) {
-            feedback.tip(fillLeagueText(LEAGUE_TIP_NOT_ENOUGH_TEMPLATE, model.coinName));
+            this.emitOutput({ kind: 'tip', text: fillLeagueText(LEAGUE_TIP_NOT_ENOUGH_TEMPLATE, model.coinName) });
             return;
         }
         const content = fillLeagueText(LEAGUE_DONATE_CONFIRM, snapshot.config.donateCost);
-        feedback.confirm(content, () => {
-            if (!this.isDisposed) void this.sendDonate(false);
-        });
+        this.emitOutput({ kind: 'confirm', content });
+    }
+
+    private confirmCoinDonate(): void {
+        const snapshot = this.options.model.snapshot;
+        if (!snapshot || !snapshot.hasTimes || !snapshot.enough) {
+            return;
+        }
+        void this.sendDonate(false);
     }
 
     /** 发一次捐献（`adv = false` 才真正会走到）。 */
@@ -140,7 +146,7 @@ export class LeagueDonateController extends ControllerBase {
         } catch (error) {
             if (!this.isDisposed) {
                 console.warn('[LeagueDonateController] 捐献请求失败', error);
-                this.options.feedback.tip(LEAGUE_TIP_FAILED);
+                this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_FAILED });
             }
         } finally {
             this.busy = false;
@@ -152,12 +158,12 @@ export class LeagueDonateController extends ControllerBase {
     private async afterWrite(result: ILeagueRewardResult): Promise<void> {
         if (this.isDisposed) return;
         if (result.status === 'ok') {
-            this.options.feedback.tip(LEAGUE_DONATE_SUCCESS);
-            if (result.rewards.length > 0) this.options.feedback.reward(result.rewards);
+            this.emitOutput({ kind: 'tip', text: LEAGUE_DONATE_SUCCESS });
+            if (result.rewards.length > 0) this.emitOutput({ kind: 'reward', goods: result.rewards });
             await this.reload();
             return;
         }
-        this.options.feedback.tip(result.status === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+        this.emitOutput({ kind: 'tip', text: result.status === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED });
     }
 
     /** 防连点：写操作在飞时直接拒掉。 */
@@ -169,6 +175,9 @@ export class LeagueDonateController extends ControllerBase {
     }
 
     private publish(): void {
-        this.options.view.render({ snapshot: this.options.model.snapshot, busy: this.busy });
+        this.emitOutput({
+            kind: 'render',
+            state: { snapshot: this.options.model.snapshot, busy: this.busy },
+        });
     }
 }

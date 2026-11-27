@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "92ad4ea0-9db3-4e1b-b659-ddcfd40398c0",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "大招技能提示特效",
+    "hasIcon": false
+  }
+}

@@ -8,6 +8,7 @@ import { ControllerBase } from '../../assets/script/framework/controller/Control
 import { ZCBattleController } from '../../assets/script/app/zcds/application/ZCBattleController';
 import { EventMgr } from '../../assets/script/framework/event/EventMgr';
 import { bundleForPath } from '../../assets/script/core/asset/BundleCatalog';
+import { ResourceScope } from '../../assets/script/core/asset/ResourceScope';
 import * as zcdsLogSwitch from '../../assets/script/app/zcds/ZCDCLogSwitch';
 
 function loadModule(path: string, resolve: (name: string) => unknown) {
@@ -48,6 +49,7 @@ export function loadBattleComposition(dependencies: Record<string, unknown>, ove
         if (name.endsWith('/GuideEvents')) return { reportGuideComplete, reportBattleGuideSettled };
         if (name === 'cc') return { Prefab: class Prefab {} };
         if (name.endsWith('/BundleCatalog')) return { bundleForPath };
+        if (name.endsWith('/ResourceScope')) return { ResourceScope };
         if (name.endsWith('/ControllerBase')) return { ControllerBase };
         if (name.endsWith('/ZCBattleController')) return { ZCBattleController };
         if (name.endsWith('/ZCBattleEntryBuilder')) return builder;
@@ -59,13 +61,15 @@ export function loadBattleComposition(dependencies: Record<string, unknown>, ove
         } };
         if (name.endsWith('/ZCBattleSettlementController')) return { ZCBattleSettlementController: class {} };
         if (name.endsWith('/BattleResultService')) return { BattleResultService: { ensureListening() {} } };
-        if (name.endsWith('/PopupDef')) return { PopupCloseReason: { Force: 3 }, PopupLayer: { SYSTEM: 1 } };
+        if (name.endsWith('/PopupDef')) return { PopupCloseReason: { Manual: 0, Force: 3 }, PopupLayer: { SYSTEM: 1 } };
         if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/ZCBattleEvents')) return { ZC_BATTLE_EVENTS };
         if (name.endsWith('/GameRoute')) return { GameRoute: { Main: 'main' } };
         if (name.endsWith('/FW')) return dependencies['../../framework/FW'] ?? { FW: { showTip() {} } };
         // 投降二次确认走通用提示框；这条夹具不验弹窗本身，只要求模块能求值。
         if (name.endsWith('/CommonTips')) return { CommonTips: { open: async () => null } };
+        //  集火提示的吐司出口（2026-11-26 第 56 批）：`Toast` 顶层 `import 'cc'`，这条夹具里只给个壳。
+        if (name.endsWith('/common/Toast')) return { Toast: { show() {} } };
         if (name.endsWith('/AudioMgr')) return { AudioMgr: { instance: { playMusic: async () => {}, stopMusic: () => {}, playSound: () => {} } } };
         if (name.endsWith('/ResConst')) return { GAME_AUDIO: {} };
         // 结算 MVP 的 `Lv.x` 读本机等级；角色仓库有自己的存储/网络依赖，这里只给个读数壳。

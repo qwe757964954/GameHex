@@ -64,7 +64,7 @@ import {
     RequestTakeDayChallengeActReward,
 } from './RequestActivityMsg';
 
-import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
+import { ACTIVITY_TABLE, ACTIVITY_TAB_TABLE, ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 采集一次界面要的全部数据。 */
 export interface IActivitySnapshot {
@@ -149,8 +149,8 @@ export class RuntimeActivityRepository implements IActivityRepository {
         const [taskRows, progressRows, tabRows, activityRows, itemRows, resourceRows] = await Promise.all([
             readRows('dayChallengeActTask'),
             readRows('dayChallengeActTaskProgress'),
-            readRows('activityTab'),
-            readRows('activity'),
+            readRows(ACTIVITY_TAB_TABLE),
+            readRows(ACTIVITY_TABLE),
             readRows(ITEM_TABLE),
             // 货币 / 属性类奖励（银币 / 金币 / 活跃度…）不在这张表里就没有图标可画
             readRows(ROLE_PROPERTY_TABLE),

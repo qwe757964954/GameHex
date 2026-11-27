@@ -89,23 +89,8 @@ export const TERRITORY_HEX_SPAWN_VICTORY_TIMING: ITerritoryHexSpawnTiming = {
 /** 见 {@link TERRITORY_HEX_SPAWN_VICTORY_TIMING}：普通 0.4 ⇒ 胜利 0.62。 */
 export const TERRITORY_HEX_SPAWN_VICTORY_SECONDS = TERRITORY_HEX_SPAWN_VICTORY_TIMING.seconds;
 
-/** 见 {@link TERRITORY_HEX_SPAWN_VICTORY_TIMING} 的表：普通 0.055 ⇒ 胜利 0.14。 */
-export const TERRITORY_HEX_SPAWN_VICTORY_STAGGER_SECONDS = TERRITORY_HEX_SPAWN_VICTORY_TIMING.stagger;
-
 /** 见同上：普通 0.3 ⇒ 胜利 0.62。 */
 export const TERRITORY_HEX_SPAWN_VICTORY_STAGGER_MAX_SECONDS = TERRITORY_HEX_SPAWN_VICTORY_TIMING.staggerMax;
-
-/** 起手缩放：普通 0.55 ⇒ 胜利 0.28（起手更小，落差更大）。 */
-export const TERRITORY_HEX_SPAWN_VICTORY_FROM_SCALE = TERRITORY_HEX_SPAWN_VICTORY_TIMING.fromScale;
-
-/** 过冲峰值：长到 `1.14` 再收回 1（普通档没有这一步）。 */
-export const TERRITORY_HEX_SPAWN_VICTORY_PEAK_SCALE = TERRITORY_HEX_SPAWN_VICTORY_TIMING.peakScale;
-
-/** 过冲峰值出现在第几成（0~1）。0.72 ⇒ 前 72% 长过头，后 28% 收回来。 */
-export const TERRITORY_HEX_SPAWN_VICTORY_PEAK_PORTION = TERRITORY_HEX_SPAWN_VICTORY_TIMING.peakPortion;
-
-/** 透明度在第几成铺满：普通 0.7 ⇒ 胜利 0.5（先亮起来、再长大）。 */
-export const TERRITORY_HEX_SPAWN_VICTORY_OPACITY_PORTION = TERRITORY_HEX_SPAWN_VICTORY_TIMING.opacityPortion;
 
 /** 某一时刻的姿态。视图直接照着写节点，不再做二次换算。 */
 export interface ITerritoryHexSpawnFrame {

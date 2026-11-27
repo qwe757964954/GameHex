@@ -22,7 +22,7 @@ import {
 import { parseRechargeItemMap } from './RechargeItemMap';
 import { RequestTakeRechargeGiftActReward } from './RequestRechargeActivityMsg';
 
-import { ITEM_TABLE } from '../../core/config/TableNames';
+import { ACTIVITY_TABLE, ACTIVITY_TAB_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 import type { INetRequestStatus } from '../../core/types/NetResult';
 import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 一次界面快照。 */
@@ -61,8 +61,8 @@ function readCmdActivities(): unknown[] {
 export class RuntimeRechargeActivityRepository implements IRechargeActivityRepository {
     async load(): Promise<IRechargeActivitySnapshot> {
         const [tabRows, activityRows, planRowArr, itemRows] = await Promise.all([
-            readRows('activityTab'),
-            readRows('activity'),
+            readRows(ACTIVITY_TAB_TABLE),
+            readRows(ACTIVITY_TABLE),
             readRows('rechargeGiftActPlan'),
             readRows(ITEM_TABLE),
         ]);

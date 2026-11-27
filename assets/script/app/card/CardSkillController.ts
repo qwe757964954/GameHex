@@ -1,4 +1,5 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
+import { EventMgr } from '../../framework/event/EventMgr';
 import type { ICardRepository, CardSkillListData, UpgradeHeroSkillResult } from './CardRepository';
 import type {
     CardSkillListPresentation,
@@ -7,7 +8,7 @@ import type {
 } from './CardPresentations';
 import { resolveCardSkills, resolveSkillLevel, skillLevelRow, skillLevelUnlocked, skillMaxLevel } from './CardSkillList';
 import type { ZCArmySkill } from './CardSkillList';
-import { CardPopupEvent } from './CardPopupEvents';
+import { CardPopupEvent, type CardSkillOutput } from './CardPopupEvents';
 
 /** 一行技能的会话状态：技能本体 + 服务端确认档 + 当前（预览）档位。 */
 interface SkillRowState {
@@ -19,19 +20,9 @@ interface SkillRowState {
 }
 
 export interface ICardSkillControllerOptions {
-    readonly owner: object;
     /** 所选英雄与技能。 */
     readonly data: ICardSkillOpenData;
     readonly repository: Pick<ICardRepository, 'loadSkillList' | 'upgradeHeroSkill'>;
-    readonly view: {
-        /** 只读 ViewState；未加载完传 `null`。 */
-        readonly render: (state: CardSkillListPresentation | null) => void;
-        readonly close: () => void;
-        /** 一次性展示命令：文案由 View 决定，Controller 不碰 Toast / cc。 */
-        readonly notify: (kind: 'offline' | 'failed') => void;
-    };
-    readonly requests: { readonly removeCaller: (caller: object) => void };
-    readonly failed: (error: unknown) => void;
 }
 
 /** 单技能会话由组合层持有，关闭时解除意图与在途请求。 */
@@ -44,25 +35,20 @@ export class CardSkillController extends ControllerBase {
     private phase: 'idle' | CardSkillUpgradePhase = 'idle';
     private loaded = false;
     private revision = 0;
-    private started = false;
     private skillData: CardSkillListData | null = null;
 
     constructor(context: IControllerContext, private readonly options: ICardSkillControllerOptions) {
         super(context, 'card-skill');
         this.heroId = Math.floor(Number(options.data.heroId) || 0);
         this.cardId = String(this.heroId);
-        //  在途请求的 caller 是本控制器；组合层 dispose 时统一解除。
-        this.own(() => options.requests.removeCaller(this));
     }
 
     async start(): Promise<void> {
-        if (this.started || this.isDisposed) return;
-        this.started = true;
         this.listen(CardPopupEvent.SkillIntent, this.onUpgradeIntent);
         if (!Number.isSafeInteger(this.heroId) || this.heroId <= 0
             || !Number.isSafeInteger(this.options.data.skillId) || this.options.data.skillId <= 0) {
-            this.options.failed(new Error('[CardSkillController] 缺少合法 heroId / skillId'));
-            this.options.view.close();
+            this.emitOutput({ kind: 'failed', error: new Error('[CardSkillController] 缺少合法 heroId / skillId') });
+            this.emitOutput({ kind: 'close' });
             return;
         }
         this.rows = [];
@@ -74,8 +60,15 @@ export class CardSkillController extends ControllerBase {
         await this.refresh();
     }
 
+    private emitOutput(output: CardSkillOutput): void {
+        if (this.isDisposed) {
+            return;
+        }
+        EventMgr.instance.emit(CardPopupEvent.SkillOutput, output, this);
+    }
+
     private publish(): void {
-        this.options.view.render(this.buildPresentation());
+        this.emitOutput({ kind: 'render', state: this.buildPresentation() });
     }
 
     private buildPresentation(): CardSkillListPresentation | null {
@@ -121,7 +114,7 @@ export class CardSkillController extends ControllerBase {
         try {
             data = await this.options.repository.loadSkillList(this.heroId);
         } catch (error) {
-            this.options.failed(error);
+            this.emitOutput({ kind: 'failed', error });
         }
         if (this.isDisposed || revision !== this.revision) return;
         if (!data) {
@@ -132,8 +125,8 @@ export class CardSkillController extends ControllerBase {
         const skills = resolveCardSkills(data.table, data.skillIds, this.cardId)
             .filter(skill => skill.skillId === this.options.data.skillId);
         if (skills.length === 0) {
-            this.options.failed(new Error('[CardSkillController] 技能不属于当前英雄或缺少配置'));
-            this.options.view.close();
+            this.emitOutput({ kind: 'failed', error: new Error('[CardSkillController] 技能不属于当前英雄或缺少配置') });
+            this.emitOutput({ kind: 'close' });
             return;
         }
         this.skillData = data;
@@ -151,7 +144,9 @@ export class CardSkillController extends ControllerBase {
     }
 
     private onUpgradeIntent(): void {
-        void this.step(this.options.data.skillId, 1).catch(error => this.options.failed(error));
+        void this.step(this.options.data.skillId, 1).catch(error => {
+            this.emitOutput({ kind: 'failed', error });
+        });
     }
 
     /**
@@ -205,7 +200,7 @@ export class CardSkillController extends ControllerBase {
             row.level = row.serverLevel;
             this.phase = result.kind;
             this.publish();
-            this.options.view.notify(result.kind);
+            this.emitOutput({ kind: 'notify', status: result.kind });
             return;
         }
         //  服务端确认档优先，不猜 `target`：服务端可能连升 / 只升半档。

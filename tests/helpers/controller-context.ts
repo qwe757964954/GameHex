@@ -1,7 +1,7 @@
 import { ControllerBase } from '../../assets/script/framework/controller/ControllerBase';
 import type { GameContext } from '../../assets/script/core/runtime/GameContext';
 
-export function createControllerContext(): GameContext {
+export function createControllerContext(overrides: Partial<GameContext> = {}): GameContext {
     return {
         assets: {
             load: async (_path, Type) => new Type(), loadDir: async () => [], has: async () => true,
@@ -9,6 +9,7 @@ export function createControllerContext(): GameContext {
         configs: { initialize: async () => {}, getTable: async () => [] },
         sessionAssets: { ready: true, prepare: async () => {}, clear() {} },
         network: { requestJson: async () => { throw new Error('Unexpected network request'); } },
+        ...overrides,
     };
 }
 

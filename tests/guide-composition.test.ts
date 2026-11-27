@@ -22,7 +22,63 @@ class FakeMainTaskEntry {
     static guideUnlocked = true;
 }
 
-function fixture(waitForDialogs = false, existingReward = false, page: 'battle' | 'card' | 'territory' = 'battle', existingGoal = false, tabsReady = true, mapReady = true) {
+const TOP_ENTRY_SIBLING_NAMES = [
+    'EntryBar', 'Friend', 'Mail', 'Rank', 'Invite', 'Arrow',
+    'FriendLabel', 'MailLabel', 'RankLabel', 'InviteLabel',
+] as const;
+
+interface FixtureOptions {
+    withTopToggle?: boolean;
+    withTopSiblings?: boolean;
+    missingCanvas?: boolean;
+    missingView?: boolean;
+    startFails?: boolean;
+    resolveInRender?: boolean;
+    steps?: object[];
+}
+
+function loadMainTopHudToggle() {
+    const exports: Record<string, any> = {};
+    class FakeComponent {}
+    class FakeNode {}
+    class FakeButton {
+        static EventType = { CLICK: 'click' };
+    }
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/main/MainTopHudToggle.ts', 'utf8'), {
+        compilerOptions: {
+            module: ts.ModuleKind.CommonJS,
+            target: ts.ScriptTarget.ES2020,
+            experimentalDecorators: true,
+        },
+    }).outputText, {
+        exports,
+        require: (path: string) => {
+            assert.equal(path, 'cc');
+            return {
+                _decorator: {
+                    ccclass: () => (target: unknown) => target,
+                    property: () => () => {},
+                },
+                Button: FakeButton,
+                Component: FakeComponent,
+                Node: FakeNode,
+            };
+        },
+    });
+    return exports.MainTopHudToggle as new () => Record<string, any>;
+}
+
+const RealMainTopHudToggle = loadMainTopHudToggle();
+
+function fixture(
+    waitForDialogs = false,
+    existingReward = false,
+    page: 'battle' | 'card' | 'territory' = 'battle',
+    existingGoal = false,
+    tabsReady = true,
+    mapReady = true,
+    opts: FixtureOptions = {},
+) {
     class ShowRewardPage {}
     class CardUpgradePage { guideCardId = ''; }
     // 领地宝箱演出链路上的两个全屏页 + 演出窗口事件（`GuideComposition` 靠它们判断「该让位」）。
@@ -71,7 +127,13 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
     let destroys = 0, starts = 0, stops = 0, hidden = 0, rendered = 0, taskRefreshes = 0;
     let renderedFocus = '';
     const notifications: string[] = [];
-    let render!: (state: object) => void;
+    let controllerRef: object | null = null;
+    const render = (state: object, completedStepId?: string): void => {
+        const output = completedStepId
+            ? { kind: 'render', state, completedStepId }
+            : { kind: 'render', state };
+        EventMgr.instance.emit(GuideEvent.Output, output, controllerRef!);
+    };
     let focus!: (key: string) => { node: object; shape: string } | null;
     const anchors = [
         { key: 'Battle/DrawnCard', shownAt: 2, node: { activeInHierarchy: true } },
@@ -81,28 +143,48 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         { key: 'CardDetail/BtnUpgrade', shownAt: 0, node: { activeInHierarchy: true } },
     ];
     const view = {
-        node: { destroy() { destroys++; } },
+        node: {
+            isValid: true,
+            destroy() { destroys++; },
+        },
         setFocusProvider(provider: typeof focus) { focus = provider; },
-        initialize() {}, hide() { hidden++; }, render(state: { focusNode: string }) { rendered++; renderedFocus = state.focusNode; },
+        initialize() {},
+        hide() { hidden++; },
+        render(state: { focusNode: string }) {
+            rendered++;
+            renderedFocus = state.focusNode;
+            if (opts.resolveInRender && state.focusNode) focus(state.focusNode);
+        },
     };
     class FakeGuideController {
-        constructor(_context: object, options: { view: { render: typeof render } }) { render = options.view.render; }
-        start() { starts++; return true; }
+        constructor() { controllerRef = this; }
+        start() { starts++; return !opts.startFails; }
         notify(name: string, arg?: string) { notifications.push(arg === undefined ? name : `${name}:${arg}`); }
         dispose() { stops++; }
     }
+    const instantiatedNode = {
+        isValid: true,
+        active: true,
+        destroy() { destroys++; },
+        getComponent: () => opts.missingView ? null : view,
+    };
     const imports: Record<string, object> = {
-        cc: { Prefab: class {}, instantiate: () => ({ ...view.node, getComponent: () => view }) },
+        cc: { Prefab: class {}, instantiate: () => instantiatedNode },
         ControllerBase: { ControllerBase },
         GuideController: { GuideController: FakeGuideController },
         // 门控按**表序**判「走到第几步」，桩里必须是真实 stepId 序列（第 26 条）。
-        GuideLoader: { loadGuideSteps: async () => GUIDE_STEP_IDS.map(stepId => ({ stepId })), loadGuideDialog: () => dialogs, loadGuidePortraits: async () => new Map() },
+        GuideLoader: {
+            loadGuideSteps: async () => opts.steps ?? GUIDE_STEP_IDS.map(stepId => ({ stepId })),
+            loadGuideDialog: () => dialogs,
+            loadGuidePortraits: async () => new Map(),
+        },
         GuideStorageAdapter: { createGuidePersistence: () => ({ store: {}, outbox: {} }) },
         GuideGateway: { GameNetGuideGateway: class {} },
         GuideDialogView: { GuideDialogView: class {} }, GuideFocusAnchor: { GuideFocusAnchor: class {} },
         MainTabHost: { MainTabHost: class {}, MainTab: { Hero: 'hero', Territory: 'territory' } }, FW: { FW: {} },
         CardLineupPage: { CardLineupPage },
         CardUpgradePage: { CardUpgradePage }, GuideEvents: { GuideEvent },
+        MainTopHudToggle: { MainTopHudToggle: RealMainTopHudToggle },
         ViewLifecycle: { VIEW_LIFECYCLE }, PopupManager: { PopupManager: { inst: {
             openedPopups,
             get: (type: new () => object) => openedPopups.find(popup => popup instanceof type) ?? null,
@@ -143,17 +225,55 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         getGuideTabNode: (tab: string) => tabsReady ? (tab === 'territory' ? territoryTab : cardTab) : null };
     // 常驻 GM 入口挂在 `Canvas` 上（不在 tab 页里），也压在右上角那一片。
     const gmButton = { name: 'GMButton', isValid: true, active: true, children: [] as object[], parent: null as object | null };
-    const canvas = { isValid: true, addChild() {}, getComponentsInChildren: () => anchors,
-        getComponentInChildren: () => tabHost, getChildByName: () => gmButton };
+    const procedureNode = { name: 'Procedure', isValid: true, active: true, children: [] as object[], parent: null as object | null };
+    const popupNode = { name: 'Popup', isValid: true, active: true, children: [] as object[], parent: null as object | null };
+    const canvasChildren: object[] = [procedureNode, popupNode, gmButton];
+    const canvas = {
+        isValid: true,
+        children: canvasChildren,
+        addChild(child: object) { canvasChildren.push(child); },
+        insertChild(child: object, index: number) { canvasChildren.splice(index, 0, child); },
+        getComponentsInChildren: () => anchors,
+        getComponentInChildren: () => tabHost,
+        getChildByName: (name: string) => name === 'GMButton' ? gmButton : null,
+    };
     // 页面里的常驻 HUD：对话步要连它们一起收（顶栏 / 底部挂件 / 快速寻敌）。
     const hudNode = (name: string) => ({ name, isValid: true, active: true, children: [] as object[], parent: null as object | null });
-    const topHud = hudNode('TopHud');
+    const topToggle: Record<string, any> | null = opts.withTopToggle ? new RealMainTopHudToggle() : null;
+    const topHud = {
+        ...hudNode('TopHud'),
+        getComponent: (type: unknown) => type === RealMainTopHudToggle ? topToggle : null,
+    };
     const bottomHud = hudNode('BottomHud');
     const beginGame = hudNode('BeginGame');
     // 右上入口排（好友 / 邮件 / 排行榜 / 邀请）：5-4 之前要收，但左上玩家卡与资源条要留着。
-    const entryBar = hudNode('EntryBar');
-    topHud.children.push(entryBar);
-    entryBar.parent = topHud;
+    const topEntries: Record<string, any> = {};
+    const entryNames = (opts.withTopToggle || opts.withTopSiblings) ? TOP_ENTRY_SIBLING_NAMES : (['EntryBar'] as const);
+    for (const name of entryNames) {
+        const node: Record<string, any> = {
+            ...hudNode(name),
+            angle: 0,
+            on() {},
+            off() {},
+        };
+        topEntries[name] = node;
+        topHud.children.push(node);
+        node.parent = topHud;
+    }
+    const entryBar = topEntries.EntryBar;
+    if (topToggle) {
+        topToggle.entryBar = topEntries.EntryBar;
+        topToggle.friend = topEntries.Friend;
+        topToggle.mail = topEntries.Mail;
+        topToggle.rank = topEntries.Rank;
+        topToggle.invite = topEntries.Invite;
+        topToggle.friendLabel = topEntries.FriendLabel;
+        topToggle.mailLabel = topEntries.MailLabel;
+        topToggle.rankLabel = topEntries.RankLabel;
+        topToggle.inviteLabel = topEntries.InviteLabel;
+        topToggle.arrow = { node: topEntries.Arrow };
+        topToggle.onEnable();
+    }
     // 任务入口：8-1 之前单独收着（它在 BottomHud 里，5-4 之后随父节点一起露出来）。
     // `refresh()` 照抄真实 `applySnapshot` 的显隐口径（`snapshot.visible && guideUnlocked`）：
     // `taskConfigured=false` 模拟「没配任务 / 已领完」⇒ 入口自己关回去，组合层据此走代开兜底。
@@ -161,10 +281,18 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
     // `refresh()` 真实实现是 `async`（读表 + 读缓存）⇒ 落地前有几帧空窗。`taskRefreshPending`
     // 让夹具停在那一拍，验「解锁时先把入口立起来，不等快照」。
     let taskRefreshPending = false;
+    let finishTaskRefresh: (() => void) | null = null;
     const mainTaskEntry = { ...hudNode('MainTaskEntry'),
         getComponent: () => ({ refresh() {
             taskRefreshes += 1;
-            if (taskRefreshPending) return new Promise<void>(() => {});
+            if (taskRefreshPending) {
+                return new Promise<void>(resolve => {
+                    finishTaskRefresh = () => {
+                        mainTaskEntry.active = taskConfigured && FakeMainTaskEntry.guideUnlocked;
+                        resolve();
+                    };
+                });
+            }
             mainTaskEntry.active = taskConfigured && FakeMainTaskEntry.guideUnlocked;
         } }) };
     bottomHud.children.push(mainTaskEntry);
@@ -174,14 +302,18 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
     const cardPage = new CardLineupPage();
     const arena = {
         name: 'ArenaRoot', isValid: true, active: true, children: [topHud, bottomHud, beginGame],
-        scene: { getChildByName: () => canvas },
+        scene: { getChildByName: () => opts.missingCanvas ? null : canvas },
         getComponent: (type: unknown) => page === 'card' && type === CardLineupPage ? cardPage : null,
     };
     const mapTile = { activeInHierarchy: true };
     // 关卡格子上的「1-1」编号气泡：引导要把它和地块一起圈进光圈（第 17 条）。
     const levelBubble = { activeInHierarchy: true };
+    let mapFocusQueries = 0;
     const territoryView = page === 'territory' ? {
-        getGuideFocusNode: (key: string) => key.startsWith('Map/') ? mapTile : null,
+        getGuideFocusNode: (key: string) => {
+            mapFocusQueries += 1;
+            return key.startsWith('Map/') ? mapTile : null;
+        },
         getGuideFocusExtraNodes: (key: string) => key.startsWith('Map/Level_') ? [levelBubble] : [],
         // 「等地图首帧」的兜底计时（第 23 条）走领地页的 `Component.scheduleOnce`；夹具什么都不做 ——
         // 真实链路里它 8s 后才补画一次，用例靠显式 `presentMap()` 推动，不靠计时。
@@ -195,13 +327,19 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         setImmediate(() => EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'presented' }, territoryView));
     }
     return { composition, anchors, notifications, revealedCards, scrollLocks, cardTab, territoryTab, mapTile, levelBubble, ShowRewardPage, HeroObtainPage, firstReward,
-        navBar, topHud, bottomHud, beginGame, gmButton, entryBar, mainTaskEntry,
+        navBar, topHud, bottomHud, beginGame, gmButton, entryBar, topEntries, topToggle, mainTaskEntry,
+        canvasChildren, guideNode: instantiatedNode,
         taskRefreshes: () => taskRefreshes,
         taskGuideUnlocked: () => FakeMainTaskEntry.guideUnlocked,
+        mapFocusQueries: () => mapFocusQueries,
         /** 模拟「没有可展示的主线任务」：`refresh()` 会把入口关回去。 */
         setTaskConfigured: (value: boolean) => { taskConfigured = value; },
         /** 让 `refresh()` 停在未决状态，模拟「快照还在路上」那几帧。 */
         setTaskRefreshPending: (value: boolean) => { taskRefreshPending = value; },
+        finishTaskRefresh: () => {
+            finishTaskRefresh?.();
+            finishTaskRefresh = null;
+        },
         presentMap: () => EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'presented' }, territoryView),
         openCard(id: string) {
             const popup = new CardUpgradePage(); popup.guideCardId = id;
@@ -216,7 +354,8 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         finishGoal: () => finishGoal(), goalCounts: () => ({ requests: goalRequests, cancels: goalCancels, opened: openedPopups.includes(goalPopup) }),
         reopenGoalManually: () => { openedPopups.splice(openedPopups.indexOf(goalPopup), 1, new MainTaskDetailPage()); },
         finishDialogs: () => finishDialogs({ groups: new Map() }),
-        render: (state: object) => render(state), focus: (key: string) => focus(key),
+        render: (state: object, completedStepId?: string) => render(state, completedStepId),
+        focus: (key: string) => focus(key),
         renderedFocus: () => renderedFocus,
         navVisible: () => navBar.active,
         toasts: () => toasts,
@@ -529,18 +668,23 @@ test('奖励弹窗开着时兜底计时不许挂（2.6s 到点会把 8-1 放到�
     assert.equal(f.pendingTimers(), 0, '销毁后不许留悬挂计时');
 });
 
-test('8-1 报「打开主线任务」那一下弹【新手引导完成，获得奖励】，引导走完后再开面板不弹', async () => {
+test('8-1 真实完成那一下弹【新手引导完成，获得奖励】，重复播报或引导走完后再开面板不弹', async () => {
     const f = fixture(false, false, 'territory');
     try {
         await tick();
         f.render(REWARD_HOLD_STATE);
-        reportGuideComplete('pageOpened', 'task');
+        const doneState = { stepId: '', finished: true, focusNode: '', completeCond: '' };
+        // 非 8-1 完成事件不应触发完成提示。
+        f.render(REWARD_HOLD_STATE, '7-1');
+        assert.deepEqual(f.toasts(), []);
+        // 8-1 真实完成时 Controller 通过 Output.completedStepId 通知。
+        f.render(doneState, '8-1');
         assert.deepEqual(f.toasts(), [GUIDE_TEXTS.finishRewardTip]);
         assert.equal(GUIDE_TEXTS.finishRewardTip, '新手引导完成，获得奖励');
-        // 引导已结束：`MainTaskDetailPage.onOpen` 之后每次开面板都会再报一次，不许每次都弹。
-        f.render({ stepId: '', finished: true, focusNode: '', completeCond: '' });
+        // 重登续同步或重开任务面板都不许再次弹窗。
+        f.render(doneState);
         reportGuideComplete('pageOpened', 'task');
-        assert.deepEqual(f.toasts(), [GUIDE_TEXTS.finishRewardTip], '引导走完后再开任务面板不许再弹');
+        assert.deepEqual(f.toasts(), [GUIDE_TEXTS.finishRewardTip], '引导走完后再开任务面板或重渲染不许再弹');
     } finally { f.composition.dispose(); }
 });
 
@@ -783,4 +927,166 @@ test('主界面 HUD 按引导进度解锁：5-4 之前一律不显示（领奖�
         assert.equal(f.entryBar.active, true);
         assert.equal(f.taskGuideUnlocked(), true);
     } finally { f.composition.dispose(); }
+});
+
+test('5-4 之前即使 TopHud 带真实 MainTopHudToggle 并被恢复激活，9 个兄弟入口节点也全部保持隐藏；6-1 后一并恢复', async () => {
+    const withToggle = fixture(false, false, 'territory', false, true, true, { withTopToggle: true });
+    try {
+        await tick();
+        withToggle.render({ finished: false, stepId: '2-3', focusNode: '' });
+        for (const name of TOP_ENTRY_SIBLING_NAMES) {
+            assert.equal(withToggle.topEntries[name].active, false, `5-4 之前 ${name} 必须隐藏`);
+        }
+        // 领奖弹窗让位会把 TopHud 翻回可见，引擎随之触发 MainTopHudToggle.onEnable()；不得把兄弟节点翻回可见。
+        const reward = openRewardPopup(withToggle);
+        assert.equal(withToggle.topHud.active, true);
+        withToggle.topToggle!.onEnable();
+        for (const name of TOP_ENTRY_SIBLING_NAMES) {
+            assert.equal(withToggle.topEntries[name].active, false, `TopHud 重激活后 ${name} 仍不得露出`);
+        }
+        closeRewardPopup(reward);
+        withToggle.render({ finished: false, stepId: '6-1', focusNode: '' });
+        for (const name of TOP_ENTRY_SIBLING_NAMES) {
+            assert.equal(withToggle.topEntries[name].active, true, `6-1 解锁后 ${name} 应恢复可见`);
+        }
+    } finally { withToggle.composition.dispose(); }
+
+    const fallback = fixture(false, false, 'territory', false, true, true, { withTopSiblings: true });
+    try {
+        await tick();
+        fallback.render({ finished: false, stepId: '2-3', focusNode: '' });
+        for (const name of TOP_ENTRY_SIBLING_NAMES) {
+            assert.equal(fallback.topEntries[name].active, false, `无 Toggle 兜底也应隐藏 ${name}`);
+        }
+        fallback.render({ finished: false, stepId: '6-1', focusNode: '' });
+        for (const name of TOP_ENTRY_SIBLING_NAMES) {
+            assert.equal(fallback.topEntries[name].active, true, `无 Toggle 兜底在 6-1 后应恢复 ${name}`);
+        }
+    } finally { fallback.composition.dispose(); }
+});
+
+test('冷启动 finished=true 且无任务配置时不强制点亮 MainTaskEntry，也不自动弹出 MainTaskDetailPage', async () => {
+    const f = fixture(false, false, 'territory');
+    try {
+        await tick();
+        f.setTaskConfigured(false);
+        f.mainTaskEntry.active = false;
+        f.render({ finished: true, stepId: '', focusNode: '', completeCond: '' });
+        await tick();
+        assert.equal(f.taskGuideUnlocked(), true);
+        assert.equal(f.taskRefreshes(), 1);
+        assert.equal(f.mainTaskEntry.active, false);
+        assert.equal(f.goalCounts().requests, 0);
+    } finally { f.composition.dispose(); }
+});
+
+test('8-1 无任务配置且奖励弹窗或异步快照切换态未落定时，不越权弹出 MainTaskDetailPage', async () => {
+    const deferred = fixture(false, true, 'territory');
+    try {
+        await tick();
+        deferred.setTaskConfigured(false);
+        deferred.render(REWARD_HOLD_STATE);
+        await tick();
+        assert.equal(deferred.goalCounts().requests, 0, '奖励弹窗未关前禁止自动弹出主线任务面板');
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, deferred.firstReward);
+        await tick();
+        assert.equal(deferred.goalCounts().requests, 1, '奖励弹窗关闭后才允许代开兜底');
+    } finally { deferred.composition.dispose(); }
+
+    const stale = fixture(false, false, 'territory');
+    try {
+        await tick();
+        stale.setTaskConfigured(false);
+        stale.setTaskRefreshPending(true);
+        stale.render(REWARD_HOLD_STATE);
+        stale.render({ finished: true, stepId: '', focusNode: '', completeCond: '' });
+        stale.finishTaskRefresh();
+        await tick();
+        assert.equal(stale.goalCounts().requests, 0, 'refresh 期间已离开 8-1，不再代开面板');
+    } finally { stale.composition.dispose(); }
+});
+
+test('syncDialogHud 过渡步恢复 BottomNav 且源码不使用 [...this.hiddenHud]', async () => {
+    const source = readFileSync('assets/script/app/bootstrap/guide/GuideComposition.ts', 'utf8');
+    assert.equal(source.includes('[...this.hiddenHud]'), false);
+    const f = fixture(false, false, 'territory');
+    try {
+        await tick();
+        f.render({ stepId: '6-1', finished: false, focusNode: 'Map/Level_1', completeCond: 'tileFlipped:1' });
+        assert.equal(f.navVisible(), false);
+        f.render({ stepId: '6-2', finished: false, focusNode: 'Main/CardEntry', completeCond: 'pageOpened:card' });
+        assert.equal(f.navVisible(), true);
+    } finally { f.composition.dispose(); }
+});
+
+test('6-1 门控解锁时保留本来就是隐藏态的 BeginGame，不强行设为可见', async () => {
+    const f = fixture(false, false, 'territory');
+    try {
+        await tick();
+        f.beginGame.active = false;
+        f.render({ stepId: '2-3', finished: false, focusNode: '' });
+        f.render({ stepId: '6-1', finished: false, focusNode: '' });
+        assert.equal(f.beginGame.active, false);
+    } finally { f.composition.dispose(); }
+});
+
+test('启动中止（空步骤表 / 缺少 Canvas / 缺少 GuideDialogView / start 失败）清理节点并放行 MainTaskEntry', async () => {
+    const emptySteps = fixture(false, false, 'territory', false, true, true, { steps: [] });
+    try {
+        FakeMainTaskEntry.guideUnlocked = false;
+        await tick();
+        assert.equal(emptySteps.counts().starts, 0);
+        assert.equal(emptySteps.counts().stops, 0);
+        assert.equal(emptySteps.taskGuideUnlocked(), true);
+        emptySteps.render({ stepId: '1-1', finished: false, focusNode: '' });
+        assert.equal(emptySteps.counts().rendered, 0, '中止销毁后不再响应 Output 事件');
+    } finally { emptySteps.composition.dispose(); }
+
+    const noCanvas = fixture(false, false, 'territory', false, true, true, { missingCanvas: true });
+    try {
+        await tick();
+        assert.equal(noCanvas.counts().starts, 0);
+        assert.equal(noCanvas.counts().stops, 0);
+        assert.equal(noCanvas.taskGuideUnlocked(), true);
+    } finally { noCanvas.composition.dispose(); }
+
+    const noView = fixture(false, false, 'territory', false, true, true, { missingView: true });
+    try {
+        await tick();
+        assert.equal(noView.counts().starts, 0);
+        assert.equal(noView.counts().destroys, 1);
+        assert.equal(noView.counts().stops, 0);
+        assert.equal(noView.taskGuideUnlocked(), true);
+    } finally { noView.composition.dispose(); }
+
+    const startFail = fixture(false, false, 'territory', false, true, true, { startFails: true });
+    try {
+        FakeMainTaskEntry.guideUnlocked = false;
+        await tick();
+        assert.equal(startFail.counts().starts, 1);
+        assert.equal(startFail.counts().stops, 1);
+        assert.equal(startFail.counts().destroys, 1);
+        assert.equal(startFail.taskGuideUnlocked(), true);
+    } finally { startFail.composition.dispose(); }
+});
+
+test('GuideDialog 挂载在 Canvas 时插入 GMButton 之前，且单次渲染只查一次地图焦点并锁定 6-3 回退列表拖拽', async () => {
+    const territory = fixture(false, false, 'territory', false, true, true, { resolveInRender: true });
+    try {
+        await tick();
+        const guideIndex = territory.canvasChildren.indexOf(territory.guideNode);
+        const gmIndex = territory.canvasChildren.indexOf(territory.gmButton);
+        assert.ok(guideIndex >= 0);
+        assert.ok(guideIndex < gmIndex, 'GuideDialog 必须排在 GMButton 之前');
+        territory.render({ stepId: '6-1', finished: false, focusNode: 'Map/Level_1', completeCond: 'tileFlipped:1' });
+        assert.equal(territory.mapFocusQueries(), 1, 'view.render 与 syncDialogHud 不得重复查地图焦点');
+    } finally { territory.composition.dispose(); }
+
+    const card = fixture(false, false, 'card', false, true, true, { resolveInRender: true });
+    try {
+        await tick();
+        card.render({ stepId: '6-3', finished: false, focusNode: 'CardDetail/BtnUpgrade', completeCond: 'cardLevelUp:68001' });
+        assert.equal(card.renderedFocus(), 'CardList/Card_68001');
+        assert.equal(card.scrollLocks.at(-1), true, '6-3 详情页未开回退到目标卡时必须锁定卡库拖拽');
+    } finally { card.composition.dispose(); }
 });

@@ -1,5 +1,6 @@
 /**
- * 第 7 批：破阵投枪 5 条（100701 / 100901 / 101802 / 102702 / 103302）。
+ * 第 7 批：破阵术 5 条（100701 / 100901 / 101802 / 102702 / 103302）。
+ * 🔴 2026-11-25 设计案统一命名：「破阵投枪」→「破阵术」（投枪仍是对外形态，只是名字不再挂武器）。
  *
  * 机制口径（设计案 P 列原文）：
  *   「触发时把本次普攻**整份换成弹道** —— 只换 mode / 弹速 / 弹体特效，**不改 attackRange**」。
@@ -29,7 +30,12 @@ const REMOTE = 'assets/remoteRef';
 const CLIENT = 'D:/Alan/Project/POW/doc/塔防数据配置/json/client';
 
 function remoteRows(name: string): Array<Record<string, unknown>> {
-    const source = JSON.parse(readFileSync(`${REMOTE}/${name}.json`, 'utf8')) as { k: string[]; v: unknown[][] };
+    //  两种落盘形态都要吃：`armySkillLevelUp` 是列存 `{k,v}`，`pvpSkillPlan`
+    //  2026-11 的表更新后是**行对象数组**（`[{...},...]`）—— 只按列存解析会让整组用例
+    //  一起报 `Cannot read properties of undefined (reading 'map')`，看着像数据错。
+    const raw = readFileSync(`${REMOTE}/${name}.json`, 'utf8');
+    const source = JSON.parse(raw) as Array<Record<string, unknown>> | { k: string[]; v: unknown[][] };
+    if (Array.isArray(source)) return source;
     return source.v.map((row) => Object.fromEntries(source.k.map((key, index) => [key, row[index]])));
 }
 
@@ -43,23 +49,23 @@ const SKILLS: Array<{
     slots: Array<[number, string, number]>;
 }> = [
     {
-        chain: 100701, card: '68007', levels: [3, 10, 22],
+        chain: 100701, card: '68007', levels: [2, 10, 22],
         slots: [[190701, 'attack', 0.24]],
     },
     {
-        chain: 100901, card: '68009', levels: [3, 10, 22],
+        chain: 100901, card: '68009', levels: [2, 10, 22],
         slots: [[280901, 'attack', 0.26], [190901, 'attackSpeed', 0.28]],
     },
     {
-        chain: 101802, card: '68018', levels: [6, 16, 26],
+        chain: 101802, card: '68018', levels: [3, 16, 26],
         slots: [[281802, 'attack', 0.16], [191802, 'attackSpeed', 0.17]],
     },
     {
-        chain: 102702, card: '68027', levels: [6, 16, 26],
+        chain: 102702, card: '68027', levels: [3, 16, 26],
         slots: [[192702, 'attackSpeed', 0.11]],
     },
     {
-        chain: 103302, card: '68033', levels: [6, 16, 26],
+        chain: 103302, card: '68033', levels: [3, 16, 26],
         slots: [[283302, 'attack', 0.16], [193302, 'attackSpeed', 0.17]],
     },
 ];
@@ -93,7 +99,7 @@ test('5 条投枪：四个 lance 键走参数袋、主链三空，两份产物�
     }
 });
 
-test('5 条投枪：同名「破阵投枪」，解锁等级跟技能格走（3/10/22 与 6/16/26）', () => {
+test('5 条投枪：同名「破阵术」，解锁等级跟技能格走（3/10/22 与 6/16/26）', () => {
     const expected = new Map(SKILLS.map((spec) => [spec.chain, spec.levels]));
     for (const rows of [remoteRows('armySkillLevelUp'), clientRows('armySkillLevelUp')]) {
         for (const spec of SKILLS) {
@@ -102,7 +108,7 @@ test('5 条投枪：同名「破阵投枪」，解锁等级跟技能格走（3/1
             assert.equal(tiers.length, 3, `${spec.chain} 在 armySkillLevelUp 里必须三档`);
             const levels = expected.get(spec.chain)!;
             for (const [index, row] of tiers.entries()) {
-                assert.equal(String(row.name), '破阵投枪', `${spec.chain} L${index + 1} 名字`);
+                assert.equal(String(row.name), '破阵术', `${spec.chain} L${index + 1} 名字`);
                 assert.equal(Number(row.unlockarmylevel), levels[index], `${spec.chain} L${index + 1} 解锁等级`);
                 assert.match(String(row.desc), /穿透3个目标/, `${spec.chain} L${index + 1} 文案要写穿透数`);
                 assert.match(String(row.desc), /70%\/45%\/30%/, `${spec.chain} L${index + 1} 文案要写衰减链`);

@@ -1010,8 +1010,9 @@ test('prefab 存在，根节点是第一个 `cc.Node` 且 `cc.Prefab.data` 指�
     assert.equal(PREFAB_NODES[0]!._name, 'Hang');
     assert.equal(PREFAB_NODES[0]!._parent as unknown, null, '根节点没有父节点');
     assert.deepEqual(transformOf('Hang'), { w: 720, h: 1280, ax: 0.5, ay: 0.5 });
-    // 58 = 弹窗壳 4 + 头部 1 + 进度条 3 + 收益 2×2 + 网格 6×2 + 按钮 2 + 倍率 4 + 月卡条 6 + 文字若干
-    assert.equal(PREFAB_NODES.length, 58, '节点数变了先确认结构（编辑器往返不会改数量）');
+    // 60 = 弹窗壳 4 + 头部 1 + 进度条 3 + 收益 2×2 + 网格 6×2 + 按钮 2 + 倍率 4 + 月卡条 6 + 文字若干
+    //      + 红点内部 Icon/Spine/Title 3 层（根 RedDot 原本已计入）
+    assert.equal(PREFAB_NODES.length, 60, '节点数变了先确认结构（编辑器往返不会改数量）');
 });
 
 test('hang › ⚠️ 所有节点的 `_layer` 都是 UI_2D（落在 DEFAULT 会让整棵子树不渲染）', () => {
@@ -1025,9 +1026,13 @@ test('⚠️ 每个脚本组件的 `__type__` 都能从对应 `.ts.meta` 的 uui
         const meta = JSON.parse(readFileSync(`${file}.meta`, 'utf8')) as { uuid: string };
         expected.set(compressUuid(meta.uuid), className);
     }
+    const ENGINE_TYPE_PREFIXES = ['cc.', 'sp.'];
+    const SHARED_CIDS = new Set(['5fa5aSCCTRI/Y8zkguS79+z']); // 工程通用 RedDot（跨模块共用）
     const used = new Set(
         PREFAB
-            .filter((entry) => entry && typeof entry.__type__ === 'string' && !entry.__type__.startsWith('cc.'))
+            .filter((entry) => entry && typeof entry.__type__ === 'string'
+                && !ENGINE_TYPE_PREFIXES.some((p) => entry.__type__.startsWith(p))
+                && !SHARED_CIDS.has(entry.__type__))
             .map((entry) => entry.__type__ as string),
     );
     for (const cid of used) {
@@ -1159,7 +1164,9 @@ test('⚠️ 几何逐条对 FGUI XML 反解值（画布 720×1280，左上角�
         ['Hang/SweepBtn', 179, 983, 150, 68],
         ['Hang/SweepBtn/Title', 222, 1012.5, 84, 29],
         ['Hang/SweepBtn/RedDot', 310, 970, 30, 30],
-        ['Hang/SweepBtn/RedDot/Dot', 310.5, 971, 29, 28],
+        ['Hang/SweepBtn/RedDot/Icon', 310, 970.5, 30, 29],
+        ['Hang/SweepBtn/RedDot/Spine', 308.5, 965.8, 33, 38.4],
+        ['Hang/SweepBtn/RedDot/Title', 318, 971, 15, 29],
         ['Hang/SweepBtn/AdIcon', 198, 1019, 39, 28],
         ['Hang/SweepBtn/CostIcon', 219, 990, 20, 20],
         ['Hang/SweepBtn/Cost', 239, 985, 35, 31],
@@ -1194,7 +1201,7 @@ test('⚠️ 几何逐条对 FGUI XML 反解值（画布 720×1280，左上角�
     const checked = new Set<string>(['Hang', ...boxes.map(([p]) => p), ...gridPaths]);
     const unchecked = [...NODE_BY_PATH.keys()].filter((p) => !checked.has(p));
     assert.deepEqual(unchecked, [], `这些节点没进几何对账表：${unchecked.join(', ')}`);
-    // 兜底：确认对账表没漏（58 个节点全部覆盖）
+    // 兜底：确认对账表没漏（60 个节点全部覆盖）
     assert.equal(checked.size, PREFAB_NODES.length, `对账表覆盖 ${checked.size} 个，实际 ${PREFAB_NODES.length} 个节点`);
 });
 
@@ -1348,7 +1355,7 @@ test('⚠️ 九宫：`HJ_ART_SLICED` 的每张图在 prefab 里都必须 `_type
         ['Hang/MonthCardBar/Bg', HJ_ART_DIR, HJ_ART_NAMES.monthBg],
         ['Hang/MonthCardBar/Deco', HJ_ART_DIR, HJ_ART_NAMES.monthDeco],
         ['Hang/MonthCardBar/BuyBtn', HJ_ART_DIR, HJ_ART_NAMES.monthBtn],
-        ['Hang/SweepBtn/RedDot/Dot', assetPath('image/common'), 'cm_red_dot'],
+        ['Hang/SweepBtn/RedDot/Icon', assetPath('image/common'), 'cm_red_dot'],
     ];
     for (const [path, dir, name] of plain) {
         assert.equal(uuidOf(dir, name), spriteUuidAt(path), `${path} 应当用 ${dir}/${name}`);
@@ -2218,11 +2225,13 @@ test('分组后金币车、底板与时间保持蓝湖位置，并完整落在�
     }
 });
 
-test('挂机组件绑定新金币车与计时 Label，预留红点仍由原组件管理', () => {
+test('挂机组件绑定新金币车与计时 Label，红点指向通用 RedDot 组件', () => {
     const script = aCompOfType(ENTRY, ENTRY_CID);
     const deref = (value: unknown): Record<string, unknown> => ARENA[(value as { __id__: number }).__id__]!;
     assert.equal(deref(script.shakeNode), aNode(entryChild('HangIcon')));
-    assert.equal(deref(script.redDot), aNode(entryChild('RedDot')));
+    const dot = deref(script.redDot);
+    assert.equal(dot.__type__, '5fa5aSCCTRI/Y8zkguS79+z', '红点必须指向通用 RedDot 组件');
+    assert.equal(deref(dot.node), aNode(entryChild('RedDot')));
     const label = deref(script.timeLabel);
     assert.equal(label.__type__, 'cc.Label', '必须绑定组件，不能误绑定到节点');
     assert.equal(deref(label.node), aNode(entryChild('HangTime')));

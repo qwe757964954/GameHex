@@ -53,6 +53,8 @@ function prepare() {
 // ── 一、配表真值 ───────────────────────────────────────────────────────────────
 
 test('玉林好汉：普攻换成 30716（自己的飞镖），强化那一击指向 30821', () => {
+    // 普攻 = 第 57 批统一子弹（`卡牌常用子弹物件/玉林好汉_子弹`，白色三角拖尾）；
+    // 强化那一击（30821「精英猎手」）= 原先那套 `_飞镖普攻_强化`，它有自己烘焙的 `_lscale`，不跟着换。
     prepare();
     const skills = new Map(readRows('pvpSkill').map((row) => [Number(row.skillId), row]));
     const cards = readRows('pvpCard');
@@ -70,7 +72,9 @@ test('玉林好汉：普攻换成 30716（自己的飞镖），强化那一击�
     assert.equal(dart!.trigger, 'every_seconds');
     assert.equal(Number(dart!.cooldown), 10);
     assert.equal(Number(dart!.empoweredSkillId), 30821);
-    assert.equal(dart!.effectPrefabPath, 'units/projectiles/玉林好汉_飞镖普攻/玉林好汉_飞镖普攻');
+    // 2026-11-26 第 57 批：普攻弹体换成「卡牌常用子弹物件」里的统一格式（白色三角拖尾）。
+    // 强化那一击（30821）是另一套美术，**不动** —— 两套独立，见下一条断言。
+    assert.equal(dart!.effectPrefabPath, 'units/projectiles/卡牌常用子弹物件/玉林好汉_子弹');
 
     const ultimate = skills.get(30821);
     assert.ok(ultimate, '30821 必须存在');

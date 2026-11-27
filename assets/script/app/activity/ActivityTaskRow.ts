@@ -1,4 +1,5 @@
 import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { RedDot } from '../common/RedDot';
 import { ActivityRewardSlot } from './ActivityRewardSlot';
 
 const { ccclass, property } = _decorator;
@@ -64,8 +65,8 @@ export class ActivityTaskRow extends Component {
     @property({ type: Sprite, tooltip: 'ActionBtn/Bg：按钮底图（按状态换 绿/蓝/灰 三张九宫图）' })
     actionBackground: Sprite = null;
 
-    @property({ type: Node, tooltip: 'ActionBtn/RedDot：可领取红点（默认隐藏）' })
-    actionRedDot: Node = null;
+    @property({ type: RedDot, tooltip: 'ActionBtn/RedDot：可领取红点（工程通用红点，默认隐藏）' })
+    actionRedDot: RedDot = null;
 
     @property({ type: Node, tooltip: 'TakenStamp：已领取印章（`act_taken_stamp`，默认隐藏）' })
     takenStamp: Node = null;
@@ -107,7 +108,7 @@ export class ActivityTaskRow extends Component {
         if (view.actionFrame) this.actionBackground.spriteFrame = view.actionFrame;
         const button = this.actionButton.getComponent(Button);
         button.interactable = view.actionEnabled;
-        this.actionRedDot.active = view.redDot;
+        this.actionRedDot.setRedDot(view.redDot);
         this.actionButton.active = view.actionVisible;
         // 印章与按钮互斥（FGUI 是 `状态` 控制器的第 2 页）
         this.takenStamp.active = view.taken;

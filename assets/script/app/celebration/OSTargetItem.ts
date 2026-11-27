@@ -1,4 +1,5 @@
 import { _decorator, Button, Component, Label, Node } from 'cc';
+import { RedDot } from '../common/RedDot';
 import { osTargetNodeState } from './CelebrationViewState';
 import { OSArtStrip } from './OSArtStrip';
 import { targetDescTextOf, targetStateOf } from './CelebrationRepository';
@@ -34,14 +35,14 @@ export class OSTargetItem extends Component {
     @property({ type: Node, tooltip: 'ClaimBtn：领取按钮（FGUI 按钮_领取，状态 页 id 1）' })
     claimBtn: Node = null!;
 
-    @property({ type: Node, tooltip: 'ClaimBtn/RedDot：跟随领取按钮常亮' })
-    claimRedDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'ClaimBtn/RedDot：跟随领取按钮（工程通用红点）' })
+    claimRedDot: RedDot = null!;
 
     @property({ type: Node, tooltip: 'GoBtn：前往按钮（FGUI 按钮_前往，状态 页 id 0）' })
     goBtn: Node = null!;
 
-    @property({ type: Node, tooltip: 'GoBtn/RedDot：老端从不点亮，恒隐藏' })
-    goRedDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'GoBtn/RedDot：老端从不点亮，恒隐藏（工程通用红点）' })
+    goRedDot: RedDot = null!;
 
     @property({ type: Node, tooltip: 'ClaimedMark：已领取印章（FGUI n35，状态 页 id 2）' })
     claimedMark: Node = null!;
@@ -80,8 +81,8 @@ export class OSTargetItem extends Component {
         this.claimBtn.active = flags.claimVisible;
         this.goBtn.active = flags.goVisible;
         this.claimedMark.active = flags.claimedVisible;
-        this.claimRedDot.active = flags.claimVisible;
-        this.goRedDot.active = false;
+        this.claimRedDot.setRedDot(flags.claimVisible);
+        this.goRedDot.setRedDot(false);
 
         this.strip.render(snapshot, row.rewards, frames);
     }

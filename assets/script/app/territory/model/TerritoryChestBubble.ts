@@ -20,15 +20,15 @@ export const TERRITORY_CHEST_BUBBLE_ICON_Y = 17;
 export const TERRITORY_CHEST_BUBBLE_TEXT_Y = -17;
 /** 数字字号与行高。 */
 export const TERRITORY_CHEST_BUBBLE_FONT_SIZE = 24;
-export const TERRITORY_CHEST_BUBBLE_LINE_HEIGHT = 27;
+const TERRITORY_CHEST_BUBBLE_LINE_HEIGHT = 27;
 /** 数字颜色：深棕，奶白底上白字不可读。 */
 export const TERRITORY_CHEST_BUBBLE_TEXT_COLOR: readonly [number, number, number] = [0x5a, 0x3a, 0x1e];
 /**
  * 数字描边宽度与颜色，用于补足字重。
  * 1px 可让笔画接近美术稿，加到 2px 会糊。
  */
-export const TERRITORY_CHEST_BUBBLE_OUTLINE_WIDTH = 1;
-export const TERRITORY_CHEST_BUBBLE_OUTLINE_COLOR: readonly [number, number, number] = [0x3a, 0x24, 0x10];
+const TERRITORY_CHEST_BUBBLE_OUTLINE_WIDTH = 1;
+const TERRITORY_CHEST_BUBBLE_OUTLINE_COLOR: readonly [number, number, number] = [0x3a, 0x24, 0x10];
 
 /** 一整套排版（视图只读这一份，别在视图里再写一遍数字）。 */
 export interface ITerritoryChestBubbleLayout {

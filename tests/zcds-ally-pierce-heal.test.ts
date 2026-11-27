@@ -61,7 +61,7 @@ function skillParams(row: Record<string, unknown>): Record<string, number> {
 const TIERS = [3, 4, 5];
 const HEAL_PCT = [0.03, 0.04, 0.05];
 const ATTACK_SPEED = [0.20, 0.22, 0.24];
-const UNLOCK = [3, 10, 22];
+const UNLOCK = [2, 10, 22];
 const MAIN_MODIFIER = [94024011, 94024012, 94024013];
 const SLOT_MODIFIER = [94924011, 94924012, 94924013];
 
@@ -77,7 +77,7 @@ test('102401「贯穿滋养」：主链三空 + 两个新参数 + 混搭尾，�
             assert.equal(String(row.skillName), '贯穿滋养',
                 `L${tier + 1} 必须改名：旧名「裂变共鸣」语义是 CD 共鸣，跟新机制毫无关系`);
             assert.equal(Number(row.modifierId), MAIN_MODIFIER[tier], `L${tier + 1} 修改器号不能动（J 表 upsert 靠它）`);
-            assert.equal(Number(row.unlockHeroLevel), UNLOCK[tier], `L${tier + 1} 解锁档位（技能 1 口径 3/10/22）`);
+            assert.equal(Number(row.unlockHeroLevel), UNLOCK[tier], `L${tier + 1} 解锁档位（技能 1 口径 2/10/22）`);
             //  🔴 主链三空：这条被动的属性全走子链槽位与 `mix.*`，主链不挂任何 statId。
             assert.equal(row.statId ?? null, null, `L${tier + 1} 主链 statId 必须为空`);
             assert.equal(row.operation ?? null, null, `L${tier + 1} 主链 operation 必须为空`);

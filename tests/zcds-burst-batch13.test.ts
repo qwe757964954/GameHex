@@ -10,14 +10,12 @@ import type { ZCFloatText, ZCSnapshot, ZCUnitState } from '../assets/script/app/
 import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import {
-    ZCAttackResolutionSystem, type IZCAttackResolutionContext,
-} from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+    ZCAttackResolutionSystem, type IZCAttackResolutionContext } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
-import {
-    ZC_BURST_IMPACT_PREFAB_PATH, burstGuardStatusId,
-    zcBurstEffectPaths, zcBurstEffectScale, zcIsBurstBehavior,
-} from '../assets/script/app/zcds/model/ZCBurstFx';
+import { ZC_EFFECT_BEHAVIOR_KEYS, ZC_EFFECT_PATHS, zcEffectPathsForBehavior } from '../assets/script/app/zcds/model/ZCEffectCatalog';
+import { burstGuardStatusId, zcBurstEffectScale } from '../assets/script/app/zcds/model/ZCEffectTuning';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -133,7 +131,7 @@ test('101504 已换成射线集束：菌毯爆发弃用，三档结构位（修�
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(rows.length, 3);
     assert.deepEqual(rows.map((row) => Number(row.modifierId)), [94015041, 94015042, 94015043]);
-    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36], '技能 4 = 12/24/36');
+    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [7, 24, 36], '技能 4 = 7/24/36');
     assert.deepEqual(rows.map((row) => Number(row.pvpSkillId)), [30241, 30241, 30241], '键 = 本卡普攻 skillId');
     for (const row of rows) {
         assert.equal(row.unitId, '68015');
@@ -155,7 +153,7 @@ test('101804 菌核爆裂：三档倍率/击退格数/冷却与设计案一致',
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(rows.length, 3);
     assert.deepEqual(rows.map((row) => Number(row.modifierId)), [94018041, 94018042, 94018043]);
-    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36], '技能 4 = 12/24/36');
+    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [7, 24, 36], '技能 4 = 7/24/36');
     for (const [index, row] of rows.entries()) {
         assert.equal(row.unitId, '68018');
         assert.equal(row.behaviorKey, 'burst_knockback');
@@ -251,11 +249,10 @@ test('burst_aura / burst_knockback 必须双登记 + 表现路径进加载清单
         assert.match(runtimeSource, new RegExp(`register\\('${key}'`),
             `ZCSkillRuntime 没注册 ${key} ⇒ 参数永远进不了运行时`);
     }
-    assert.equal(zcIsBurstBehavior('burst_aura'), true);
-    assert.equal(zcIsBurstBehavior('burst_knockback'), true);
-    assert.equal(zcIsBurstBehavior('splash_shot'), false, '第 12 批的车道不许被这条判据收进来');
-    assert.deepEqual(zcBurstEffectPaths('burst_knockback'), [ZC_BURST_IMPACT_PREFAB_PATH]);
-    assert.deepEqual(zcBurstEffectPaths(null), [], '别的行为键不许被收进清单');
+    assert.deepEqual(zcEffectPathsForBehavior(ZC_EFFECT_BEHAVIOR_KEYS.burstAura), [ZC_EFFECT_PATHS.burstImpact]);
+    assert.deepEqual(zcEffectPathsForBehavior(ZC_EFFECT_BEHAVIOR_KEYS.burstKnockback), [ZC_EFFECT_PATHS.burstImpact]);
+    assert.notDeepEqual(zcEffectPathsForBehavior(ZC_EFFECT_BEHAVIOR_KEYS.splashShot), [ZC_EFFECT_PATHS.burstImpact], '第 12 批的车道独立声明两条路径');
+    assert.deepEqual(zcEffectPathsForBehavior(null), [], '别的行为键不许被收进清单');
 
     const unit = (unitId: string) => ({ unitId, attackProfile: { effectPrefabPath: null, impactEffectPrefabPath: null } });
     const plan = (unitId: string, behaviorKey: string) => ({ enabled: true, unitId, behaviorKey });
@@ -263,10 +260,10 @@ test('burst_aura / burst_knockback 必须双登记 + 表现路径进加载清单
         [unit('68015'), unit('68018'), unit('68001')],
         { skillPlans: [plan('68015', 'burst_aura'), plan('68001', 'random_strike')], textOverrides: new Map() },
     );
-    assert.ok(withBurst.effectPaths.includes(ZC_BURST_IMPACT_PREFAB_PATH), '爆点必须进加载清单');
+    assert.ok(withBurst.effectPaths.includes(ZC_EFFECT_PATHS.burstImpact), '爆点必须进加载清单');
     const withoutBurst = buildZCVisualResourcePlan(
         [unit('68001')], { skillPlans: [plan('68001', 'random_strike')], textOverrides: new Map() });
-    assert.equal(withoutBurst.effectPaths.includes(ZC_BURST_IMPACT_PREFAB_PATH), false);
+    assert.equal(withoutBurst.effectPaths.includes(ZC_EFFECT_PATHS.burstImpact), false);
 });
 
 test('burstReadyAt 必须登记进快照白名单（不还原会读档白送一次爆发）', () => {
@@ -375,11 +372,11 @@ test('菌毯爆发：全向命中半径 150 内的敌人，并给自己套 12% �
     const state = makeState(units);
     const { context } = burstContext(units, AURA_PARAMS[0]);
 
-    assert.equal(ZCAttackResolutionSystem.castBurstSkill(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castBurstSkill(state, caster, context), true);
     assert.equal(state.combatEvents.length, 1);
     const event = state.combatEvents[0];
     assert.equal(event.type, 'area');
-    assert.equal(event.effectPrefabPath, ZC_BURST_IMPACT_PREFAB_PATH);
+    assert.equal(event.effectPrefabPath, ZC_EFFECT_PATHS.burstImpact);
     assert.equal(event.fromX, 0, '圆心恒等于自己');
     assert.equal(event.toX, 0);
     assert.ok(Math.abs(Number(event.radius) - 45) < 1e-6, '150 表值 × 0.3 = 45 世界 px');
@@ -399,14 +396,14 @@ test('菌毯爆发 III 级：护盾期间的减伤状态挂到自己身上，L1/
     const tier3 = burstContext(units, AURA_PARAMS[2]);
     const guardId = burstGuardStatusId(15, 4);
     assert.equal(
-        ZCAttackResolutionSystem.castBurstSkill(makeState(units), caster, tier3.context, guardId), true);
+        ZCSkillResolutionSystem.castBurstSkill(makeState(units), caster, tier3.context, guardId), true);
     assert.deepEqual(tier3.statusApplied,
         [{ unitId: '1', id: guardId, durationSeconds: 4 }], '减伤跟着护盾时长走');
 
     const tier1 = burstContext(units, AURA_PARAMS[0]);
     const fresh = makeUnit(1, ZCOwner.Player, 0);
     assert.equal(
-        ZCAttackResolutionSystem.castBurstSkill(makeState([fresh, enemy]), fresh, tier1.context), true);
+        ZCSkillResolutionSystem.castBurstSkill(makeState([fresh, enemy]), fresh, tier1.context), true);
     assert.equal(tier1.statusApplied.length, 0, 'L1 没有 burstShieldReducePct ⇒ 不挂减伤');
 });
 
@@ -418,7 +415,7 @@ test('菌核爆裂：爆完把命中目标推开 N 格（格数 × 一格行距�
     const state = makeState(units);
     const { context, knocked } = burstContext(units, KNOCK_PARAMS[2], '68018', 101804);
 
-    assert.equal(ZCAttackResolutionSystem.castBurstSkill(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castBurstSkill(state, caster, context), true);
     assert.equal(knocked.length, 1);
     assert.equal(knocked[0].id, 2);
     //  `HEX_GRID_LOGICAL_ROW_STEP` 是一格行距；世界换算由 `applyLegacyKnockback` 自己乘。
@@ -434,7 +431,7 @@ test('参数不全 / 半径内没人：返回 false（不消费 CD），且不�
     const state = makeState(units);
 
     const broken = burstContext(units, { burstCooldown: 16, burstRadius: 150 });
-    assert.equal(ZCAttackResolutionSystem.castBurstSkill(state, caster, broken.context), false,
+    assert.equal(ZCSkillResolutionSystem.castBurstSkill(state, caster, broken.context), false,
         '缺 burstDamageRate ⇒ 不爆');
     assert.equal(state.combatEvents.length, 0);
 
@@ -442,7 +439,7 @@ test('参数不全 / 半径内没人：返回 false（不消费 CD），且不�
     const lone = [caster, makeUnit(3, ZCOwner.Enemy, 100, '68028')];
     const loneState = makeState(lone);
     const empty = burstContext(lone, AURA_PARAMS[0]);
-    assert.equal(ZCAttackResolutionSystem.castBurstSkill(loneState, caster, empty.context), false,
+    assert.equal(ZCSkillResolutionSystem.castBurstSkill(loneState, caster, empty.context), false,
         '半径内没人 ⇒ 不放、不消费 CD');
     assert.equal(loneState.combatEvents.length, 0);
 });

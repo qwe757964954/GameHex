@@ -202,11 +202,10 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
     assert.deepEqual(loadedPrefabs.sort(), [
         // 本局携带神器的图标（中立资源点「神器充能」格用，图名来自 pvpArtifact[].icon）。
         'image/artifact/霜封冰刃/spriteFrame',
-        // 中立资源占位问号 / 金币飞行贴图 / 自选主城区域气泡（三组后期新增的图标加载）。
+        // 中立资源占位问号 / 金币飞行贴图（后期新增的图标加载）。
+        // 野怪集火按钮的 `spawn-region/frame_01..03` 已随三态气泡退役 —— 改由 prefab 绑的
+        // `FocusSpine`（`units/effects/野怪激活可攻击UI特效`）自带，不再进本局资源清单。
         'image/map-resource/coin_icon/spriteFrame',
-        'image/spawn-region/frame_01/spriteFrame',
-        'image/spawn-region/frame_02/spriteFrame',
-        'image/spawn-region/frame_03/spriteFrame',
         'effects/arrow',
         'effects/empowered',
         'effects/slash',
@@ -297,11 +296,12 @@ test('首屏外壳复用资源管理器批次，保留条件槽位并随战斗�
         h.assets.loadBatch = (requests, options) => { batches++; return loadBatch(requests, options); };
         const values = await resourceLoader(h.assets).loadShellPrefabs(scope, selectSpawn, hasBossPanel);
         assert.equal(batches, 1);
-        assert.equal(Object.keys(values).length, 14);
+        assert.equal(Object.keys(values).length, 15);
         assert.equal(values.hudPrefab?.path, resourcePlan.ZC_BATTLE_SHELL_PATHS.hud);
         assert.equal(values.spawnSelectionPrefab?.path ?? null, selectSpawn ? resourcePlan.ZC_BATTLE_SHELL_PATHS.spawnSelection : null);
+        assert.equal(values.spawnRegionHintPrefab?.path ?? null, selectSpawn ? resourcePlan.ZC_BATTLE_SHELL_PATHS.spawnRegionHint : null);
         assert.equal(values.bossPanelPrefab?.path ?? null, hasBossPanel ? resourcePlan.ZC_BATTLE_SHELL_PATHS.bossPanel : null);
-        assert.equal(h.loaded.length, 12 + Number(selectSpawn) + Number(hasBossPanel));
+        assert.equal(h.loaded.length, 12 + 2 * Number(selectSpawn) + Number(hasBossPanel));
         assert.equal(h.released(), 0);
         scope.dispose();
         assert.equal(h.released(), h.loaded.length);

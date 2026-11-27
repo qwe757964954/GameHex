@@ -10,7 +10,13 @@ export const ZC_BATTLE_SHELL_PATHS = {
     cardReveal: 'ui/game/ZCGameCardReveal', legendBanner: 'ui/game/ZCGameLegendBanner',
     killBanner: 'ui/game/ZCGameKillBanner',
     // 装饰 Sprite 的 CUSTOM 尺寸和不裁边由 prefab 声明。
-    decor: 'ui/game/ZCGameDecor', spawnSelection: 'ui/game/ZCSpawnSelection', bossPanel: 'ui/game/ZCBossPanel',
+    decor: 'ui/game/ZCGameDecor', spawnSelection: 'ui/game/ZCSpawnSelection',
+    spawnRegionHint: 'ui/game/SpawnRegionHint', bossPanel: 'ui/game/ZCBossPanel',
+    /**
+     * 兵营信息面板：随对局创建按需加载一次（不进首屏预热清单）。
+     * 定义仍放在这里，保证战斗 UI 路径只有这一份来源。
+    */
+    barracksInfo: 'ui/game/ZCBarracksInfo',
 } as const;
 
 const BATTLE_EFFECTS_DIRECTORY = 'units/effects';
@@ -23,6 +29,33 @@ export const ZC_BATTLE_FX_PATHS = {
     death: `${BATTLE_EFFECTS_DIRECTORY}/死亡特效/死亡特效`,
     buildingDestroy: `${BATTLE_EFFECTS_DIRECTORY}/建筑死亡特效/建筑死亡特效`,
     hitDirectory: `${BATTLE_EFFECTS_DIRECTORY}/受击特效`,
+    /**
+     * 大招通报预制体（内含底光骨架、形象 Sprite 与技能名 Label）。
+     *
+     * 由 `ZCGame` 按 `Prefab` 异步加载，不进 `ZC_BATTLE_COMMON_PREFABS` 首包预热清单。
+     */
+    skillAnnounce: `${BATTLE_EFFECTS_DIRECTORY}/大招技能提示特效/大招技能提示特效`,
+    /**
+     * 胜负 UI 特效预制体（内含胜利 / 失败两段骨架与 720 宽适配缩放）。
+     *
+     * 由 `ZCGame` 按 `Prefab` 异步加载，不进 `ZC_BATTLE_COMMON_PREFABS` 首包预热清单。
+     * 两段动画名见 `ZCSettlementOutcomeStyle`。
+     */
+    settlementOutcome: `${BATTLE_EFFECTS_DIRECTORY}/胜利失败UI特效/胜利失败UI特效`,
+    /**
+     * 对局开始「开局对战」横幅预制体（内含骨架与 720 宽适配缩放）。
+     *
+     * 由 `ZCGame` 按 `Prefab` 异步加载后交给 HUD，不进 `ZC_BATTLE_COMMON_PREFABS`。
+     * 动画名见 `ZCBattleStartStyle`。
+     */
+    battleStartBanner: `${BATTLE_EFFECTS_DIRECTORY}/开局对战UI特效/开局对战UI特效`,
+    /**
+     * 塔防「BOSS 波来袭」预警 UI 特效（骨架 + 720 宽适配缩放，画布 496×496 ⇒ 缩放 1.4516）。
+     *
+     * 由 `ZCGame` 按 `Prefab` 异步加载后交给 HUD，只在守城局加载（`matchConfig.pveDefence`）。
+     * 动画名与判据见 `ZCBossWarningStyle`。
+     */
+    bossWarningBanner: `${BATTLE_EFFECTS_DIRECTORY}/BOSS来袭UI特效/BOSS来袭UI特效`,
 } as const;
 
 export const ZC_BATTLE_DOWNLOAD_PREFABS = [

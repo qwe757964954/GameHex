@@ -1,5 +1,6 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
-import { LeagueJoinEvent, type ILeagueJoinIntent, type ILeagueJoinView } from './LeagueJoinEvents';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { LeagueJoinEvent, type ILeagueJoinIntent, type LeagueJoinOutput } from './LeagueJoinEvents';
 import type { ILeagueRepository } from './LeagueRepository';
 import {
     buildLeagueUnionViews,
@@ -24,18 +25,7 @@ export type ILeagueJoinRepository = Pick<
 >;
 
 export interface ILeagueJoinControllerOptions {
-    readonly owner: object;
     readonly repository: ILeagueJoinRepository;
-    readonly view: ILeagueJoinView;
-    readonly feedback: {
-        readonly tip: (text: string) => void;
-        readonly notifyJoined: () => void;
-    };
-    readonly popups: {
-        readonly openCreate: () => void;
-        readonly openUnion: (view: ILeagueUnionView) => void;
-    };
-    readonly requests: { readonly removeCaller: (caller: object) => void };
 }
 
 /** 全服行的三段前缀（与大厅 / 加入页同源）。 */
@@ -53,19 +43,15 @@ const JOIN_ROW_TEXTS = {
  * 迟到结果不再上屏。
  */
 export class LeagueJoinController extends ControllerBase {
-    private started = false;
     private busy = false;
     private revision = 0;
     private searchKey = '';
 
     constructor(context: IControllerContext, private readonly options: ILeagueJoinControllerOptions) {
         super(context, 'league-join');
-        this.own(() => options.requests.removeCaller(this));
     }
 
     start(): void {
-        if (this.started || this.isDisposed) return;
-        this.started = true;
         this.listen(LeagueJoinEvent.Intent, this.onIntent);
         void this.reload();
     }
@@ -82,10 +68,10 @@ export class LeagueJoinController extends ControllerBase {
                 void this.quickJoin();
                 return;
             case 'create':
-                this.options.popups.openCreate();
+                this.emitOutput({ kind: 'openCreate' });
                 return;
             case 'openUnion':
-                this.options.popups.openUnion(event.union);
+                this.emitOutput({ kind: 'openUnion', union: event.union });
                 return;
         }
     };
@@ -105,7 +91,7 @@ export class LeagueJoinController extends ControllerBase {
         } catch (error) {
             if (this.isDisposed || revision !== this.revision) return;
             console.warn('[LeagueJoinController] 读联盟列表失败', error);
-            this.options.feedback.tip(LEAGUE_TIP_FAILED);
+            this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_FAILED });
         }
     }
 
@@ -114,16 +100,17 @@ export class LeagueJoinController extends ControllerBase {
      * 命中过搜索缓存就只显示那一条，否则显示全部。
      */
     private present(rows: readonly ILeagueUnionRow[]): void {
-        this.options.view.render(buildLeagueUnionViews(
+        const views = buildLeagueUnionViews(
             pickUnionListForSearch(rows, this.options.repository.cachedSearch(this.searchKey)),
             JOIN_ROW_TEXTS,
-        ));
+        );
+        this.emitOutput({ kind: 'render', rows: views });
     }
 
     /** 点「查询」：空输入提示；否则按 id 搜，回来后按缓存重铺列表。 */
     private async search(): Promise<void> {
         if (!this.searchKey) {
-            this.options.feedback.tip(LEAGUE_TIP_INPUT_UNION_ID);
+            this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_INPUT_UNION_ID });
             return;
         }
         const revision = ++this.revision;
@@ -141,7 +128,7 @@ export class LeagueJoinController extends ControllerBase {
         } catch (error) {
             if (this.isDisposed || revision !== this.revision) return;
             console.warn('[LeagueJoinController] 搜索联盟失败', error);
-            this.options.feedback.tip(LEAGUE_TIP_FAILED);
+            this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_FAILED });
         }
     }
 
@@ -155,7 +142,7 @@ export class LeagueJoinController extends ControllerBase {
 
         const ids = pickQuickJoinIdsFor(snapshot.unions, this.options.repository.cachedSearch(this.searchKey));
         if (!ids.length) {
-            this.options.feedback.tip(LEAGUE_NO_JOINABLE);
+            this.emitOutput({ kind: 'tip', text: LEAGUE_NO_JOINABLE });
             return;
         }
         if (!this.beginWrite()) return;
@@ -167,11 +154,11 @@ export class LeagueJoinController extends ControllerBase {
 
             await this.reload();
             if (this.isDisposed) return;
-            this.options.feedback.notifyJoined();
+            this.emitOutput({ kind: 'joined' });
         } catch (error) {
             if (!this.isDisposed) {
                 console.warn('[LeagueJoinController] 快速加入失败', error);
-                this.options.feedback.tip(LEAGUE_TIP_FAILED);
+                this.emitOutput({ kind: 'tip', text: LEAGUE_TIP_FAILED });
             }
         } finally {
             this.busy = false;
@@ -188,6 +175,10 @@ export class LeagueJoinController extends ControllerBase {
     /** 三态归一：只有 `'ok'` 静默。 */
     private report(result: 'ok' | 'offline' | 'failed'): void {
         if (result === 'ok') return;
-        this.options.feedback.tip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+        this.emitOutput({ kind: 'tip', text: result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED });
+    }
+
+    private emitOutput(output: LeagueJoinOutput): void {
+        EventMgr.instance.emit(LeagueJoinEvent.Output, output, this);
     }
 }

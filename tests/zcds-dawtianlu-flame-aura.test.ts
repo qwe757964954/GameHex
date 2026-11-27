@@ -15,6 +15,7 @@
  *     从 bundle 摘掉，运行时贴图与图集两头都取不到；
  *  ③ 尺寸必须与判定对得上：画布宽被生成器钉成**环外径**，所以
  *     `_contentSize.width × _lscale` 必须等于 `auraRadius × 2 × 0.76875` = 307.5 屏上 px；
+ *     2026-11-26 起画布即屏上尺寸（308 × 1），`_lscale` 恒为 1；
  *  ④ 路径必须真的被 `buildZCVisualResourcePlan` 收进本局清单 —— 漏收的后果是
  *     技能照常每秒扣血、屏幕上一次都不亮，且一条错都不报。
  */
@@ -22,7 +23,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { ZC_SELF_AURA_BEHAVIOR_KEY, zcSelfAuraEffectPath } from '../assets/script/app/zcds/model/ZCSelfAuraFx';
+import { ZC_EFFECT_BEHAVIOR_KEYS, zcSelfAuraEffectPath } from '../assets/script/app/zcds/model/ZCEffectCatalog';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 
 const ROOT = join(__dirname, '..');
@@ -127,12 +128,15 @@ test('动画：30 帧 / sample 12 / Loop / 2.5 秒，每一帧都指向图集里
 test('尺寸：画布宽 × 根 _lscale = 判定直径 307.5 屏上 px（画布宽被钉成地面环外径）', () => {
     const { node, ui } = parts();
     assert.equal(node._lscale.x, node._lscale.y, '等比缩放，否则环会变成扁的');
+    //  画布就是屏上尺寸 ⇒ 缩放必须是 1，尺寸只由 `_contentSize.width` 承载。
+    assert.equal(node._lscale.x, 1, '_lscale 必须是 1（尺寸烘在画布里，不再靠缩放凑）');
+    assert.equal(node._lscale.y, 1, '_lscale 必须是 1（纵向同理）');
     const screen = ui._contentSize.width * node._lscale.x;
-    //  `_lscale` 在 prefab 里只保留 6 位小数 ⇒ 允许 0.01px（0.003%）的取整误差。
-    assert.ok(Math.abs(screen - JUDGE_DIAMETER_SCREEN) < 0.01,
-        `环屏上宽 ${screen} 必须等于 ${JUDGE_DIAMETER_SCREEN}（画布宽 ${ui._contentSize.width} × ${node._lscale.x}）`);
+    //  307.5 取整成 308 ⇒ 只允许 ≤0.5px 的画布取整误差（0.16%）。
+    assert.ok(Math.abs(screen - JUDGE_DIAMETER_SCREEN) <= 0.5 + 1e-9,
+        `环屏上宽 ${screen} 必须等于 ${JUDGE_DIAMETER_SCREEN}（画布宽 ${ui._contentSize.width}，最多差半像素取整）`);
     //  这条 prefab 只服务 102503，尺寸烘在这里 ⇒ 宿主倍率必须还是 1。
-    assert.equal(zcSelfAuraEffectPath(ZC_SELF_AURA_BEHAVIOR_KEY, '68025'), PATH);
+    assert.equal(zcSelfAuraEffectPath(ZC_EFFECT_BEHAVIOR_KEYS.selfAura, '68025'), PATH);
 });
 
 test('摆位：环中心被钉到节点原点 —— 横向几乎归零、纵向往上补（火焰全在环上方）', () => {

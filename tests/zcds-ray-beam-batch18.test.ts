@@ -24,18 +24,18 @@ import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/Z
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { ZCGroundZoneSystem, zcGroundZoneReaches } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 import {
-    ZCAttackResolutionSystem, type IZCAttackResolutionContext,
-} from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+    ZCAttackResolutionSystem, type IZCAttackResolutionContext } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import type { ZCAttackProfile, ZCDeckBonuses, ZCUnitDefinition } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import type { ZCFloatText } from '../assets/script/app/zcds/model/ZCGameTypes';
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { ZCStatusSystem } from '../assets/script/app/zcds/model/ZCStatusEffect';
 import {
-    ZC_RAY_BEAM_REFERENCE_HALF_LENGTH, zcRayBeamEffectScale,
-} from '../assets/script/app/zcds/model/ZCRayBeamFx';
+    ZC_EFFECT_PATHS, zcEffectPathsForBehavior,
+} from '../assets/script/app/zcds/model/ZCEffectCatalog';
 import {
-    ZC_FIRE_ZONE_PREFAB_PATH, zcFireZoneEffectPaths,
-} from '../assets/script/app/zcds/model/ZCFireZoneFx';
+    ZC_EFFECT_SCALE, zcRayBeamEffectScale,
+} from '../assets/script/app/zcds/model/ZCEffectTuning';
 import { ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
 import { compileZCCombatBuild, getZCModifierCatalogs } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { captureZCMatchConfig, type ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
@@ -202,7 +202,7 @@ test('103503 配表：整袋换成 fire_zone，ray* 一个不剩（射线集束�
             assert.equal(row.skillKind, 'active_cd', '累计普攻触发也照旧用 active_cd');
             assert.equal(Number(row.unitId), Number(UNIT));
             assert.equal(Number(row.pvpSkillId), SKILL_ID);
-            assert.equal(Number(row.unlockHeroLevel), [9, 18, 27][index]);
+            assert.equal(Number(row.unlockHeroLevel), [5, 18, 27][index]);
             assert.deepEqual(Object.keys(bag).filter((key) => !key.startsWith('fire')), [],
                 '参数袋里不许串进 103501 / 103502 / 103504 的键，也不许留 ray*');
             for (const key of ['rayEvery', 'rayHalfLength', 'rayHalfWidth', 'rayForward',
@@ -234,7 +234,7 @@ test('103503 卡面：desc 三份一致（pvpSkillPlan 与 armySkillLevelUp 两�
         rows.forEach((row, index) => {
             assert.equal(row.name, '文明之火');
             assert.equal(row.desc, plans[index].desc);
-            assert.equal(Number(row.unlockarmylevel), [9, 18, 27][index]);
+            assert.equal(Number(row.unlockarmylevel), [5, 18, 27][index]);
             assert.deepEqual(row.modfiy, [94035031 + index]);
         });
     }
@@ -252,7 +252,7 @@ test('103503 射线：矩形从身前起、朝目标方向，长度 / 宽度 / �
     const { context } = rayContext(units, bag, foe);
     const state = rayState(units, 3);
 
-    assert.equal(ZCAttackResolutionSystem.castRayBeam(state, caster, context, '__rayvuln:20__'), true);
+    assert.equal(ZCSkillResolutionSystem.castRayBeam(state, caster, context, '__rayvuln:20__'), true);
     assert.equal(state.groundZones.length, 1, 'II 级之前只有主射线');
     const ray = state.groundZones[0];
     //  圆心 = 起点前移 30 + 半长 120 = 150；全长 240 逻辑 px（本夹具 scale = 1）。
@@ -290,7 +290,7 @@ test('103503 每 0.2 秒复打：站在光束里的敌人一直挨，走出去�
     const units = [caster, fence];
     const { context } = rayContext(units, params(2), fence);
     const state = rayState(units, 0);
-    ZCAttackResolutionSystem.castRayBeam(state, caster, context, '__rayvuln:20__');
+    ZCSkillResolutionSystem.castRayBeam(state, caster, context, '__rayvuln:20__');
 
     const hits: Array<{ id: number; damage: number }> = [];
     const zoneCtx = {
@@ -331,7 +331,7 @@ test('103503 III 级末端光斑：射线末端多一个小区域，消失那一
     const units = [caster, foe];
     const { context } = rayContext(units, params(4, { raySpotRadius: 60, raySpotDamageRate: 0.5 }), foe);
     const state = rayState(units, 0);
-    ZCAttackResolutionSystem.castRayBeam(state, caster, context, '__rayvuln:20__');
+    ZCSkillResolutionSystem.castRayBeam(state, caster, context, '__rayvuln:20__');
 
     assert.equal(state.groundZones.length, 2, '主射线 + 末端光斑');
     const spot = state.groundZones[1];
@@ -494,14 +494,14 @@ test('103503 端到端：真实构筑把 fire 参数编进模型技能书', () =
     const planRow = readRows('pvpSkillPlan')
         .find((row) => Number(row.skillChainId) === CHAIN && Number(row.skillLevel) === 3);
     assert.equal(planRow?.behaviorKey, 'fire_zone');
-    assert.deepEqual(zcFireZoneEffectPaths(String(planRow?.behaviorKey)), [ZC_FIRE_ZONE_PREFAB_PATH],
+    assert.deepEqual(zcEffectPathsForBehavior(String(planRow?.behaviorKey)), [ZC_EFFECT_PATHS.hotZone],
         '资源清单按表行 behaviorKey 收火焰 prefab —— 收不到就是「照常掉血、地上一片火都没有」');
 });
 
 test('103503 表现缩放：事件级 scale 按「半长 ÷ 基准」算，非法值退回 1', () => {
     //  基准是**镭射飞龙那张图**烘进资产的可见半长（第 43 批换图后重算）：
     //  画布 alpha 可见宽 575 屏上 px ÷ 0.76875 = 748 逻辑 px ⇒ 半长 374。
-    assert.equal(ZC_RAY_BEAM_REFERENCE_HALF_LENGTH, 374, '发射线的基准半长必须按新图重算');
+    assert.equal(ZC_EFFECT_SCALE.rayBeamReferenceHalfLength, 374, '发射线的基准半长必须按新图重算');
     assert.equal(zcRayBeamEffectScale(374), 1);
     assert.equal(zcRayBeamEffectScale(120), 120 / 374);
     assert.equal(zcRayBeamEffectScale(0), 1, '非法值不能让节点缩成 0');

@@ -1,16 +1,19 @@
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
+import { AudioMgr } from '../../framework/audio/AudioMgr';
+import { RedDot } from '../common/RedDot';
 import { type IPopupOpenParams } from '../../framework/ui/PopupDef';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { FW } from '../../framework/FW';
-import { CacheMgr } from '../net/CacheMgr';
-import { RefUtil } from '../../framework/ref/RefUtil';
+import { GAME_AUDIO } from '../ResConst';
+import { UiUpgradeFx } from '../common/UiUpgradeFx';
+import { UI_UPGRADE_ANIMATION, type UiUpgradeAnimation } from '../common/UiUpgradeFxTable';
 import { roleRepository } from './RoleRepository';
 import { RoleEvent } from './RoleEvents';
 import { ROLE_TEXTS } from './RoleTexts';
 import { loadRoleBagIconSprite } from './RoleArtLoader';
-import type { IRoleEquipGrowth } from './RoleTypes';
-import { equipLevelOf } from './RoleTable';
+import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
+import { EquipEvolveTab, type IRoleEquipCostFact, type IRoleEquipGrowth } from './RoleTypes';
 import { EquipWashPopup } from './EquipWashPopup';
 import { EquipEvolveAttrItem } from './EquipEvolveAttrItem';
 import { EquipEvolveCostItem } from './EquipEvolveCostItem';
@@ -18,9 +21,17 @@ import { EquipEvolveSlotItem } from './EquipEvolveSlotItem';
 
 const { ccclass, property } = _decorator;
 
+/**
+ * 百分比数值 → 文案：传入的 `hpPercent` / `nextHpPercent` 已是百分数（105 = 105%），
+ * 这里只抹掉浮点尾巴，**不再 ×100**（否则 105 会显示成 10500）。
+ */
+function percentText(value: number): string {
+    return String(Math.round(value * 100) / 100);
+}
+
 export interface IEquipEvolveOpenParams {
     partId?: number;
-    tab?: 'strengthen' | 'upgrade';
+    tab?: EquipEvolveTab;
 }
 
 /**
@@ -51,6 +62,12 @@ export class EquipEvolvePage extends PopupBase {
     @property({ type: Sprite, tooltip: '中间大图装备图标' })
     goodsIcon: Sprite = null!;
 
+    @property({ type: Label, tooltip: '中间大图左上等级徽章（「N级」）' })
+    goodsLevelLabel: Label = null!;
+
+    @property({ type: Label, tooltip: '中间大图右下品阶（「Lv.N」）' })
+    goodsRankLabel: Label = null!;
+
     @property({ type: Button, tooltip: '返回按钮' })
     backBtn: Button = null!;
 
@@ -73,8 +90,8 @@ export class EquipEvolvePage extends PopupBase {
     @property({ type: Node, tooltip: '强化页签未选中态文字图标' })
     tabHeroIconOff: Node = null!;
 
-    @property({ type: Node, tooltip: '强化页签红点' })
-    tabHeroRedDot: Node = null!;
+    @property({ type: RedDot, tooltip: '强化页签红点' })
+    tabHeroRedDot: RedDot = null!;
 
     @property({ type: Node, tooltip: '升品页签选中态底图' })
     tabForgeOn: Node = null!;
@@ -88,8 +105,8 @@ export class EquipEvolvePage extends PopupBase {
     @property({ type: Node, tooltip: '升品页签未选中态文字图标' })
     tabForgeIconOff: Node = null!;
 
-    @property({ type: Node, tooltip: '升品页签红点' })
-    tabForgeRedDot: Node = null!;
+    @property({ type: RedDot, tooltip: '升品页签红点' })
+    tabForgeRedDot: RedDot = null!;
 
     // --- 底部 6 格装备槽位组件列表 ---
     @property({ type: [EquipEvolveSlotItem], tooltip: '底部6个装备槽位组件' })
@@ -117,11 +134,11 @@ export class EquipEvolvePage extends PopupBase {
     @property({ type: Button, tooltip: '一键强化按钮' })
     buildAllBtn: Button = null!;
 
-    @property({ type: Node, tooltip: '强化按钮红点' })
-    buildBtnRedDot: Node = null!;
+    @property({ type: RedDot, tooltip: '强化按钮红点' })
+    buildBtnRedDot: RedDot = null!;
 
-    @property({ type: Node, tooltip: '一键强化按钮红点' })
-    buildAllBtnRedDot: Node = null!;
+    @property({ type: RedDot, tooltip: '一键强化按钮红点' })
+    buildAllBtnRedDot: RedDot = null!;
 
     // --- 升品/洗练分页子组件 ---
     @property({ type: Label, tooltip: '当前品阶文字' })
@@ -151,44 +168,78 @@ export class EquipEvolvePage extends PopupBase {
     @property({ type: Button, tooltip: '洗练按钮' })
     washBtn: Button = null!;
 
-    @property({ type: Node, tooltip: '升品按钮红点' })
-    upBtnRedDot: Node = null!;
+    @property({ type: RedDot, tooltip: '升品按钮红点' })
+    upBtnRedDot: RedDot = null!;
+
+    @property({ type: RedDot, tooltip: '洗炼按钮红点' })
+    washBtnRedDot: RedDot = null!;
 
     @property({ type: Button, tooltip: '规则说明帮助按钮' })
     helpBtn: Button = null!;
 
     private currentPartId = 1;
-    private currentTab: 'strengthen' | 'upgrade' = 'strengthen';
+    private currentTab: EquipEvolveTab = EquipEvolveTab.Strengthen;
     private currentGrowth: IRoleEquipGrowth | null = null;
     private sessionRevision = 0;
+    /** 红点异步结果序号：装备切换 / 页签切换时丢弃过期结果。 */
+    private redDotRevision = 0;
     private readonly equipIconCache = new Map<string, SpriteFrame>();
+    private readonly costIconCache = new Map<string, SpriteFrame>();
+
+    /**
+     * 升级播放 `shengji`，强化播放 `shengjie`。两者共用升级成功音效。
+     * 特效资源和节点归本次弹窗的资源作用域，每次打开时重新初始化。
+     */
+    private upgradeFx: UiUpgradeFx | null = null;
 
     protected onInit(): void {
+        this.upgradeFx = new UiUpgradeFx(this.node);
         this.bindEvents();
         EventMgr.instance.on(RoleEvent.WashConfirmed, this.onWashConfirmed, this);
     }
 
+    /**
+     * 逐帧只推「字特效到点收起来」：`loop = false` 的骨架会停在最后一帧，
+     * 不收就一直糊在屏幕中间。
+     */
+    public update(): void {
+        this.upgradeFx?.step();
+    }
+
     public onDestroy(): void {
         EventMgr.instance.off(RoleEvent.WashConfirmed, this.onWashConfirmed, this);
+        this.upgradeFx?.reset();
+        this.upgradeFx = null;
         super.onDestroy();
     }
 
+    /** 弹窗交还（销毁 / 进池）时资源作用域要 dispose：字特效节点必须同一拍销毁。 */
+    public _internalReleaseResources(): void {
+        this.upgradeFx?.reset();
+        super._internalReleaseResources();
+    }
+
     private onWashConfirmed(): void {
+        EventMgr.instance.emit(RoleEvent.EquipChanged);
         void this.refreshCurrentPart();
     }
 
     protected async onOpen(params?: IPopupOpenParams<IEquipEvolveOpenParams> | IEquipEvolveOpenParams): Promise<void> {
         const data = (params && 'userData' in params ? params.userData : params) as IEquipEvolveOpenParams | undefined;
         this.currentPartId = data?.partId && data.partId >= 1 && data.partId <= 6 ? data.partId : 1;
-        this.currentTab = data?.tab === 'upgrade' ? 'upgrade' : 'strengthen';
+        this.currentTab = data?.tab === EquipEvolveTab.Upgrade ? EquipEvolveTab.Upgrade : EquipEvolveTab.Strengthen;
+        // 每次 open 都是新的资源作用域：上一趟的预制与节点已经跟着 dispose 走了，
+        // 不复位就永远只有第一次点「强化 / 升级」有字特效。
+        this.upgradeFx?.reset();
+        this.upgradeFx?.load(this.assets);
         this.updateTabDisplay();
         await this.refreshCurrentPart();
     }
 
     private bindEvents(): void {
         this.backBtn.node.on(Button.EventType.CLICK, () => this.close());
-        this.tabHero.node.on(Button.EventType.CLICK, () => this.switchTab('strengthen'));
-        this.tabForge.node.on(Button.EventType.CLICK, () => this.switchTab('upgrade'));
+        this.tabHero.node.on(Button.EventType.CLICK, () => this.switchTab(EquipEvolveTab.Strengthen));
+        this.tabForge.node.on(Button.EventType.CLICK, () => this.switchTab(EquipEvolveTab.Upgrade));
 
         this.buildBtn.node.on(Button.EventType.CLICK, this.onBuildClick, this);
         this.buildAllBtn.node.on(Button.EventType.CLICK, this.onBuildAllClick, this);
@@ -208,7 +259,7 @@ export class EquipEvolvePage extends PopupBase {
         }
     }
 
-    private switchTab(tab: 'strengthen' | 'upgrade'): void {
+    private switchTab(tab: EquipEvolveTab): void {
         if (this.currentTab === tab) return;
         this.currentTab = tab;
         this.updateTabDisplay();
@@ -217,7 +268,7 @@ export class EquipEvolvePage extends PopupBase {
     }
 
     private updateTabDisplay(): void {
-        const isStrengthen = this.currentTab === 'strengthen';
+        const isStrengthen = this.currentTab === EquipEvolveTab.Strengthen;
         this.pageStrengthen.active = isStrengthen;
         this.pageUpgrade.active = !isStrengthen;
 
@@ -231,6 +282,8 @@ export class EquipEvolvePage extends PopupBase {
         this.tabForgeOff.active = isStrengthen;
         this.tabForgeIconOn.active = !isStrengthen;
         this.tabForgeIconOff.active = isStrengthen;
+        // 蓝湖设计稿：规则说明角标只出现在升级页。
+        this.helpBtn.node.active = !isStrengthen;
     }
 
     private async selectPart(partId: number): Promise<void> {
@@ -268,12 +321,13 @@ export class EquipEvolvePage extends PopupBase {
                     void loadRoleBagIconSprite('equip', partData.entry.iconKey).then(sf => {
                         if (this.isValid && sf && partData.entry?.iconKey) {
                             this.equipIconCache.set(partData.entry.iconKey, sf);
-                            slotItem.setData(sf, (i + 1) === this.currentPartId, slotItem.redDotNode?.active ?? false);
+                            slotItem.setData(sf, (i + 1) === this.currentPartId,
+                                slotItem.hasRedDot, partData.level, partData.entry?.rank ?? 0);
                         }
                     });
                 }
             }
-            slotItem.setData(iconSf, selected, slotItem.redDotNode?.active ?? false);
+            slotItem.setData(iconSf, selected, slotItem.hasRedDot, partData.level, partData.entry?.rank ?? 0);
         }
     }
 
@@ -301,11 +355,28 @@ export class EquipEvolvePage extends PopupBase {
         }
     }
 
+    /** 中间大图等级徽章：底图与文字同属徽章节点（文字为子节点），隐藏徽章父节点即整体隐藏。 */
+    private setGoodsLevel(level: number): void {
+        const badge = this.goodsLevelLabel.node.parent;
+        if (badge) badge.active = level > 0;
+        else this.goodsLevelLabel.node.active = level > 0;
+        this.goodsLevelLabel.string = `${level}级`;
+    }
+
     private renderGrowthData(): void {
         const growth = this.currentGrowth;
-        if (!growth) return;
+        if (!growth) {
+            this.setGoodsLevel(0);
+            this.goodsRankLabel.node.active = false;
+            return;
+        }
 
-        if (this.currentTab === 'strengthen') {
+        // 中间大图徽章（等级 + 品阶）与页签无关，两个分页共用；等级文字在徽章子节点里，整体随徽章隐藏。
+        this.setGoodsLevel(growth.level);
+        this.goodsRankLabel.node.active = growth.rank > 0;
+        this.goodsRankLabel.string = `Lv.${growth.rank}`;
+
+        if (this.currentTab === EquipEvolveTab.Strengthen) {
             const isMax = growth.level >= 100;
             this.maxLvLabel.node.active = isMax;
             this.curLvLabel.node.active = !isMax;
@@ -314,161 +385,109 @@ export class EquipEvolvePage extends PopupBase {
             this.buildAllBtn.node.active = !isMax;
 
             if (!isMax) {
-                this.curLvLabel.string = growth.level > 0 ? `Lv.${growth.level}` : 'Lv.0';
-                this.nextLvLabel.string = `Lv.${growth.level + 1}`;
+                this.curLvLabel.string = `${growth.level}级`;
+                this.nextLvLabel.string = `${growth.level + 1}级`;
             }
 
-            // 属性列表渲染（纯组件直接赋值，无 getChildByName）
-            const nextAtk = growth.nextAttack ?? Math.round(growth.attack * 1.05) + 5;
-            const nextHp = growth.nextHpPercent ?? (growth.hpPercent + 0.05);
-            const stats = [
-                { name: '攻击力', cur: growth.attack, next: nextAtk },
-                { name: '全队生命', cur: `${Math.round(growth.hpPercent * 100)}%`, next: `${Math.round(nextHp * 100)}%` },
+            // 蓝湖版式：左列「名称：当前值」，右列下一级；攻击力带 `+`，生命按百分比口径。
+            // 数值全部取 `RoleRepository.equipmentGrowth`：`hpPercent` / `nextHpPercent` 已是百分数
+            // （105 = 105%），页面只拼文案，不再 ×100，也不再自己编「×1.05」的下一级。
+            const nextAtk = isMax ? undefined : growth.nextAttack;
+            const nextHp = isMax ? undefined : growth.nextHpPercent;
+            const rows = [
+                { name: '全队攻击力：', cur: `+${growth.attack}`, next: nextAtk === undefined ? undefined : `+${nextAtk}` },
+                { name: '生命百分比：', cur: `${percentText(growth.hpPercent)}`, next: nextHp === undefined ? undefined : `${percentText(nextHp)}%` },
             ];
-
             for (let i = 0; i < this.strengthenAttrItems.length; i++) {
                 const item = this.strengthenAttrItems[i];
-                if (i < stats.length) {
-                    const s = stats[i];
-                    item.setData(s.name, s.cur, s.next, isMax);
-                } else {
+                const row = rows[i];
+                if (!row) {
                     item.node.active = false;
+                    continue;
                 }
+                item.setData(row.name, row.cur, row.next);
             }
 
-            // 消耗材料渲染
             for (let i = 0; i < this.strengthenCostItems.length; i++) {
-                const item = this.strengthenCostItems[i];
-                if (i < growth.levelCost.length && !isMax) {
-                    item.setData(growth.levelCost[i]);
-                } else {
-                    item.node.active = false;
-                }
+                this.renderCostItem(this.strengthenCostItems[i], isMax ? null : growth.levelCostFacts[i] ?? null);
             }
         } else {
-            // 升品与洗练
-            const isMaxQuality = !growth.qualityCost;
-            const rankText = `${growth.rank || 1}阶`;
-            const nextRankText = `${(growth.rank || 1) + 1}阶`;
-            if (this.qualityNowLabel) {
-                this.qualityNowLabel.node.active = !isMaxQuality;
-                this.qualityNowLabel.string = rankText;
-            }
-            if (this.qualityNextLabel) {
-                this.qualityNextLabel.node.active = !isMaxQuality;
-                this.qualityNextLabel.string = nextRankText;
-            }
-            if (this.qualityArrowNode) {
-                this.qualityArrowNode.active = !isMaxQuality;
-            }
-            if (this.qualityMaxLabel) {
-                this.qualityMaxLabel.node.active = isMaxQuality;
-                this.qualityMaxLabel.string = rankText;
-            }
+            const isMaxQuality = !growth.qualityCostFact;
+            this.qualityNowLabel.node.active = !isMaxQuality;
+            this.qualityNowLabel.string = growth.rarityName;
+            this.qualityNextLabel.node.active = !isMaxQuality;
+            this.qualityNextLabel.string = growth.nextRarityName ?? growth.rarityName;
+            this.qualityArrowNode.active = !isMaxQuality;
+            this.qualityMaxLabel.node.active = isMaxQuality;
+            this.qualityMaxLabel.string = growth.rarityName;
 
             for (let i = 0; i < this.upgradeAttrItems.length; i++) {
                 const item = this.upgradeAttrItems[i];
-                if (i < growth.effects.length) {
-                    item.setData('附加属性', growth.effects[i]);
-                } else {
+                const row = growth.effectRows[i];
+                if (!row) {
                     item.node.active = false;
+                    continue;
                 }
+                item.setData(row.name, row.cur, isMaxQuality ? undefined : row.next);
             }
 
-            if (this.upgradeCostItems[0]) {
-                if (growth.qualityCost) {
-                    this.upgradeCostItems[0].setData(growth.qualityCost);
-                } else {
-                    this.upgradeCostItems[0].node.active = false;
-                }
-            }
+            this.renderCostItem(this.upgradeCostItems[0], growth.qualityCostFact);
+            this.renderCostItem(this.washCostItems[0], growth.washCostFact);
 
-            const showWash = !!growth.washCost;
+            // 有洗炼时两颗 218×90 按钮按蓝湖按钮行对齐（102 / 399），无洗炼时升级按钮居中；
+            // 消耗项跟随按钮左缘（升级单按钮态按蓝湖 318），坐标相对底部操作组（BottomGroup）。
+            const showWash = !!growth.washCostFact;
             this.washBtn.node.active = showWash;
-            this.upBtn.node.setPosition(showWash ? 68 : 205, -341, 0);
-
-            if (this.washCostItems[0]) {
-                if (growth.washCost) {
-                    this.washCostItems[0].setData(growth.washCost);
-                } else {
-                    this.washCostItems[0].node.active = false;
-                }
-            }
+            this.upBtn.node.setPosition(showWash ? 102 : 251, -34, 0);
+            const upCostItem = this.upgradeCostItems[0];
+            if (upCostItem) upCostItem.node.setPosition(showWash ? 135 : 318, 0, 0);
+            const washCostItem = this.washCostItems[0];
+            if (washCostItem) washCostItem.node.setPosition(462, 0, 0);
         }
     }
 
-    // --- 红点计算与更新（对齐老端 VOEquipPage 及 ModelEquip） ---
-
-    private async checkCanStrengthen(partId: number): Promise<boolean> {
-        const cache = CacheMgr.instance;
-        const part = cache.getCmdEquipPart(partId);
-        if (!part?.equip) return false;
-        const page = cache.getTlCmdRole()[0]?.selectEquipPage;
-        const selected = page == null ? null : cache.getCmdEquipPage(page);
-        // 分页行的 equipId 是装备 resId；part.equip.baseId 是初始部位 1..6，不能拿来比。
-        const level = equipLevelOf(selected?.tlCmdEquip, part.equip.resId);
-        if (level >= 100) return false;
-
-        const ref = RefUtil.instance;
-        const [item, nextLevel] = await Promise.all([
-            ref.getRefAsync('equip', 'resId', part.equip.resId),
-            ref.getRefAsync('equipLevel', 'equipLevel', level + 1),
-        ]) as [Record<string, unknown> | undefined, Record<string, unknown> | undefined];
-
-        if (!item || !nextLevel) return false;
-        const userGold = Number(cache.getTlCmdRole()[0]?.gold ?? 0);
-        const userDrawings = Number(cache.getCmdItem(Number(item.consumeId))?.number ?? 0);
-        const needGold = Number(nextLevel.gold ?? 0);
-        const needDrawings = Number(nextLevel.drawings ?? 0);
-
-        return userGold >= needGold && userDrawings >= needDrawings;
+    /** 消耗项：先上「持有/需求」与配色，再异步补图标；同一路径只取一次。 */
+    private renderCostItem(item: EquipEvolveCostItem | undefined, fact: IRoleEquipCostFact | null): void {
+        if (!item) return;
+        if (!fact) {
+            item.node.active = false;
+            return;
+        }
+        const cached = this.costIconCache.get(fact.iconPath);
+        item.setCost(fact, cached ?? null);
+        if (cached || !fact.iconPath) return;
+        void loadItemIconArt(fact.iconPath).then(sf => {
+            if (!this.isValid || !sf) return;
+            this.costIconCache.set(fact.iconPath, sf);
+            if (item.node.active) item.setCost(fact, sf);
+        });
     }
 
-    private async checkCanUpgrade(partId: number): Promise<boolean> {
-        const cache = CacheMgr.instance;
-        const part = cache.getCmdEquipPart(partId);
-        if (!part?.equip) return false;
-
-        const ref = RefUtil.instance;
-        const [nextRank, costConfig] = await Promise.all([
-            ref.getRefAsync('equipRank', ['rank', 'qualityLevel'], part.equip.rank, part.equip.curQuality + 1),
-            ref.getRefAsync('gameConfig', 'key', 'equipAddQualityCostId'),
-        ]) as [Record<string, unknown> | undefined, Record<string, unknown> | undefined];
-
-        if (!nextRank || !costConfig) return false;
-        const costResId = Number(costConfig.value ?? 0);
-        const userMaterial = Number(cache.getCmdItem(costResId)?.number ?? 0);
-        const needMaterial = Number(nextRank.cost ?? 0);
-
-        return userMaterial >= needMaterial;
-    }
+    // --- 红点计算与更新（与角色页共用 `RoleRepository.equipRedDots()`，口径见 RoleEquipRedDotTable） ---
 
     private async updateRedDots(): Promise<void> {
-        const parts = roleRepository.equipParts();
-        let anyCanStrengthen = false;
-        let anyCanUpgrade = false;
+        const revision = ++this.redDotRevision;
+        const dots = await roleRepository.equipRedDots();
+        if (!this.isValid || revision !== this.redDotRevision) return;
 
-        for (let i = 0; i < parts.length && i < this.slotItems.length; i++) {
-            const p = parts[i];
-            const canSt = await this.checkCanStrengthen(p.partId);
-            const canUp = await this.checkCanUpgrade(p.partId);
-            if (canSt) anyCanStrengthen = true;
-            if (canUp) anyCanUpgrade = true;
+        // 页签 / 按钮：强化与升品各自汇总；洗炼在升品页内，并入升品页签红点。
+        this.tabHeroRedDot.setRedDot(dots.strengthen);
+        this.tabForgeRedDot.setRedDot(dots.upgrade || dots.wash);
+        this.buildAllBtnRedDot.setRedDot(dots.strengthen);
 
-            const hasRd = this.currentTab === 'strengthen' ? canSt : canUp;
-            if (this.slotItems[i]?.redDotNode) {
-                this.slotItems[i].redDotNode.active = hasRd;
-            }
+        const current = dots.parts[this.currentPartId - 1];
+        this.buildBtnRedDot.setRedDot(current.strengthen);
+        this.upBtnRedDot.setRedDot(current.upgrade);
+        this.washBtnRedDot.setRedDot(current.wash);
+
+        // 底部槽位红点跟随当前页签的可操作项（升品页把洗炼也算进来）。
+        for (let i = 0; i < this.slotItems.length && i < dots.parts.length; i += 1) {
+            const slot = this.slotItems[i];
+            const part = dots.parts[i];
+            slot.setRedDot(this.currentTab === EquipEvolveTab.Strengthen
+                ? part.strengthen
+                : part.upgrade || part.wash);
         }
-
-        if (this.tabHeroRedDot) this.tabHeroRedDot.active = anyCanStrengthen;
-        if (this.tabForgeRedDot) this.tabForgeRedDot.active = anyCanUpgrade;
-        if (this.buildAllBtnRedDot) this.buildAllBtnRedDot.active = anyCanStrengthen;
-
-        const curCanSt = await this.checkCanStrengthen(this.currentPartId);
-        const curCanUp = await this.checkCanUpgrade(this.currentPartId);
-        if (this.buildBtnRedDot) this.buildBtnRedDot.active = curCanSt;
-        if (this.upBtnRedDot) this.upBtnRedDot.active = curCanUp;
     }
 
     private async onBuildClick(): Promise<void> {
@@ -478,8 +497,10 @@ export class EquipEvolvePage extends PopupBase {
             type: 0,
         }, this);
         if (status === 'ok') {
+            this.playGrowthSuccess(UI_UPGRADE_ANIMATION.rankUp);
             FW.showTip(ROLE_TEXTS.equipChanged);
             await this.refreshCurrentPart();
+            EventMgr.instance.emit(RoleEvent.EquipChanged);
             EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 2 });
         }
     }
@@ -487,8 +508,11 @@ export class EquipEvolvePage extends PopupBase {
     private async onBuildAllClick(): Promise<void> {
         const status = await roleRepository.requestGrowth('CmdEquipUpLevelAllReqMsg', {}, this);
         if (status === 'ok') {
+            // 一键强化与单件强化是同一件事，反馈必须一致
+            this.playGrowthSuccess(UI_UPGRADE_ANIMATION.rankUp);
             FW.showTip(ROLE_TEXTS.equipChanged);
             await this.refreshCurrentPart();
+            EventMgr.instance.emit(RoleEvent.EquipChanged);
             EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 2 });
         }
     }
@@ -499,33 +523,54 @@ export class EquipEvolvePage extends PopupBase {
             equipId: this.currentGrowth.baseId,
         }, this);
         if (status === 'ok') {
+            // 「升级」（升品页签）⇒ 字特效用「升级成功」
+            this.playGrowthSuccess(UI_UPGRADE_ANIMATION.levelUp);
             FW.showTip(ROLE_TEXTS.equipChanged);
             await this.refreshCurrentPart();
+            EventMgr.instance.emit(RoleEvent.EquipChanged);
         }
     }
 
+    /**
+     * 装备养成成功的统一反馈：通用音效 + 屏正中的字特效。
+     *
+     * 两个都「拿不到就静默跳过」（音效表缺行 / 预制没进包）：设备静音或资源没到时，
+     * 界面上的等级、品阶、消耗仍然是成功的 —— 反馈是加菜，不是成功判据。
+     */
+    private playGrowthSuccess(animation: UiUpgradeAnimation): void {
+        void AudioMgr.instance.playSound(GAME_AUDIO.upgradeSuccess, this.resourceScope);
+        this.upgradeFx?.play(animation);
+    }
+
     private async onWashClick(): Promise<void> {
-        if (!this.currentGrowth) return;
+        const growth = this.currentGrowth;
+        const context = this.popupOpenContext;
+        if (!growth || !context) return;
         const status = await roleRepository.requestGrowth('CmdEquipWashReqMsg', {
-            equipId: this.currentGrowth.baseId,
+            equipId: growth.baseId,
         }, this, response => {
-            const rsp = response as any;
-            const newEffects: number[] = rsp?.tlLibs ?? rsp?.tlCurEffects ?? [];
-            if (newEffects.length) {
-                void EquipWashPopup.open({
-                    userData: {
-                        equipId: this.currentGrowth!.baseId,
-                        name: this.currentGrowth!.name,
-                        rank: this.currentGrowth!.rank,
-                        level: this.currentGrowth!.level,
-                        oldEffects: this.currentGrowth!.effects,
-                        newEffectIds: newEffects,
-                    }
-                });
+            const newEffectIds = response.tlLibs ?? [];
+            if (!newEffectIds.length || (response.equipId != null && response.equipId !== growth.baseId)) {
+                FW.showTip(ROLE_TEXTS.failed);
+                return;
             }
+            void EquipWashPopup.open({
+                userData: {
+                    equipId: growth.baseId,
+                    name: growth.name,
+                    rank: growth.rank,
+                    level: growth.level,
+                    oldEffects: growth.effects,
+                    washValues: growth.washValues,
+                    newEffectIds,
+                },
+            });
         });
+        if (context.cancelled) return;
         if (status === 'ok') {
-            FW.showTip(ROLE_TEXTS.equipWash);
+            EventMgr.instance.emit(RoleEvent.EquipChanged);
+        } else {
+            FW.showTip(status === 'offline' ? ROLE_TEXTS.offline : ROLE_TEXTS.failed);
         }
     }
 

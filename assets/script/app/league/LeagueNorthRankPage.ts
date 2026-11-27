@@ -48,7 +48,7 @@ import { FW } from '../../framework/FW';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { loadArt } from '../card/CardLineupIcons';
-import { LEAGUE_ART_ROOT } from './LeagueArt';
+import { LEAGUE_ART_ROOT } from '../ArtPaths';
 import { LeagueNorthRankRow } from './LeagueNorthRankRow';
 import { LeagueNorthTab, LEAGUE_NORTH_TAB_ART_NAMES } from './LeagueNorthTab';
 import {

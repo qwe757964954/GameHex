@@ -14,7 +14,7 @@ export const BIGMAP_BASE_CONTENT_LIFT = HEX_GRID_CONTENT_LIFT;
  *基地场景的最小画布：设计稿地皮按 126×117 原生尺寸 1:1 展示。
  *1280 覆盖 720×1610 的 1282 高浏览区，相机的 `minZoom` 不会被强行压到 0.89。
  */
-export const BIGMAP_BASE_MAP_SIZE = 1280;
+const BIGMAP_BASE_MAP_SIZE = 1280;
 
 export interface IBigMapPlotPosition {
     readonly hexId: number;

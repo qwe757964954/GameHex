@@ -18,8 +18,8 @@ export function formatText(template: string, ...args: readonly (string | number)
 /** 三个页签的标题（顺序 = `FRIEND_TAB_KEYS` 的顺序）。 */
 export const FRIEND_TAB_LABELS: readonly string[] = ['好友列表', '添加好友', '黑名单'];
 
-/** 主容器底部 / 右上角的按钮文案（FGUI `Button title` 原值）。 */
-export const FRIEND_BTN_REMOVE_MODE = '批量删除';
+/** 主容器底部 / 右上角的按钮文案（FGUI `Button title` 原值；v2 右上角改为「管理」）。 */
+export const FRIEND_BTN_REMOVE_MODE = '管理';
 export const FRIEND_BTN_REMOVE_MODE_BACK = '返回';
 export const FRIEND_BTN_SEND_ONE_KEY = '一键赠送';
 export const FRIEND_BTN_GET_END = '领取体力';
@@ -50,16 +50,23 @@ export const FRIEND_ROW_BUTTON_TEXT: Readonly<Record<string, string>> = {
     remove: '移除',
 };
 
-/** 计数类文案（老端 `FRIEND_NUM` / `BLACK_LIST`）。 */
-export const FRIEND_COUNT_TEMPLATE = '好友数：{0}/{1}';
-export const FRIEND_BLACK_COUNT_TEMPLATE = '黑名单：{0}/{1}';
+/** 计数类文案（老端 `FRIEND_NUM` / `BLACK_LIST`；v2 只保留数字，前缀在 prefab 静态标签上）。 */
+export const FRIEND_COUNT_TEMPLATE = '{0}/{1}';
+export const FRIEND_BLACK_COUNT_TEMPLATE = '{0}/{1}';
 
-/** 剩余次数（老端 `FRIEND_SEND_END_TIMES` / `FRIEND_GET_END_TIMES`）。 */
-export const FRIEND_SEND_TIMES_TEMPLATE = '今日还可赠送{0}次';
+/** 剩余次数（老端 `FRIEND_SEND_END_TIMES` / `FRIEND_GET_END_TIMES`；v2 只保留数字）。 */
+export const FRIEND_SEND_TIMES_TEMPLATE = '{0} 次';
 export const FRIEND_GET_END_TIMES_TEMPLATE = '今日还可领取{0}次';
 
 /** 批量删除的人数提示（老端 `FRIEND_REMOVE_SELECT_TEXT`）。 */
-export const FRIEND_REMOVE_SELECT_TEMPLATE = '已选择：{0}人';
+export const FRIEND_REMOVE_SELECT_TEMPLATE = '已选择 {0} 人';
+
+/** v2 区块标签行的标题 / 人数。 */
+export const FRIEND_TAG_LIST = '好友列表';
+export const FRIEND_TAG_ADD = '推荐好友';
+export const FRIEND_TAG_BLACK = '黑名单';
+export const FRIEND_TAG_REMOVE = '批量删除';
+export const FRIEND_TAG_COUNT_TEMPLATE = '{0} 人';
 
 /** 战力前缀（老端 `COMBAT_POWER_TEXT`）与在线标（`ONLINE_TEXT`）。 */
 export const FRIEND_POWER_PREFIX = '战力：';
@@ -68,7 +75,7 @@ export const FRIEND_ONLINE_TEXT = '在线';
 /** 领取行的体力数（老端 `GIFT_NUM`）。 */
 export const FRIEND_END_NUM_TEMPLATE = '体力数:{0}';
 /** 行的主按钮（领取体力弹窗的行）。 */
-export const FRIEND_ROW_GET_END_TEXT = '领取';
+const FRIEND_ROW_GET_END_TEXT = '领取';
 
 /** 顶部提示。 */
 export const FRIEND_TIP_SEND_MAX = '今日赠送次数已用完';

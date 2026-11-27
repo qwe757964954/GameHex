@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ZCBattleSettlementController } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
 import { createControllerContext } from './helpers/controller-context';
-import { runtimeFixture, flush, deferred } from './helpers/battle-runtime';
+import type { ZCBattlePopupCommand } from '../assets/script/app/zcds/application/ZCBattleEvents';
+import type { IZCDamageStatsSeats, IZCDamageStatsUnit } from '../assets/script/app/zcds/application/ZCBattleRuntimeContract';
+import { type ITestBattlePopup, type ITestDamageStatsPopup, runtimeFixture, flush, deferred } from './helpers/battle-runtime';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
-import { ZC_BATTLE_EVENTS } from '../assets/script/app/zcds/application/ZCBattleEvents';
+import { ZC_BATTLE_DEBUG_EVENTS, ZC_BATTLE_EVENTS } from '../assets/script/app/zcds/application/ZCBattleEvents';
 import { ZCGameUiEvent } from '../assets/script/app/zcds/view/ZCGameHudEvents';
 import type { IZCChapterBattleOutcome } from '../assets/script/app/battle/BattleResultService';
-import type { IZCBattlePopup } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
-import type { IZCDamageStatsPopup, IZCDamageStatsSeats, IZCDamageStatsUnit } from '../assets/script/app/zcds/application/ZCBattleRuntimeContract';
 import { GAME_AUDIO } from '../assets/script/app/ResConst';
 import { battleDrawSoundOf } from '../assets/script/app/zcds/application/ZCBattleRuntimeController';
-import { getPlayerDeck } from '../assets/script/app/zcds/model/ZCCombatCatalog';
+import { getPlayerDeck, type ZCDeckCard } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 
 test('战斗翻地块的抽卡音按品阶四选一：抽空 / 蓝绿 / 紫 / 金', () => {
     // 用户 2026-11-24：「抽空播战斗中抽空音效；抽出蓝绿卡都播蓝绿卡音效；
@@ -75,6 +75,26 @@ test('战斗内点击地块按实际抽到的卡牌品阶播音，开发不了 /
     }
 });
 
+test('点击兵营弹出兵营信息，点其他格收起', () => {
+    const h = runtimeFixture();
+    try {
+        const model = h.runtime.currentModel;
+        assert.ok(model);
+        const hex = model.snapshot.hexes[0];
+        const raw = hex as unknown as { building: string; cardId: string | null; owner: string };
+        raw.building = 'barracks';
+        raw.cardId = '68029';
+        raw.owner = 'player';
+        EventMgr.instance.emit(ZCGameUiEvent.HexClick, hex.id, h.view);
+        assert.ok(h.calls.includes('barracks:68029'), '点击兵营应把卡 id 交给面板');
+        const other = model.snapshot.hexes.find(cell => cell.id !== hex.id && cell.building !== 'barracks');
+        if (other) EventMgr.instance.emit(ZCGameUiEvent.HexClick, other.id, h.view);
+        assert.ok(h.calls.includes('barracks:hide'), '点击非兵营格应收起面板');
+    } finally {
+        h.dispose();
+    }
+});
+
 test('固定与自选出生点在开战时打印一份最终配置，后续帧不重复打印', (t) => {
     const log = t.mock.method(console, 'info', () => {});
     for (const selecting of [false, true]) {
@@ -127,11 +147,11 @@ test('固定与自选出生点在开战时打印一份最终配置，后续帧�
 
 test('GM 加金币经事件修改当前模型并即时渲染，选点阶段拒绝，退出后解除', () => {
     const target = {}, messages: string[] = [];
-    EventMgr.instance.on(ZCGameUiEvent.DebugAddGoldResult, ({ message }) => messages.push(message), target);
+    EventMgr.instance.on(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD_RESULT, ({ message }) => messages.push(message), target);
     try {
         const selecting = runtimeFixture({}, true);
         try {
-            EventMgr.instance.emit(ZCGameUiEvent.DebugAddGold, 123);
+            EventMgr.instance.emit(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD, 123);
             assert.match(messages.at(-1), /出生点/);
             assert.equal(selecting.runtime.currentModel, null);
         } finally { selecting.dispose(); }
@@ -140,17 +160,17 @@ test('GM 加金币经事件修改当前模型并即时渲染，选点阶段拒�
         const before = model.snapshot.playerGold;
         try {
             h.calls.length = 0;
-            EventMgr.instance.emit(ZCGameUiEvent.DebugAddGold, 123);
+            EventMgr.instance.emit(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD, 123);
             assert.equal(model.snapshot.playerGold, before + 123);
             assert.ok(h.calls.includes('all'));
             assert.match(messages.at(-1), /增加 123/);
             h.calls.length = 0;
-            EventMgr.instance.emit(ZCGameUiEvent.DebugAddGold, -1);
+            EventMgr.instance.emit(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD, -1);
             assert.equal(model.snapshot.playerGold, before + 123);
             assert.equal(h.calls.length, 0);
         } finally { h.dispose(); }
         const count = messages.length;
-        EventMgr.instance.emit(ZCGameUiEvent.DebugAddGold, 123);
+        EventMgr.instance.emit(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD, 123);
         assert.equal(messages.length, count);
         assert.equal(model.snapshot.playerGold, before + 123);
     } finally { EventMgr.instance.offTarget(target); }
@@ -162,7 +182,7 @@ test('伤害面板按实际席位逐人显示，打开时追平并按静态节�
         const openedSeats: (IZCDamageStatsSeats | undefined)[] = [];
         const updates: (readonly IZCDamageStatsUnit[])[] = [];
         let isOpen = true, opens = 0;
-        const popup: IZCDamageStatsPopup = { get isOpen() { return isOpen; }, refresh: units => updates.push(units), close() { isOpen = false; } };
+        const popup: ITestDamageStatsPopup = { get isOpen() { return isOpen; }, refresh: units => updates.push(units), close() { isOpen = false; } };
         const h = runtimeFixture({}, false, undefined, { openDamage: async (units, seats) => { opens++; opened.push(units); openedSeats.push(seats); return popup; } });
         try {
             const owners = ['player', 'enemy', 'enemy2', 'enemy3'].slice(0, count);
@@ -196,7 +216,7 @@ test('伤害面板按实际席位逐人显示，打开时追平并按静态节�
             assert.equal(updates.length, before + 1);
             assert.deepEqual(updates[updates.length - 1].slice(0, count).map(unit => unit.owner), owners, '席位行序不变（排序在弹窗里做）');
             assert.equal(updates[updates.length - 1][1].damage, 100);
-            isOpen = false;
+            h.closeDamagePopup();
             EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.15 });
             assert.equal(updates.length, before + 1);
             isOpen = true;
@@ -242,7 +262,7 @@ test('missing unit art is scoped to its real view, deduplicated and ignored afte
 
 test('统计面板加载期间结束对局则关闭迟到窗口，已点空白关闭的窗口不再刷新', async () => {
     for (const settled of [false, true]) {
-        const pending = deferred<IZCDamageStatsPopup | null>();
+        const pending = deferred<ITestDamageStatsPopup | null>();
         let closes = 0, refreshes = 0;
         const h = runtimeFixture({}, false, undefined, { openDamage: () => pending.promise });
         try {
@@ -309,6 +329,16 @@ test('settlement waits before report, closes before navigation and restores on c
     const owner = {}, target = {};
     EventMgr.instance.on(ZC_BATTLE_EVENTS.PVE_RESULT, (_payload, source) => { if (source === owner) calls.push('record'); }, target);
     EventMgr.instance.on(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, (_payload, source) => { if (source === owner) calls.push('navigate'); }, target);
+    EventMgr.instance.on(ZC_BATTLE_EVENTS.POPUP_COMMAND, (command: ZCBattlePopupCommand, source) => {
+        if (source !== owner) return;
+        if (command.kind === 'openSettlement') {
+            pages.push(command.options);
+            calls.push('open');
+        } else if (command.kind === 'closeSettlement') {
+            calls.push('close');
+            calls.push(`reason:${command.reason}`);
+        }
+    }, target);
     t.after(() => EventMgr.instance.offTarget(target));
     const controller = new ZCBattleSettlementController(createControllerContext(), {
         results: {
@@ -317,9 +347,9 @@ test('settlement waits before report, closes before navigation and restores on c
             cancelRequests: () => calls.push('cancel'),
         },
         rewards: { loadRewards: async () => [] },
-        popup: {
-            open: async options => { pages.push(options); calls.push('open'); return { close: reason => { calls.push('close'); calls.push(`reason:${reason}`); } }; },
-            openRank: async () => { calls.push('rank'); return null; },
+        rank: {
+            present: async () => { calls.push('rank'); },
+            cancel: () => {},
         },
         flow: { watchSwitch: callback => { settled = callback; return () => calls.push('unwatch'); } },
         failed: () => {},
@@ -429,7 +459,7 @@ test('late result after disposal does not persist, load rewards or open popup', 
     assert.deepEqual(calls, []); assert.equal(h.pages.length, 0);
 });
 test('late popup closes immediately and cancelled return reuses the original result', async () => {
-    const pending = deferred<IZCBattlePopup | null>(), calls: string[] = [];
+    const pending = deferred<ITestBattlePopup | null>(), calls: string[] = [];
     const h = runtimeFixture({ open: () => pending.promise });
     EventMgr.instance.emit(ZCGameUiEvent.Retreat); await flush(); h.dispose();
     pending.resolve({ close: () => calls.push('closed') }); await flush();
@@ -497,11 +527,12 @@ test('runtime disposal closes settlement and auxiliary popups even if request ca
     h.runtime.scope.defer(() => calls.push('runtimeRelease'));
     EventMgr.instance.emit(ZCGameUiEvent.OpenGuide);
     EventMgr.instance.emit(ZCGameUiEvent.OpenRank);
+    await flush();
     EventMgr.instance.emit(ZCGameUiEvent.Retreat);
     await flush();
     try {
         assert.throws(() => h.runtime.dispose(), error => error === failure);
-        assert.deepEqual(calls, ['cancel', 'settlementClose', 'rankClose', 'guideClose', 'runtimeRelease']);
+        assert.deepEqual(calls, ['rankClose', 'guideClose', 'cancel', 'settlementClose', 'runtimeRelease']);
         assert.equal(h.runtime.currentModel, null);
         assert.equal(h.settlement.scope.disposed, true);
         h.runtime.dispose();
@@ -634,4 +665,201 @@ test('投降确认框还开着就退局：弹窗被关掉，也不会补一次�
     await flush();
     assert.ok(closes >= 1, '退局必须把确认框关掉，不能留在别的界面上');
     assert.equal(h.requests.length, 0, '关窗口不等于确认，不能补结算');
+});
+
+test('局内开着排行榜时进入结算（≥3 人局），先关闭局内排行榜再弹出结算排行榜', async () => {
+    const events: string[] = [];
+    let resolveClosed: () => void = () => {};
+    const whenClosed = new Promise<void>(resolve => { resolveClosed = resolve; });
+    const h = runtimeFixture({
+        openRank: async () => {
+            events.push('settlementRankOpen');
+            return { close() { events.push('settlementRankClose'); }, whenClosed };
+        },
+        open: async () => {
+            events.push('settlementPageOpen');
+            return { close() {} };
+        },
+    }, false, undefined, {
+        openRank: async () => {
+            events.push('runtimeRankOpen');
+            return { close() { events.push('runtimeRankClose'); } };
+        },
+    });
+    try {
+        Object.defineProperty(h.runtime.currentModel, 'owners', { get: () => ['player', 'enemy', 'enemy2'] });
+        EventMgr.instance.emit(ZCGameUiEvent.OpenRank);
+        await flush();
+        assert.deepEqual(events, ['runtimeRankOpen']);
+
+        EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+        await flush();
+        assert.deepEqual(events, ['runtimeRankOpen', 'runtimeRankClose', 'settlementRankOpen']);
+
+        // 结算态再发局内排行榜意图必须被忽略。
+        EventMgr.instance.emit(ZCGameUiEvent.OpenRank);
+        await flush();
+        assert.deepEqual(events, ['runtimeRankOpen', 'runtimeRankClose', 'settlementRankOpen']);
+
+        resolveClosed();
+        await flush();
+        assert.deepEqual(events, ['runtimeRankOpen', 'runtimeRankClose', 'settlementRankOpen', 'settlementPageOpen']);
+    } finally { h.dispose(); }
+});
+
+test('结算页「查看完整队伍」在途期间连点被拦截，关闭后可再次打开', async () => {
+    const pending = deferred<ITestDamageStatsPopup | null>();
+    let opens = 0;
+    let closeTeam!: () => void;
+    const h = runtimeFixture({
+        openDamage: () => {
+            opens++;
+            if (opens === 1) return pending.promise;
+            return Promise.resolve({ isOpen: true, refresh() {}, close() {} });
+        },
+    });
+    try {
+        EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+        await flush();
+        EventMgr.instance.emit(ZCGameUiEvent.SettlementViewTeam);
+        EventMgr.instance.emit(ZCGameUiEvent.SettlementViewTeam);
+        assert.equal(opens, 1, '在途期间连点只发一次打开请求');
+
+        let teamOpen = true;
+        const teamPopup: ITestDamageStatsPopup = {
+            get isOpen() { return teamOpen; },
+            refresh() {},
+            close() { teamOpen = false; },
+        };
+        closeTeam = () => {
+            teamOpen = false;
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.DAMAGE_POPUP_STATE, { phase: 'settlement', open: false }, h.view);
+        };
+        pending.resolve(teamPopup);
+        await flush();
+        EventMgr.instance.emit(ZCGameUiEvent.SettlementViewTeam);
+        assert.equal(opens, 1, '已展开期间再次点击不重复打开');
+
+        closeTeam();
+        EventMgr.instance.emit(ZCGameUiEvent.SettlementViewTeam);
+        await flush();
+        assert.equal(opens, 2, '用户关闭后允许再次打开');
+    } finally { h.dispose(); }
+});
+
+test('结算演出期无法触发撤退，且在途确认框在进入演出时被取消，不会覆盖获胜结果', async () => {
+    const pendingConfirm = deferred<boolean>();
+    let confirmCalls = 0;
+    let cancelCalls = 0;
+    const h = runtimeFixture({}, false, undefined, {
+        confirm: async () => {
+            confirmCalls++;
+            return {
+                answered: pendingConfirm.promise,
+                close() { cancelCalls++; },
+            };
+        },
+    });
+    try {
+        // 1. 游戏中发起撤退，确认框处于等待中
+        EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+        await flush();
+        assert.equal(confirmCalls, 1, '游戏中发起撤退触发确认框');
+        assert.equal(cancelCalls, 0);
+
+        // 2. 在确认前，对局自然分出胜负（获胜），切入结算演出
+        h.forceStatus('victory');
+        h.holdSweep(true);
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 });
+        assert.equal(h.session.currentPhase, 'settlement-presentation');
+        assert.equal(cancelCalls, 1, '进入结算演出瞬间应主动取消在途确认框');
+
+        // 3. 在途确认框即使延迟兑现为 true，也不得触发投降结算覆盖胜利
+        pendingConfirm.resolve(true);
+        await flush();
+        assert.equal(h.requests.length, 0, '演出阶段不应被在途确认抢跑投降');
+
+        // 4. 演出期间再次点击投降直接被拒
+        EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+        await flush();
+        assert.equal(confirmCalls, 1, '演出阶段不可再次发起撤退');
+
+        // 5. 演出结束，正常结算上报本地胜利
+        h.holdSweep(false);
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 });
+        await flush();
+        assert.equal(h.session.currentPhase, 'settlement');
+        assert.equal(h.requests.length, 1);
+        assert.equal(h.requests[0].localVictory, true, '胜利结果未被撤退覆盖');
+    } finally { h.dispose(); }
+});
+
+test('自选出生点阶段不可触发撤退', async () => {
+    let confirmCalls = 0;
+    const h = runtimeFixture({}, true, undefined, {
+        confirm: async () => {
+            confirmCalls++;
+            return { answered: Promise.resolve(true), close() {} };
+        },
+    });
+    try {
+        EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+        await flush();
+        assert.equal(confirmCalls, 0, '选点阶段不可触发撤退');
+        assert.equal(h.requests.length, 0);
+    } finally { h.dispose(); }
+});
+
+test('实时伤害统计面板只补齐单位卡，纯建筑卡不混入统计行', async () => {
+    let openedUnits: readonly IZCDamageStatsUnit[] = [];
+    const h = runtimeFixture({}, false, undefined, {
+        openDamage: async (units) => {
+            openedUnits = units;
+            return { isOpen: true, refresh() {}, close() {} };
+        },
+    });
+    try {
+        const config = h.entry.matchConfig;
+        const playerDeck = config.playerDeck as ZCDeckCard[];
+        const buildingCard = playerDeck.find(card => !card.unitId);
+        assert.ok(buildingCard, '测试卡组必须存在无 unitId 的纯建筑卡');
+
+        EventMgr.instance.emit(ZCGameUiEvent.OpenDamageStats);
+        await flush();
+
+        assert.ok(openedUnits.length > 0);
+        const buildingInStats = openedUnits.find(unit => unit.cardId === buildingCard.id);
+        assert.equal(buildingInStats, undefined, '未出击补齐的统计行不应包含纯建筑卡');
+    } finally { h.dispose(); }
+});
+
+test('点击野怪格或进入结算演出时收起兵营面板', () => {
+    const h = runtimeFixture();
+    try {
+        const model = h.runtime.currentModel;
+        assert.ok(model);
+        const hex = model.snapshot.hexes[0];
+        const raw = hex as unknown as { building: string; cardId: string | null; owner: string };
+        raw.building = 'barracks';
+        raw.cardId = '68029';
+        raw.owner = 'player';
+
+        // 1. 打开兵营信息
+        EventMgr.instance.emit(ZCGameUiEvent.HexClick, hex.id, h.view);
+        assert.ok(h.calls.includes('barracks:68029'));
+
+        // 2. 模拟野怪格集火，应收起兵营面板
+        h.calls.length = 0;
+        EventMgr.instance.emit(ZCGameUiEvent.MonsterFocus, 999);
+        assert.ok(h.calls.includes('barracks:hide'), '集火野怪时应收起兵营面板');
+
+        // 3. 重新打开兵营信息，进入结算演出时应收起
+        EventMgr.instance.emit(ZCGameUiEvent.HexClick, hex.id, h.view);
+        assert.ok(h.calls.includes('barracks:68029'));
+        h.calls.length = 0;
+        h.forceStatus('victory');
+        h.holdSweep(true);
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 });
+        assert.ok(h.calls.includes('barracks:hide'), '切入结算演出时应收起兵营面板');
+    } finally { h.dispose(); }
 });

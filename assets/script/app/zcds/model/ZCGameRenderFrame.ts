@@ -10,6 +10,7 @@ import type {
     ZCHexState,
     ZCHitFx,
     ZCNeutralReward,
+    ZCSkillAnnounce,
     ZCSnapshot,
 } from './ZCGameTypes';
 import type { ZCOwner } from './ZCMapConfig';
@@ -45,6 +46,8 @@ export interface ZCGameRenderFrame {
     readonly cardReveals: readonly DeepReadonly<ZCCardReveal>[];
     readonly hexActivations: readonly DeepReadonly<ZCHexActivation>[];
     readonly neutralRewards: readonly DeepReadonly<ZCNeutralReward>[];
+    /** 传说卡首次放大招的通报（卡面形象 + 技能名）；走动态层，不进一次性通知。*/
+    readonly skillAnnounces: readonly DeepReadonly<ZCSkillAnnounce>[];
 }
 
 /** 一次性通知，对局编排层取走后交给动态渲染，不留在帧投影里。*/

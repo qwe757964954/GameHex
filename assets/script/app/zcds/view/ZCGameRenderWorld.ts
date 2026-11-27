@@ -3,7 +3,7 @@ import { missileLog } from '../ZCMissileSkillDiagnostics';
 import { hexGridDistance } from '../../../core/hex/HexGridLayout';
 import { zcMonsterPosition } from '../model/systems/ZCNeutralFeatureSystem';
 import type { IZCDeferredBattleArt } from '../application/ZCGamePreparedResources';
-import { EffectAsset, Graphics, instantiate, Material, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
+import { Color, EffectAsset, Graphics, instantiate, Material, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import { buildHexGridLayout } from '../../../core/hex/HexGridLayout';
 import { findCatalogCard, resolveUnitDefinition, ZCUnitId } from '../model/ZCCombatCatalog';
 import type { ZCAttackTrait } from '../model/ZCCombatCatalog';
@@ -23,8 +23,18 @@ import { ZCCardRevealView } from './ZCCardRevealView';
 import type { IZCBattlePresentationArt } from '../application/ZCBattleRuntimeContract';
 import { ZCGameLegendBannerView } from './ZCGameLegendBannerView';
 import { ZCGameKillBannerView } from './ZCGameKillBannerView';
+import { createZCSkillAnnounceNode, refreshZCSkillAnnounceFrame, renderZCSkillAnnounce } from './ZCSkillAnnounceFx';
+import type { IZCSkillAnnounceNode } from './ZCSkillAnnounceFx';
+import {
+    zcSkillAnnounceProgress,
+    zcSkillAnnounceSlotCenterY,
+    ZC_SKILL_ANNOUNCE_STACK_FALLBACK_TOP_Y,
+    ZC_SKILL_ANNOUNCE_STACK_FALLBACK_X,
+    ZC_SKILL_ANNOUNCE_STACK_GAP,
+    ZC_SKILL_ANNOUNCE_STACK_MAX,
+} from '../model/ZCSkillAnnounceStyle';
 import { ZCHexView } from './ZCHexView';
-import type { IZCMonsterFocusFrames } from './ZCHexView';
+import { ZCCharacterTier, zcCharacterDrawOrder, zcCharacterTierOf } from '../model/ZCCharacterDrawOrder';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { reportGuideComplete } from '../../guide/application/GuideEvents';
@@ -42,6 +52,7 @@ import {
     type ZCHexState,
     type ZCNeutralReward,
     type ZCProjectileState,
+    type ZCSkillAnnounce,
     type ZCUnitState,
 } from '../model/ZCGameTypes';
 import { ZC_OWNER_ORDER } from '../model/ZCMapConfig';
@@ -77,7 +88,7 @@ import { ZCVictorySweep } from './ZCVictorySweep';
 import { ZCEffectPool } from './ZCEffectPool';
 import { ZCWallGeometry } from './ZCWallGeometry';
 import { ZCWallRenderer } from './ZCWallRenderer';
-import { ZCSpawnRegionHintOverlay, type IZCSpawnRegionHintFrames } from './ZCSpawnRegionHintOverlay';
+import { ZCSpawnRegionHintOverlay } from './ZCSpawnRegionHintOverlay';
 import { ZCNeutralRewardFx } from './ZCNeutralRewardFx';
 import { zcFactionColor, zcTowardWhite } from './ZCTheme';
 
@@ -85,6 +96,12 @@ type ZCRenderEntityKind = 'hex' | 'unit' | 'effect' | 'float' | 'cardReveal' | '
 
 /** 旧测试 frame 缺 `neutralRewards` 字段时的共享空数组（渲染层只读，永不修改）。*/
 const EMPTY_NEUTRAL_REWARDS: readonly Readonly<ZCNeutralReward>[] = [];
+
+/**
+ * 同理：老快照 / 测试桩构的帧没有 `skillAnnounces` 时的共享空数组。
+ * 不能在每帧那里写 `?? []` —— 那等于每帧 new 一个数组（工程禁 update 路径分配）。
+ */
+const EMPTY_SKILL_ANNOUNCES: readonly Readonly<ZCSkillAnnounce>[] = [];
 
 /**
  * 一条技能特效路径「第一次取不到美术」之后，等多久还没到货才值得告警（战斗秒）。
@@ -263,6 +280,16 @@ interface ZCRenderWorldOptions {
     */
     overlayLayer: Node;
     /**
+     * 大招通报纵向队列的锚点（通常就是 HUD 左侧的玩家列表节点）。
+     *
+     * 用户口径 2026-11-25：「播报放在玩家名字的下方，往下依次排队不重叠，间隔 3px，
+     * 超过 3 个时后面的不展示」。所以通报不再跟着施法者贴棋盘，而是贴在 HUD 上、
+     * 以**这个节点的底边**为起点往下排（见 `skillAnnounceAnchorLocal`）。
+     *
+     * 缺省 / 拿不到 `UITransform` ⇒ 用样式里的兜底坐标（正常局不会走到）。
+     */
+    skillAnnounceAnchor?: Node | null;
+    /**
      * 本局携带神器的图标帧（`image/artifact/<pvpArtifact[].icon>`）。
      *
      * 中立资源点「神器充能」格显示它（而不是中文字）。缺失时那一格退回文字兜底。
@@ -279,24 +306,13 @@ interface ZCRenderWorldOptions {
     unknownResourceFrame?: SpriteFrame | null;
     neutralResourceFrames?: ReadonlyMap<string, SpriteFrame>;
     /**
-     * 野怪集火按钮的三态底图（`image/spawn-region/frame_01/02/03` ⇒ locked/focus/cancel）。
-     *
-     * 缺省 ⇒ 按钮底图保持 prefab 的白色占位图、按状态染色（旧表现），不影响开关逻辑。
-    */
-    monsterFocusFrames?: IZCMonsterFocusFrames | null;
-    /**
      * 飞向 HUD 金币栏的那把金币贴图（`image/map-resource/coin_icon`）。
      *
      * 缺省 ⇒ 金币节点照建、曲线照跑，但 `Sprite` 没有 `spriteFrame` 屏上什么都不画
      * （不是"透明图"），只剩「+N」读数可见。排查「金币没动画」先看这个有没有加载到。
     */
     goldCoinFrame?: SpriteFrame | null;
-    /**
-     * 自选主城区域气泡底图（`image/spawn-region/frame_01` 绿 / `frame_02` 红，九宫格）。
-     * 缺省 ⇒ 气泡回退 Graphics 色块（旧样式），不影响选点。
-    */
-    spawnRegionFrames?: IZCSpawnRegionHintFrames | null;
-    /** 区域气泡 prefab；缺省 ⇒ 气泡不显示（不再在运行期用常量拼节点）。*/
+    /** 区域气泡 prefab；由 ZCGameLoader 在自选模式加载，底图由 prefab 自身绑定。*/
     spawnRegionHintPrefab?: Prefab | null;
     /**
      * HUD 金币栏面板（`BottomInfoPanel/CoinPanel`）：金币粒子的目标挂点；缺省 ⇒ 不播金币飞行。
@@ -345,6 +361,24 @@ interface ZCRenderWorldOptions {
     */
     hitFxPrefabs?: ReadonlyMap<ZCAttackTrait, Prefab>;
     wallPrefab: Prefab | null;
+}
+
+/**
+ * 一个参与前后排序的「角色」：一个单位，或一整个野怪（身体 + 血条 + 集火按钮）。
+ *
+ * 为什么野怪要成组而不是各排各的：血条画在头顶、按钮画在血条之上，按 y 单独排的话
+ * 血条的 y 更大 ⇒ 会被判成「更远」先画，结果被自己的身体盖住。所以它们必须跟着身体
+ * 一起走、组内层序恒为「身体 → 血条 → 按钮」（用户口径 2026-11-26：血条不独立于单位）。
+ */
+interface IZCCharacterSlot {
+    tier: ZCCharacterTier;
+    y: number;
+    /** 稳定兜底用的 id：单位取 `unit.id`，野怪取 `-(hexId + 1)`（负数 ⇒ 同 y 时垫在单位之下）。*/
+    id: number;
+    /** 排在最下面的那个节点（单位根 / 野怪身体）。*/
+    primary: Node | null;
+    /** 紧随其后的同组节点（野怪的血条 / 按钮）；单位没有。*/
+    extras: readonly Node[] | null;
 }
 
 /**
@@ -419,7 +453,33 @@ export class ZCGameRenderWorld {
      * 表现退回修之前的样子，但不崩。层序事实仍以 prefab 为准（见 `options.board` 的注释）。
     */
     private resourceLayer: Node | null = null;
-    private monsterFocusLayer: Node | null = null;
+    /**
+     * 角色层（2026-11-26 第 55 批）：**单位与野怪（连同血条、集火按钮）都挂在这一层里**，
+     * 每帧按「层次 + 屏幕 y」重排兄弟序，口径见 `ZCCharacterDrawOrder`。
+     *
+     * 为什么要独立一层：此前单位是平铺在 `mapLayer` 上的兄弟节点，顺序 = 出生先后，
+     * 于是「站得更靠下（更近镜头）的角色」可能反被后出生的角色盖住 —— 用户的原始反馈
+     * 就是「更底下的角色模型在上层，包括他的描边层和血条」。层内只有角色，
+     * 兄弟下标可以直接当排序结果用，不用和飘字 / 特效 / 卡牌抢位置。
+     *
+     * 位置：贴在棋盘之后第一位。地面特效走 `zcCombatEffectSiblingIndex('ground')` = `boardIndex + 1`，
+     * 插进来会把本层顶到 `+2` ⇒ 地上的火圈仍在角色脚底（不会被这层挡住）。
+     */
+    private characterLayer: Node | null = null;
+    /**
+     * 排序用的复用槽位（本帧前 `count` 个是有效的）。
+     *
+     * 复用理由：这条通道每帧都跑、单位数 ≈ 46 —— 每帧新建 46 个 `{tier, y, id}` 正是
+     * AGENTS.md 禁止的「update 路径分配临时对象」。
+     */
+    private readonly characterOrderSlots: IZCCharacterSlot[] = [];
+    /** 本帧参与排序的那一段（`sort` 只能排整段，所以单独摊一份引用视图；不新建对象）。*/
+    private readonly characterOrderSort: IZCCharacterSlot[] = [];
+    /** 上一帧排出来的 id 序列 + 每组节点数；与这一帧完全一致 ⇒ 一个 `setSiblingIndex` 都不写。*/
+    private readonly characterOrderDrawn: number[] = [];
+    /** 上一帧每个角色的主节点；`id` + 节点都相同才算「没变」（节点换了必须重排）。*/
+    private readonly characterOrderDrawnNodes: (Node | null)[] = [];
+
     /**
      * 共享轮廓的「内容探针」与「上次已画快照」，两个复用数组做逐项比对。
      *
@@ -430,16 +490,6 @@ export class ZCGameRenderWorld {
     private readonly outlineProbe: number[] = [];
     private readonly outlineDrawn: number[] = [];
     private readonly unitViews = new Map<number, ZCUnitView>();
-    /**
-     * 召唤物（分身 / 舞伴）的实体 id。
-     *
-     * 只服务一件事：**绘制顺序**。分身是半透明的，若它排在普通单位之上，
-     * 5~6 个半透明复制品压在本体身上，看起来就是「本体跟着变透了」——
-     * 而设计口径恰恰是「只有分身有透明度，本体 100% 实心，透明度用来区分本体与分身」。
-     * 所以召唤物一律插到「第一个普通单位之前」（仍在格子之上、特效之外不受影响），
-     * 本体永远画在自己所有分身的上面。
-    */
-    private readonly summonEntityIds = new Set<number>();
     /**
      * 一次性表现件（出生光柱 / 受击闪白 / 阵亡特效）统一由特效池管理，不进 ECS。
      *
@@ -476,6 +526,17 @@ export class ZCGameRenderWorld {
     */
     private killBannerNode: Node | null = null;
     private killBannerView: ZCGameKillBannerView | null = null;
+    /**
+     * 大招通报的节点，按通报 id 一对一。
+     *
+     * 不进对象池：一局最多 8 次、每次结构都随卡面/技能名变，池化反而要额外重置三层节点；
+     * 节点随通报过期就地销毁，天然不会跨局残留。
+    */
+    private readonly skillAnnounceNodes = new Map<number, IZCSkillAnnounceNode>();
+    /** 本帧仍有效的通报 id（复用容器，避免每帧新建 Set）。*/
+    private readonly skillAnnounceLive = new Set<number>();
+    /** 写透明度复用的颜色实例（每帧新建 `Color` 属于 update 路径分配）。*/
+    private readonly skillAnnounceTint = new Color(255, 255, 255, 255);
     private readonly hexEntityBySource = new Map<number, number>();
     /** 静态帧复用的边界掩码容器；`buildTerritoryBoundaryMasks` 支持 out。*/
     private readonly boundaryMasks = new Map<number, number>();
@@ -751,6 +812,9 @@ export class ZCGameRenderWorld {
         // 中立资源图标层（2026-10-14 加）。不带 `!` 断言：棋盘 prefab 万一还没补这一层，
         // 退化成「图标留在格节点里」就行 —— 表现为图标仍会被邻格切，但不该整局开不起来。
         this.resourceLayer = this.options.board.getChildByName('ResourceLayer') ?? null;
+        // 角色层（单位 + 野怪一起排序，见 `characterLayer`）：建完棋盘就先立起来，
+        // 下面逐个地块视图注入引用 —— 野怪的身体 / 血条 / 集火按钮要在开打前就能搬进来。
+        const characterLayer = this.ensureCharacterLayer();
         water.setPosition(originX, originY, 0);
         water.getComponent(UITransform).setContentSize(layout.width, layout.height);
         // 2.5D 地块有侧壁，渲染顺序须由共享布局给出；y 小的格子后画。
@@ -783,6 +847,8 @@ export class ZCGameRenderWorld {
             // 沿格边线切掉（见 `ZCGameBoard.prefab` 的 `ResourceLayer` 与 `ZCHexView.setResourceIconRaised`）。
             // 引用整局不变，建视图时喂一次。
             view.setResourceIconLayer(this.resourceLayer);
+            // 角色层同理整局不变：野怪要跟单位一起按 y 排序，就必须能搬进同一个父节点。
+            view.setCharacterLayer(characterLayer);
             // 地面光斑的序列帧（抬升期点亮）。取不到时降级为「不画光」。
             //  地块收场已改成「原地缩到最小」（2026-10-14），不再压扁 ⇒ 不再注入
             // `shaders/hex-flip` 那份透视材质（领地地图的翻格仍自带一份）。
@@ -799,8 +865,6 @@ export class ZCGameRenderWorld {
             // 用这张帧（`hideNeutralResourceLabel` 为假），喂进去也无副作用。
             view.setUnknownResourceFrame(this.options.unknownResourceFrame ?? null);
             view.setNeutralResourceFrames(this.options.neutralResourceFrames ?? null);
-            // 野怪集火按钮的三态底图：整局一份，逐个视图喂（地块池化复用，注一次不会传到别的格）。
-            view.setMonsterFocusFrames(this.options.monsterFocusFrames ?? null);
             // 兵团资源点（表现键 `unit_cap`）按组合项站 N 个中立待机兵：卡 id + 数量来自
             // 该格抽中的资源项（`neutralResourceGroup`），所以逐格喂、不能共用一份。
             this.injectResourceUnits(view, config.id);
@@ -1051,16 +1115,17 @@ export class ZCGameRenderWorld {
             for (const id of selection.baseNeighborIds(ZCOwner.Player)) playerBaseNeighbors.add(id);
         }
         this.redrawSharedOutline(selection.map.hexes, boundaryMasks, 'spawn', selectedHexId);
-        if (!this.spawnRegionHintOverlay) {
-            // ZCGameBoard.prefab declares CooldownOverlay last. All board layers share identity
-            // local transforms, so the cached hex positions remain board-local in this layer.
-            this.spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay(
-                this.boardLayer('CooldownOverlay'),
-                this.options.spawnRegionFrames ?? null,
-                this.options.spawnRegionHintPrefab ?? null,
-            );
+        if (!this.spawnRegionHintOverlay && this.options.spawnRegionHintPrefab) {
+            // ZCGameBoard.prefab 的 CooldownOverlay 下预置了 SpawnRegionHints 容器节点，与棋盘保持同一局部坐标系。
+            const hintRoot = this.boardLayer('CooldownOverlay').getChildByName('SpawnRegionHints');
+            if (hintRoot) {
+                this.spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay(
+                    hintRoot,
+                    this.options.spawnRegionHintPrefab,
+                );
+            }
         }
-        this.spawnRegionHintOverlay.render(
+        this.spawnRegionHintOverlay?.render(
             this.spawnRegionHints,
             hintsVisible,
             mapScale,
@@ -1146,19 +1211,11 @@ export class ZCGameRenderWorld {
         this.renderTerritoryClaimWave(frame);
         this.renderNeutralHint(frame);
         this.renderNeutralRewards(frame);
+        this.renderSkillAnnounces(frame);
         this.renderNeutralFeatures(frame);
-    }
-
-    /** 棋盘与按钮层共用地图坐标和缩放，按钮画在动态出兵之上。 */
-    private raiseMonsterFocus(button: Node): void {
-        if (!this.monsterFocusLayer) {
-            const layer = new Node('MonsterFocusLayer');
-            layer.layer = this.options.mapLayer.layer;
-            layer.addComponent(UITransform);
-            layer.setParent(this.options.mapLayer);
-            this.monsterFocusLayer = layer;
-        }
-        if (button.parent !== this.monsterFocusLayer) button.setParent(this.monsterFocusLayer);
+        // 角色排序放在最后：单位位置（插值 / 传送抬升）和野怪巡逻位移这一帧都写完了，
+        // 这里读到的 `node.position.y` 才是画面上真正的那条 y。
+        this.renderCharacterOrder(frame);
     }
 
     private renderNeutralFeatures(frame: ZCGameRenderFrame): void {
@@ -1172,7 +1229,13 @@ export class ZCGameRenderWorld {
             if (monsterView && feature && typeof feature.awake === 'boolean') {
                 monsterView.renderMonsterFocus(hex, now);
                 monsterView.renderMonsterAttack(feature.claimed ? undefined : feature.attackStartedAt, now, feature.monsterFacing);
-                if (!feature.claimed) this.raiseMonsterFocus(monsterView.monsterFocusButton.node);
+                //  野怪刚被玩家方打下：视图形色已经回正常（`zcMonsterTintStateOf` 的 `captured`），
+                //  这里补一次「卡牌单位生成」那道出生特效（2026-11-26 第 53 批）。
+                //  取走即空 ⇒ 只在改归属的那一帧播一次；宿主拿不到（资源单位被隐藏）就跳过。
+                if (monsterView.consumeMonsterCapturedFx()) {
+                    const host = monsterView.monsterFxHost;
+                    if (host) this.effectPool.playSpawnFx(host, now);
+                }
             }
             if (feature && feature.patrol && !feature.claimed) {
                 const view = this.hexViews.get(this.hexEntityBySource.get(hex.id));
@@ -1205,24 +1268,18 @@ export class ZCGameRenderWorld {
                         to.position.x - view.node.position.x, to.position.y - view.node.position.y);
                 }
             }
-            if (feature.portalAt !== undefined && now >= feature.portalAt
-                && portalFlightProgress(feature.portalAt, now) < 1) {
-                const resourceFrames = this.options.neutralResourceFrames;
-                const portalFrame = resourceFrames ? resourceFrames.get('portal') : undefined;
-                const entrance = frame.mapConfig.hexes[hex.id];
-                const exit = frame.mapConfig.hexes[feature.portalExitId];
-                if (portalFrame && exit) {
+            if (feature.portalAt !== undefined) {
+                const portalFrame = this.options.neutralResourceFrames?.get('portal');
+                const playing = !!portalFrame && now >= feature.portalAt
+                    && portalFlightProgress(feature.portalAt, now) < 1;
+                view.setPortalAnimating(playing);
+                if (playing) {
+                    const entrance = frame.mapConfig.hexes[hex.id];
                     this.effectPool.playPortalFx(hex.id, mapToViewX(entrance.x), mapToViewY(entrance.y), feature.portalAt, portalFrame);
-                    this.effectPool.playPortalFx(exit.id, mapToViewX(exit.x), mapToViewY(exit.y), feature.portalAt, portalFrame);
                 }
             }
         }
         this.effectPool.recyclePortalFx(now);
-        const layer = this.monsterFocusLayer;
-        if (layer) {
-            const lastIndex = this.options.mapLayer.children.length - 1;
-            if (this.options.mapLayer.children[lastIndex] !== layer) layer.setSiblingIndex(lastIndex);
-        }
     }
 
     private refreshNeutralFeatureHexIds(frame: ZCGameRenderFrame): void {
@@ -1675,6 +1732,123 @@ export class ZCGameRenderWorld {
     }
 
     /**
+     * 传说卡首次放大招的通报：**在玩家名字列表下方纵向排队**，形象 + 技能名一块。
+     *
+     * 位置口径变过（用户 2026-11-25）：
+     *
+     * - 旧：贴施法者格心（`mapLayer` + `mapToViewX/Y`），棋盘一拖、单位一跑就对不上，
+     *   而且换到群战里三条通报会互相盖住（截图里的「警兵武将技」压在单位身上）；
+     * - 新：挂全屏演出层（`overlayLayer`），锚点在玩家列表底边，按 0/1/2 号位往下排，
+     *   项间距 `ZC_SKILL_ANNOUNCE_STACK_GAP`、最多 `ZC_SKILL_ANNOUNCE_STACK_MAX` 条。
+     *
+     * 槽位**每帧按存活顺序重排**：这一批通报时长相同、几乎同时入队，重排只在末尾那条
+     * 到期时发生一次（等于「上面空出来，下面往上补一格」），比固定槽位留下的空洞更好看。
+     *
+     * 队列已在模型侧按「同时最多 3 条」拒收多余的那条（`pushSkillAnnounce`），
+     * 这里再按 `ZC_SKILL_ANNOUNCE_STACK_MAX` 兜一道，防止老快照 / 测试桩塞超过 3 条。
+     */
+    renderSkillAnnounces(frame: ZCGameRenderFrame): void {
+        const now = this.visualTime(frame);
+        const live = this.skillAnnounceLive;
+        live.clear();
+        // 先按「起点 → id」排一遍：槽位顺序必须是稳定的，否则同一帧里两条会按数组顺序抖。
+        const visible: Readonly<ZCSkillAnnounce>[] = [];
+        for (const announce of frame.skillAnnounces ?? EMPTY_SKILL_ANNOUNCES) {
+            // 起点 / 终点都由模型给：`startedAt` 在未来时整条不渲染（不是画一个 0 缩放的残影）。
+            if (now < announce.startedAt) continue;
+            if (now >= announce.startedAt + announce.durationSeconds) continue;
+            visible.push(announce);
+        }
+        visible.sort((a, b) => (a.startedAt - b.startedAt) || (a.id - b.id));
+
+        const anchor = this.skillAnnounceAnchorLocal();
+        let slot = 0;
+        for (const announce of visible) {
+            live.add(announce.id);
+            let parts = this.skillAnnounceNodes.get(announce.id);
+            if (!parts) {
+                parts = this.createSkillAnnounce(announce);
+                if (!parts) continue;
+                this.skillAnnounceNodes.set(announce.id, parts);
+            }
+            // 超过 3 条不再占位（节点照建但不摆），下一帧到期后自然补齐。
+            if (slot < ZC_SKILL_ANNOUNCE_STACK_MAX) {
+                parts.root.setPosition(anchor.x, zcSkillAnnounceSlotCenterY(anchor.topY, slot), 0);
+                slot += 1;
+            }
+            renderZCSkillAnnounce(
+                parts,
+                zcSkillAnnounceProgress(now, announce.startedAt, announce.durationSeconds),
+                this.skillAnnounceTint,
+            );
+        }
+        for (const [id, parts] of this.skillAnnounceNodes) {
+            if (live.has(id)) continue;
+            parts.root.destroy();
+            this.skillAnnounceNodes.delete(id);
+        }
+    }
+
+    /**
+     * 通报队列的锚点：玩家列表**底边**在全屏演出层里的局部坐标。
+     *
+     * `anchorY` 是「第一条通报的顶边」—— 再往上就是玩家名字最后一行，正好接着排。
+     * 拿不到锚点节点时退回样式里的兜底值（不返回 null：那样这条通报就永远不显示，
+     * 而且零报错，比位置差一点难查得多）。
+     */
+    private skillAnnounceAnchorLocal(): { x: number; topY: number } {
+        const fallback = {
+            x: ZC_SKILL_ANNOUNCE_STACK_FALLBACK_X,
+            topY: ZC_SKILL_ANNOUNCE_STACK_FALLBACK_TOP_Y,
+        };
+        const anchorNode = this.options.skillAnnounceAnchor;
+        const overlay = this.options.overlayLayer;
+        if (!anchorNode || !anchorNode.isValid || !overlay) return fallback;
+        const anchorRect = anchorNode.getComponent(UITransform);
+        const overlayRect = overlay.getComponent(UITransform);
+        if (!anchorRect || !overlayRect) return fallback;
+        // 底边 = 中心 − 半高（`getBoundingBoxToWorld` 会跟着旋转/缩放，这里只做平移）。
+        const bottomWorld = new Vec3(
+            anchorNode.worldPosition.x,
+            anchorNode.worldPosition.y - anchorRect.height * anchorRect.anchorY,
+            0,
+        );
+        const local = overlayRect.convertToNodeSpaceAR(bottomWorld);
+        return { x: local.x, topY: local.y - ZC_SKILL_ANNOUNCE_STACK_GAP };
+    }
+
+    /**
+     * 建一条通报节点（挂全屏演出层；位置由 `renderSkillAnnounces` 每帧按槽位写）。
+     *
+     * 卡面图取 `presentationArt.cardArtFrames`（= 卡表 `headIcon` → `icons/cardHead/**`，
+     * 整局预加载、与翻牌 / 传说卡横幅同一份），不另开一条加载通道；还没有图时也照常建节点
+     * （只显示名字），`refreshLegendCardArt` 之后新建的通报自然带上图。
+     */
+    private createSkillAnnounce(announce: Readonly<ZCSkillAnnounce>): IZCSkillAnnounceNode | null {
+        const layer = this.options.overlayLayer;
+        if (!layer) return null;
+        const art = this.options.presentationArt;
+        const prefab = art.skillAnnouncePrefab ? art.skillAnnouncePrefab() : null;
+        if (!prefab) return null;
+        const parts = createZCSkillAnnounceNode(
+            prefab,
+            announce.cardId,
+            announce.skillName,
+            art.cardArtFrames.get(announce.cardId) ?? null,
+            layer.layer,
+        );
+        const node = parts.root;
+        node.setParent(layer);
+        node.setSiblingIndex(layer.children.length - 1);
+        //  层已在 `createZCSkillAnnounceNode` 里逐节点写过：`Node.layer` 不随 `setParent` 继承。
+        //  首帧先落在槽位上，避免出现一帧 (0,0) 的残影（下一帧 render 会再写一次同样的值）。
+        const anchor = this.skillAnnounceAnchorLocal();
+        node.setPosition(anchor.x, zcSkillAnnounceSlotCenterY(anchor.topY, 0), 0);
+        node.name = `SkillAnnounce_${announce.id}`;
+        return parts;
+    }
+
+    /**
      * 注入 / 摘除选点阶段的【确认位置】按钮节点。
      *
      * 进 `startSpawnSelection`、出 `finishSpawnSelection` / `shutdown` —— 都是 `ZCGame` 调
@@ -1696,6 +1870,9 @@ export class ZCGameRenderWorld {
         if (this.killBannerView && this.killBannerView.isValid) this.killBannerView.refreshPortrait();
         for (const view of this.cardRevealViews.values()) {
             if (view.isValid) view.invalidateArt();
+        }
+        for (const parts of this.skillAnnounceNodes.values()) {
+            refreshZCSkillAnnounceFrame(parts, this.options.presentationArt.cardArtFrames.get(parts.cardId) ?? null);
         }
     }
 
@@ -1856,6 +2033,11 @@ export class ZCGameRenderWorld {
         if (this.killBannerNode && this.killBannerNode.isValid) this.killBannerNode.destroy();
         this.killBannerNode = null;
         this.killBannerView = null;
+        // 大招通报挂棋盘层、不进 ECS 也不进对象池，下面的遍历收不到，必须显式销毁并清表。
+        for (const parts of this.skillAnnounceNodes.values()) {
+            if (parts.root.isValid) parts.root.destroy();
+        }
+        this.skillAnnounceNodes.clear();
         // 中立资源飞行特效不进 ECS，下面的遍历收不到，必须显式销毁（挂 HUD 根，跨局残留会
         // 在下一局继续用上一局的起点/目标坐标算位移）。
         this.neutralRewardFx.clear();
@@ -1870,8 +2052,6 @@ export class ZCGameRenderWorld {
             if (node.isValid) node.destroy();
         }
         this.reparentedNodes.length = 0;
-        if (this.monsterFocusLayer) this.monsterFocusLayer.destroy();
-        this.monsterFocusLayer = null;
         for (const scene of this.scene.values()) {
             if (scene.node.isValid) scene.node.destroy();
         }
@@ -1879,7 +2059,6 @@ export class ZCGameRenderWorld {
         this.scene.clear();
         this.hexViews.clear();
         this.unitViews.clear();
-        this.summonEntityIds.clear();
         this.effectViews.clear();
         this.floatTextViews.clear();
         this.cardRevealViews.clear();
@@ -1905,36 +2084,14 @@ export class ZCGameRenderWorld {
         this.unitInterpolator.clear();
         this.wallGeometry.clear();
         if (this.unitOutlineCopyMaterial) this.unitOutlineCopyMaterial.destroy();
-    }
-
-    /**
-     * 单位节点的绘制顺序：**召唤物在下、普通单位在上**。
-     *
-     * 只在新实体建出来那一刻摆一次（节点池复用会保留旧下标，所以这条必须每建必跑）：
-     *  · 普通单位 ⇒ 挪到队尾（最上层）；
-     *  · 召唤物 ⇒ 插到「当前最靠下的普通单位」之前，于是本体永远盖住自己的分身。
-     *
-     * 为什么必须动：分身的造型与本体一模一样（复制本体，不是另开兵种），
-     * 唯一区别就是那层 65% / 60% 的透明度。它们出生就在本体脚边（101404 是 20px 圆内），
-     * 排在普通单位之上时，半透明复制品会直接糊在本体脸上 —— 看起来就是「本体也变透了」。
-     */
-    private applyUnitDrawOrder(entityId: number, node: Node, unit: Readonly<ZCUnitState>): void {
-        if (unit.summonMasterId === undefined) {
-            this.summonEntityIds.delete(entityId);
-            const siblings = node.parent ? node.parent.children.length : 0;
-            if (siblings > 0) node.setSiblingIndex(siblings - 1);
-            return;
-        }
-        this.summonEntityIds.add(entityId);
-        let firstRegular = Number.POSITIVE_INFINITY;
-        for (const otherId of this.unitViews.keys()) {
-            if (this.summonEntityIds.has(otherId)) continue;
-            const other = this.scene.get(otherId)?.node;
-            if (!other || !other.isValid || other.parent !== node.parent) continue;
-            firstRegular = Math.min(firstRegular, other.getSiblingIndex());
-        }
-        //  一个普通单位都没有（极端：只召出了分身）⇒ 保持队尾，至少不会掉到格子下面。
-        if (Number.isFinite(firstRegular)) node.setSiblingIndex(firstRegular);
+        // 角色层是全局唯一的动态容器（不随棋盘 prefab 走），自己收。
+        // 放在最后：单位节点先由 `pool.destroy()` 收干净，这里只销毁空壳，免得
+        // 「先销毁父、子节点又被池回收去 setParent」变成挂到已销毁节点上。
+        if (this.characterLayer && this.characterLayer.isValid) this.characterLayer.destroy();
+        this.characterLayer = null;
+        this.characterOrderSlots.length = 0;
+        this.characterOrderDrawn.length = 0;
+        this.characterOrderDrawnNodes.length = 0;
     }
 
     private createEntity(kind: ZCRenderEntityKind, sourceId: number, node: Node): number {
@@ -1953,7 +2110,6 @@ export class ZCGameRenderWorld {
             else node.destroy();
         }
         this.pooledEntityKeys.delete(entityId);
-        this.summonEntityIds.delete(entityId);
         this.identity.delete(entityId);
         this.scene.delete(entityId);
         this.hexViews.delete(entityId);
@@ -2194,6 +2350,17 @@ export class ZCGameRenderWorld {
     }
 
     /**
+     * 这段扫场的总时长（秒）；没在播返回 0。
+     *
+     * 唯一用途：让「结算胜负 UI 特效」与地块翻转动画**同起同落**（用户 2026-11-25 口径
+     * 「持续的时间和地块翻转结算动画时间一致」）。与 {@link advanceVictorySweep} 的返回值
+     * 同源（都读 `ZCVictorySweep`），调用方不要另算一份时长。
+     */
+    get victorySweepSeconds(): number {
+        return this.sweep.durationSeconds;
+    }
+
+    /**
      * 中止扫场并把所有格子还原成真实归属的底色。
      * 重开一局、退出对局都要调 —— 否则下一局的格子会带着上一局胜利方的颜色出场。
     */
@@ -2281,7 +2448,7 @@ export class ZCGameRenderWorld {
         for (const unit of frame.snapshot.units) this.renderUnitEntity(unit, frame);
     }
 
-    private renderUnitEntity(unit: Readonly<ZCUnitState>, frame: ZCGameRenderFrame): void {
+    private renderUnitEntity(unit: DeepReadonly<ZCUnitState>, frame: ZCGameRenderFrame): void {
         const definition = frame.unitDefinitionsById.get(unit.unitId) ?? resolveUnitDefinition(unit.unitId);
         let entityId = this.unitEntityBySource.get(unit.id);
         const isBirth = entityId === undefined;
@@ -2289,7 +2456,7 @@ export class ZCGameRenderWorld {
             if (!this.options.unitPrefab) return;
             const key = `unit:${unit.unitId}`;
             const node = this.pool.acquire(key, () => instantiate(this.options.unitPrefab));
-            this.attachToMapLayer(node);
+            this.attachToCharacterLayer(node);
             node.setScale(Vec3.ONE);
             node.name = `Unit_${unit.id}`;
             // 同上：视图组件在 ZCGameUnit.prefab 上。
@@ -2305,7 +2472,9 @@ export class ZCGameRenderWorld {
             this.pooledEntityKeys.set(entityId, key);
             this.unitViews.set(entityId, view);
             this.unitEntityBySource.set(unit.id, entityId);
-            this.applyUnitDrawOrder(entityId, node, unit);
+            //  绘制顺序不在这里摆：出生顺序不再是层序，`renderCharacterOrder` 每帧按
+            //  「层 + 屏幕 y」重排（2026-11-26 第 55 批）。分身的「垫在普通单位之下」
+            //  已经由 `zcCharacterTierOf` 的 tier 0 承接，不再需要出生时插队。
         }
         const currentPosition = this.unitPosition(unit);
         const { x, y } = this.unitInterpolator.positionOf(unit, frame, currentPosition.x, currentPosition.y);
@@ -2388,7 +2557,7 @@ export class ZCGameRenderWorld {
             monster && unitId ? resolveUnitDefinition(unitId) : null);
     }
 
-    private unitPosition(unit: Readonly<ZCUnitState>): { x: number; y: number } {
+    private unitPosition(unit: DeepReadonly<ZCUnitState>): { x: number; y: number } {
         // 模型在所有移动状态都更新连续坐标；切到等待/攻击时格子进度会被清零。
         if (Number.isFinite(unit.freeX) && Number.isFinite(unit.freeY)) {
             //  写进复用对象而不是返回新字面量：这段每帧每单位各跑一次
@@ -2420,6 +2589,155 @@ export class ZCGameRenderWorld {
         node.setParent(this.options.mapLayer);
         node.setSiblingIndex(this.options.mapLayer.children.length - 1);
         node.layer = this.options.mapLayer.layer;
+    }
+
+    /**
+     * 角色（单位 / 野怪）挂到角色层。层不可用（单测桩没走 `initialize`）时退回 `mapLayer`，
+     * 此时不排序 —— 宁可维持「出生顺序」的旧样子，也不要按猜的父节点乱挂。
+     */
+    private attachToCharacterLayer(node: Node): void {
+        const layer = this.characterLayer;
+        if (!layer || !layer.isValid) {
+            this.attachToMapLayer(node);
+            return;
+        }
+        node.setParent(layer);
+        node.setSiblingIndex(layer.children.length - 1);
+        node.layer = layer.layer;
+    }
+
+    /**
+     * 角色层：`mapLayer` 里一个只装角色的容器，位置贴在棋盘之后（见 `characterLayer` 字段注释）。
+     * 已经建好就直接复用 —— `initialize` 换局会重跑，但层跟着渲染世界走、不该重建。
+     */
+    private ensureCharacterLayer(): Node | null {
+        if (this.characterLayer && this.characterLayer.isValid) return this.characterLayer;
+        const mapLayer = this.options.mapLayer;
+        const board = this.options.board;
+        if (!mapLayer || !board) return null;
+        const layer = new Node('CharacterLayer');
+        layer.layer = mapLayer.layer;
+        layer.addComponent(UITransform);
+        layer.setParent(mapLayer);
+        layer.setPosition(Vec3.ZERO);
+        //  棋盘之后第一位。地面特效（`ground`）插到 `boardIndex + 1` 会把本层顶到 `+2`
+        //  ⇒ 地上的火圈 / 光斑仍在角色脚底，与第 30 批的层序口径一致。
+        layer.setSiblingIndex(board.getSiblingIndex() + 1);
+        this.characterLayer = layer;
+        return layer;
+    }
+
+    /**
+     * 角色之间谁盖谁（2026-11-26 第 55 批，用户四条口径）：
+     * 1. 分身（`summonMasterId`）垫在最底；2. 地面按 y；3. 飞行与中立野怪整体在地面之上；
+     * 4. 「y 大的先画」（= 远者先画，近者压上来），与城墙砖同口径。
+     *
+     * 每帧重排而不是排一次：单位在走、野怪在巡逻，y 一直在变；顺序一变遮挡关系就变。
+     * 但**顺序没变就一个 `setSiblingIndex` 都不写** —— 写一次会让 cc 重建这份渲染数据，
+     * 46 个单位每帧全量写等于白扔一半帧。
+     *
+     * 血条 / 描边不单独排：单位的血条与描边本来就是单位节点的子节点，跟着自己走；
+     * 野怪的血条与集火按钮由 `ZCHexView` 搬进角色层并挂在身体之后（`extras`），
+     * 作为一整个角色参与排序。
+     */
+    private renderCharacterOrder(frame: ZCGameRenderFrame): void {
+        const layer = this.characterLayer;
+        if (!layer || !layer.isValid) return;
+        const slots = this.characterOrderSlots;
+        let count = 0;
+        for (const unit of frame.snapshot.units) {
+            const entityId = this.unitEntityBySource.get(unit.id);
+            if (entityId === undefined) continue;
+            const node = this.scene.get(entityId)?.node;
+            if (!node || !node.isValid || node.parent !== layer) continue;
+            const definition = frame.unitDefinitionsById.get(unit.unitId);
+            count = this.pushCharacterSlot(count, unit.id,
+                zcCharacterTierOf({
+                    summon: unit.summonMasterId !== undefined,
+                    flying: definition ? definition.flying === true : false,
+                }), node.position.y, node, null);
+        }
+        for (const hex of this.neutralFeatureHexStates.values()) {
+            const entityId = this.hexEntityBySource.get(hex.id);
+            if (entityId === undefined) continue;
+            const view = this.hexViews.get(entityId);
+            if (!view) continue;
+            const body = view.monsterBodyNode;
+            if (!body || !body.isValid || !body.active || body.parent !== layer) continue;
+            //  野怪整体算「空中层」（用户口径 2）：不参与地面单位的 y 混排。
+            //  id 取负数 ⇒ 同 y 时垫在单位之下，且与 `unit.id`（正数）不会撞。
+            count = this.pushCharacterSlot(count, -(hex.id + 1),
+                zcCharacterTierOf({ monster: true }), body.position.y, body, view.monsterTrailingNodes);
+        }
+        const sorted = this.characterOrderSort;
+        sorted.length = count;
+        for (let i = 0; i < count; i += 1) sorted[i] = slots[i];
+        sorted.sort(zcCharacterDrawOrder);
+
+        // 与上一帧完全一致（同样的角色、同样的先后、同样的组内节点数、同样的节点）⇒ 不写兄弟序。
+        const drawn = this.characterOrderDrawn;
+        const drawnNodes = this.characterOrderDrawnNodes;
+        let same = drawn.length === count * 2;
+        if (same) {
+            let cursor = 0;
+            for (let i = 0; i < count && same; i += 1) {
+                const slot = sorted[i];
+                if (drawn[cursor] !== slot.id) { same = false; break; }
+                cursor += 1;
+                const extraCount = slot.extras ? slot.extras.length : 0;
+                if (drawn[cursor] !== extraCount) { same = false; break; }
+                cursor += 1;
+                //  节点换过（野怪重建骨骼 / 单位实体被回收再建）也必须重排：新节点出生时
+                //  挂在角色层末位，光比 id 会漏掉「同一个 id、换了一个节点」。
+                if (drawnNodes[i] !== slot.primary) { same = false; break; }
+            }
+        }
+        if (same) return;
+        drawn.length = 0;
+        drawnNodes.length = 0;
+        let index = 0;
+        for (let i = 0; i < count; i += 1) {
+            const slot = sorted[i];
+            const primary = slot.primary;
+            if (primary && primary.isValid && primary.parent === layer) {
+                //  升序落位：前面 i-1 个已在自己位子上，这里读到的当前下标是准的。
+                if (primary.getSiblingIndex() !== index) primary.setSiblingIndex(index);
+                index += 1;
+            }
+            const extras = slot.extras;
+            const extraCount = extras ? extras.length : 0;
+            for (let e = 0; e < extraCount; e += 1) {
+                const node = extras![e];
+                if (!node || !node.isValid || node.parent !== layer) continue;
+                if (node.getSiblingIndex() !== index) node.setSiblingIndex(index);
+                index += 1;
+            }
+            drawn.push(slot.id, extraCount);
+            drawnNodes.push(primary);
+        }
+    }
+
+    /** 往槽位池里放一个角色；复用到已有对象，避免每帧新建（返回新的计数）。*/
+    private pushCharacterSlot(
+        count: number,
+        id: number,
+        tier: ZCCharacterTier,
+        y: number,
+        primary: Node | null,
+        extras: readonly Node[] | null,
+    ): number {
+        let slot = this.characterOrderSlots[count];
+        if (!slot) {
+            slot = { tier, y, id, primary, extras };
+            this.characterOrderSlots[count] = slot;
+        } else {
+            slot.tier = tier;
+            slot.y = y;
+            slot.id = id;
+            slot.primary = primary;
+            slot.extras = extras;
+        }
+        return count + 1;
     }
 
     private renderEffectSystem(frame: ZCGameRenderFrame): void {

@@ -93,9 +93,6 @@ export const MONTHCARD_BOUGHT_TAG_DY: Readonly<Record<number, number>> = {
     1: -2,
 };
 
-export const MONTHCARD_RENEW_LABEL = '续费';
-export const MONTHCARD_TIP_DAILY_NOT_TAKEN = 'MONTH_CARD_DAILY_REWARD_NOT_TAKE';
-
 /**
  * 已导入的货币图标名（预加载清单，顺序 = 银币 / 晶石 / 体力 / 金币 / 经验）。
  *
@@ -110,11 +107,8 @@ export const MONTHCARD_IMPORTED_CURRENCY_ART: readonly string[] = [
     FALLBACK_RES_ICON_ART.exp,
 ];
 
-/** roleProperty.resId 上界，超过走 item 表。 */
-export const MONTHCARD_ROLE_PROPERTY_MAX_RES_ID = 9999;
-
-export const MONTH_CARD_ACT_TYPE = 1002;
-export const MONTH_CARD_ACT_TYPE_2 = 1006;
+const MONTH_CARD_ACT_TYPE = 1002;
+const MONTH_CARD_ACT_TYPE_2 = 1006;
 
 // ============================================================
 // 工具函数

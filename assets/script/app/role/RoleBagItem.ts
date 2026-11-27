@@ -1,13 +1,17 @@
 import { _decorator, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { RedDot } from '../common/RedDot';
 
 const { ccclass, property } = _decorator;
 
-/** 列表格状态标记（选中 / 已装备 / 升级箭头 / 红点）。 */
+/** 列表格状态标记（选中 / 已装备 / 升级箭头 / 红点 / 同类属性灰罩）。 */
 export interface IRoleBagItemMarks {
     readonly selected: boolean;
     readonly equipped: boolean;
     readonly upMark: boolean;
     readonly redDot: boolean;
+    readonly masked: boolean;
+    /** 多选勾选（装备分解模式）：`Check` 绿罩 + `CheckMark` 对勾一起显隐。 */
+    readonly checked?: boolean;
 }
 
 /**
@@ -18,13 +22,14 @@ export interface IRoleBagItemMarks {
  * RoleBagItem
  * ├── QualityFrame (110×110)   ← 品质框 Sprite（新增节点，渲染在最底层）
  * ├── ItemFrame (100×100)      ← 图标容器（原 prefab 本节点无 Sprite，只作布局容器）
- * │   └── Icon   (100×100)     ← 物品图标 Sprite
+ * │   ├── Icon   (100×100)     ← 物品图标 Sprite
+ * │   └── Mask   (100×100)     ← 同类属性灰罩（老端 `mask`，纯黑 50%）
  * ├── CountLabel               ← 数量文字（宝石 / 道具右下角；装备不显示）
  * ├── RankLabel                ← 品阶文字（装备 `{rank}GRADE_RANK`；其余隐藏）
  * ├── Selected  (110×110)      ← 选中高亮
- * ├── RedDot     (30×30)       ← 红点（Dot / DotText）
+ * ├── RedDot     (30×30)       ← 工程通用红点（Icon / Spine / Title）
  * ├── Equipped   (100×35)      ← 「装备中」横条
- * ├── Check / CheckMark        ← 多选态（本轮列表无多选，不接）
+ * ├── Check / CheckMark        ← 多选勾选（装备分解模式）
  * └── UpMark     (32×40)       ← 更优装备箭头
  * ```
  *
@@ -46,6 +51,9 @@ export class RoleBagItem extends Component {
 
     @property({ type: Node, tooltip: 'Icon：物品图标节点（ItemFrame/Icon，其上挂 cc.Sprite）' })
     icon: Node = null;
+
+    @property({ type: Node, tooltip: 'Mask：同类属性灰罩节点（ItemFrame/Mask，挂 cc.Sprite）' })
+    mask: Node = null;
 
     /** 缓存：品质框 Sprite（{@link ensureInit} 里取）。 */
     private frameSprite: Sprite = null;
@@ -71,8 +79,14 @@ export class RoleBagItem extends Component {
     @property({ type: Node, tooltip: 'UpMark：更优装备箭头' })
     upMark: Node = null;
 
-    @property({ type: Node, tooltip: 'RedDot：红点节点' })
-    redDot: Node = null;
+    @property({ type: RedDot, tooltip: 'RedDot：红点组件（工程通用）' })
+    redDot: RedDot = null;
+
+    /** 多选绿罩（prefab 既有节点 `Check`，默认 inactive）。 */
+    private check: Node | null = null;
+
+    /** 多选对勾（prefab 既有节点 `CheckMark`，默认 inactive）。 */
+    private checkMark: Node | null = null;
 
     protected onLoad(): void {
         this.ensureInit();
@@ -91,6 +105,8 @@ export class RoleBagItem extends Component {
         // prefab 已绑好，不判空：绑错应当场抛出来，而不是静默不显示图。
         this.frameSprite = this.frame.getComponent(Sprite);
         this.iconSprite = this.icon.getComponent(Sprite);
+        this.check = this.node.getChildByName('Check');
+        this.checkMark = this.node.getChildByName('CheckMark');
     }
 
     /**
@@ -123,10 +139,14 @@ export class RoleBagItem extends Component {
         this.rankLabel.string = rankText;
         this.rankLabel.node.active = rankText !== '';
 
-        // 四个状态标记同样无条件写（规则 82）。
+        // 五个状态标记同样无条件写（规则 82）。
         this.selected.active = marks.selected;
         this.equipped.active = marks.equipped;
         this.upMark.active = marks.upMark;
-        this.redDot.active = marks.redDot;
+        this.redDot.setRedDot(marks.redDot);
+        this.mask.active = marks.masked;
+        const checked = marks.checked === true;
+        if (this.check) this.check.active = checked;
+        if (this.checkMark) this.checkMark.active = checked;
     }
 }

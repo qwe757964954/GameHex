@@ -24,7 +24,7 @@ import type {
     CardUpgradePhase,
     ICardUpgradeViewState,
 } from './CardPresentations';
-import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 
 export type { ICardUpgradeOpenData } from './CardPresentations';
 

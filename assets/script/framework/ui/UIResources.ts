@@ -18,7 +18,7 @@ import { bundleForPath } from '../../core/asset/BundleCatalog';
 import { loadAssetBundle } from '../../platform/cocos/AssetBundleLoader';
 
 /** UI prefab 在 resources/ 下的统一根目录。 */
-export const UI_RESOURCE_ROOT = 'ui';
+const UI_RESOURCE_ROOT = 'ui';
 
 type LoadPrefabCb = (err: Error | null, prefab: Prefab | null) => void;
 

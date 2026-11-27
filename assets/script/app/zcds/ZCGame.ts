@@ -29,6 +29,17 @@ import { ZCSpawnSelectionView } from './view/ZCSpawnSelectionView';
 import { ZCHudBossPanel } from './view/ZCHudBossPanel';
 import { HeadArt } from '../HeadArt';
 import type { IControllerResources } from '../../framework/controller/ControllerBase';
+import { bundleForPath } from '../../core/asset/BundleCatalog';
+import { ZC_BATTLE_FX_PATHS, ZC_BATTLE_SHELL_PATHS } from './model/ZCGameResourcePlan';
+import { ZCBarracksInfoView } from './view/ZCBarracksInfoView';
+import type { IZCBarracksInfoPresentation } from './model/ZCBarracksInfo';
+import {
+    createZCUISpineBannerNode,
+    destroyZCUISpineBanner,
+    isZCUISpineBannerAlive,
+    type IZCUISpineBannerNode,
+} from './view/ZCUISpineBannerFx';
+import { zcOutcomeAnimationOf, zcOutcomeEffectSeconds, ZC_OUTCOME_EFFECT_CENTER_OFFSET_Y } from './model/ZCSettlementOutcomeStyle';
 import { ZC_BATTLE_EVENTS } from './application/ZCBattleEvents';
 import { createIconLoader, type IIconLoader } from '../common/SpriteFrameCache';
 
@@ -64,6 +75,20 @@ export class ZCGame extends Component {
 
     resetCamera(): void {
         this.hudView.resetCamera();
+    }
+
+    showBarracksInfo(info: IZCBarracksInfoPresentation): void {
+        this.barracksInfoPending = info;
+        this.barracksInfoCurrent = info;
+        const view = this.barracksInfoView;
+        if (!view) return;
+        view.show(info, this.legendCardArtFrames.get(info.cardId) ?? null);
+    }
+
+    hideBarracksInfo(): void {
+        this.barracksInfoPending = null;
+        this.barracksInfoCurrent = null;
+        this.barracksInfoView?.hide();
     }
 
     flashSpawn(message: string): void {
@@ -113,11 +138,54 @@ export class ZCGame extends Component {
         if (!this.beginVictorySweep(frame)) {
             return false;
         }
+        //  与地块翻转（扫场）同起同落：胜负 UI 特效的时长取自本段扫场，见 `playOutcomeEffect`。
+        this.playOutcomeEffect(frame);
         if (!this.hudView.settlementOverviewSettled) {
             this.hudView.startSettlementOverview();
             return true;
         }
+        //  推特效放在推扫场**同一处**：上面那个「结算总览还没起」的分支会早退一帧，
+        //  两边都不吃这一帧的 dt，才不会被拉开一帧的先后。
+        this.advanceOutcomeEffect(dt);
         return this.renderWorld.advanceVictorySweep(frame, dt);
+    }
+
+    /**
+     * 起播结算胜负 UI 特效（幂等，每帧都会调）。
+     *
+     * 用户口径（2026-11-25）：「判定出胜负时，地块翻转的结算动画同步播放，胜利播放胜利 UI，
+     * 失败播放失败 UI 特效，特效需要匹配屏幕宽度 720px，填充整个宽度，持续的时间和地块翻转
+     * 结算动画时间一致」。
+     *
+     * 三条前置都缺一不可：① 状态已经是 victory / defeat（平局不播，因为没有胜方可言）；
+     * ② 扫场真的开播了（`beginVictorySweep` 返回 true —— 整盘无可染格子时它返回 false，
+     * 而那正是"这段时长定义不出来"的情况）；③ 骨架已经到货（没到就不播，别等）。
+     */
+    private playOutcomeEffect(frame: ZCGameRenderFrame): void {
+        if (this.outcomeEffect) return;
+        const animation = zcOutcomeAnimationOf(frame.snapshot.status);
+        if (!animation) return;
+        const prefab = this.settlementOutcomePrefab;
+        if (!prefab) return;
+        const seconds = zcOutcomeEffectSeconds(this.renderWorld.victorySweepSeconds);
+        if (!seconds) return;
+        this.outcomeEffect = createZCUISpineBannerNode(prefab, animation, this.hudView.node, {
+            name: 'SettlementOutcomeFx',
+            durationSeconds: seconds,
+            centerY: ZC_OUTCOME_EFFECT_CENTER_OFFSET_Y,
+        });
+        this.outcomeEffectSeconds = seconds;
+        this.outcomeEffectElapsed = 0;
+    }
+
+    /** 按同一个 dt 推进胜负特效，到点（= 扫场收尾）销毁；节点被外部销毁也当结束。*/
+    private advanceOutcomeEffect(dt: number): void {
+        const effect = this.outcomeEffect;
+        if (!effect) return;
+        this.outcomeEffectElapsed += Math.max(0, dt);
+        if (this.outcomeEffectElapsed < this.outcomeEffectSeconds && isZCUISpineBannerAlive(effect)) return;
+        destroyZCUISpineBanner(effect);
+        this.outcomeEffect = null;
     }
 
     startPlaying(model: IZCBattleRenderModel, config: ZCMatchConfig, selection: ZCSpawnSelection, frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents): void {
@@ -158,6 +226,102 @@ export class ZCGame extends Component {
         if (this.leaving) return null;
         return HeadArt.loadHeadIconFrame(icon, this.loadIcon, resolver);
     }
+
+    /**
+     * 预加载战斗分包里的可选 UI 特效预制体（大招通报 / 结算胜负 / 对局开始）。
+     *
+     * 三条均属表现增强而非开局前置，失败只告警、不阻断对局流程。
+     */
+    private loadBattlePrefab(path: string, label: string, assign: (prefab: Prefab) => void): void {
+        if (!path) return;
+        void this.artResources.assets.load(path, Prefab, {
+            scope: this.artResources.scope, bundle: bundleForPath(path),
+        }).then((prefab) => {
+            if (this.leaving) return;
+            assign(prefab);
+        }).catch((error) => {
+            if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGame] ${label}加载失败`, path, error);
+        });
+    }
+
+    private loadSkillAnnouncePrefab(): void {
+        this.loadBattlePrefab(ZC_BATTLE_FX_PATHS.skillAnnounce, '大招通报', (prefab) => {
+            this.skillAnnouncePrefab = prefab;
+        });
+    }
+
+    /**
+     * 兵营信息面板按需加载（可选项）：失败只告警，不影响开局与点击其他格子。
+     *
+     * 面板根节点按设计稿顶部对齐：顶距 68（720×1280 HUD 坐标系），根尺寸 664×256 ⇒
+     * 中心 y = 640 - 68 - 128 = 444。每次进入对局加载一次，跟着 HUD 一起销毁。
+    */
+    private loadBarracksInfo(): void {
+        if (this.barracksInfoLoading || this.barracksInfoView) return;
+        this.barracksInfoLoading = true;
+        const path = ZC_BATTLE_SHELL_PATHS.barracksInfo;
+        void this.artResources.assets.load(path, Prefab, {
+            scope: this.artResources.scope, bundle: bundleForPath(path),
+        }).then((prefab) => {
+            this.barracksInfoLoading = false;
+            if (this.leaving || !this.hudView) return;
+            const node = instantiate(prefab);
+            node.setParent(this.hudView.node);
+            node.layer = this.hudView.node.layer;
+            node.setPosition(0, 444, 0);
+            const view = node.getComponent(ZCBarracksInfoView);
+            if (!view) {
+                node.destroy();
+                if (ZCDC_LOG_WARNINGS) console.warn('[ZCGame] 兵营信息面板缺少 ZCBarracksInfoView', path);
+                return;
+            }
+            this.barracksInfoView = view;
+            view.hide();
+            const pending = this.barracksInfoPending;
+            if (pending) {
+                this.barracksInfoPending = null;
+                view.show(pending, this.legendCardArtFrames.get(pending.cardId) ?? null);
+            }
+        }).catch((error) => {
+            this.barracksInfoLoading = false;
+            if (ZCDC_LOG_WARNINGS) console.warn('[ZCGame] 兵营信息面板加载失败', path, error);
+        });
+    }
+
+    private loadSettlementOutcomePrefab(): void {
+        this.loadBattlePrefab(ZC_BATTLE_FX_PATHS.settlementOutcome, '结算胜负特效', (prefab) => {
+            this.settlementOutcomePrefab = prefab;
+        });
+    }
+
+    /**
+     * 预加载「对局开始」横幅预制体并交给 HUD。
+     *
+     * 交给 HUD 而不是自己播：那条横幅的唯一窗口是 `playMapIntro` 的全景停留期（0.45s），
+     * 只有 HUD 知道那扇窗什么时候开、什么时候关（见 `ZCGameHUDView.setBattleStartEffect`）。
+     */
+    private loadBattleStartBanner(): void {
+        this.loadBattlePrefab(ZC_BATTLE_FX_PATHS.battleStartBanner, '开局对战特效', (prefab) => {
+            if (!this.hudView) return;
+            this.hudView.setBattleStartEffect(prefab);
+        });
+    }
+
+    /**
+     * 预加载塔防「BOSS 波来袭」预警特效并交给 HUD。
+     *
+     * 只在守城局加载：普通对局没有 `pveDefence`，永远不会有 BOSS 波，
+     * 白拉一个几 KB 的预制体不值当（首包预热清单同样不收录它）。
+     * 交给 HUD 播而不是自己播：唯一判据是每帧的 `defenceWaveProgress`
+     * （见 `ZCGameHUDView.playBossWarningEffect`）。
+     */
+    private loadBossWarningBanner(): void {
+        if (!this.matchConfig?.pveDefence) return;
+        this.loadBattlePrefab(ZC_BATTLE_FX_PATHS.bossWarningBanner, 'BOSS来袭预警特效', (prefab) => {
+            if (!this.hudView) return;
+            this.hudView.setBossWarningEffect(prefab);
+        });
+    }
     private matchConfig: ZCMatchConfig | null = null;
     private hudView!: ZCGameHUDView;
     private playerAvatars: Readonly<{ player: string; enemy: string }> | null = null;
@@ -191,8 +355,22 @@ export class ZCGame extends Component {
     private readonly legendRoleArtFrames = new Map<string, SpriteFrame>();
     /** 本局玩家头像帧（owner → `images/head` 那套）；异步加载，拿不到就只显示头像环。*/
     private readonly legendPortraitFrames: Map<string, SpriteFrame> = new Map();
+    /** 大招通报预制体；异步加载、整局一份。 */
+    private skillAnnouncePrefab: Prefab | null = null;
+    /** 结算胜负 UI 特效预制体（一套两段：胜利 / 失败）；异步加载、整局一份。 */
+    private settlementOutcomePrefab: Prefab | null = null;
+    /** 正在播的胜负特效；`null` = 没播 / 已收。*/
+    private outcomeEffect: IZCUISpineBannerNode | null = null;
+    /** 胜负特效的总时长（= 地块翻转结算动画的总时长，起播那一帧取一次定死）。*/
+    private outcomeEffectSeconds = 0;
+    private outcomeEffectElapsed = 0;
     /** 守城局的首领条实例（只在 `model.defenceWaveProgress` 非空时存在）。*/
     private bossPanel: ZCHudBossPanel | null = null;
+    /** 兵营信息面板：首次进入对局就开始加载，点击兵营时直接复用。*/
+    private barracksInfoView: ZCBarracksInfoView | null = null;
+    private barracksInfoPending: IZCBarracksInfoPresentation | null = null;
+    private barracksInfoCurrent: IZCBarracksInfoPresentation | null = null;
+    private barracksInfoLoading = false;
     /**
      * 结算起手的「首领条扣血」那一段是否已经起过（见 `advanceSettlementPresentation`）。
      * 每局一个 ZCGame 实例，所以不需要额外的复位口。
@@ -217,6 +395,9 @@ export class ZCGame extends Component {
         this.seatProfiles = new Map(entry.seatProfiles);
         this.playerAvatars = entry.playerAvatars;
         this.preparedResources = entry.resources;
+        //  开局横幅的加载要在 `createGame` **之前**发起：`hudView.initialize()` 会同帧跑
+        //  `playMapIntro`，晚一步就一定错过那 0.45s 的全景停留窗（见 `loadBattleStartBanner`）。
+        this.loadBattleStartBanner();
         try { this.createGame(entry.resources, model, selection); }
         catch (error) { this.shutdown(); throw error; }
     }
@@ -279,6 +460,14 @@ export class ZCGame extends Component {
         if (this.deferredAfterDraw) director.off(Director.EVENT_AFTER_DRAW, this.deferredAfterDraw);
         this.deferredAfterDraw = null;
         this.restoreSpawnConfirmButton();
+        //  胜负特效挂在 hudView 根节点下并置顶（见 `ZCUISpineBannerFx`）：随 HUD 一起销毁，
+        //  这里仍先显式收一次 —— 组件销毁是下一帧生效，留着会在收尾那一帧继续吃 update。
+        if (this.outcomeEffect) {
+            destroyZCUISpineBanner(this.outcomeEffect);
+            this.outcomeEffect = null;
+        }
+        this.outcomeEffectSeconds = 0;
+        this.outcomeEffectElapsed = 0;
         if (this.spawnSelectionView) {
             this.spawnSelectionView.node.destroy();
             this.spawnSelectionView = null;
@@ -293,6 +482,10 @@ export class ZCGame extends Component {
             this.hudView.node.destroy();
             this.hudView = null!;
         }
+        this.barracksInfoView = null;
+        this.barracksInfoPending = null;
+        this.barracksInfoCurrent = null;
+        this.barracksInfoLoading = false;
         this.preparedResources = null;
         this.unitVisualPrefabs.clear();
         this.buildingFramesByCardId.clear();
@@ -385,6 +578,11 @@ export class ZCGame extends Component {
                 if (role) this.legendRoleArtFrames.set(cardId, role);
             }
             this.renderWorld.refreshLegendCardArt();
+            // 面板可能比卡面图先打开：到货后补一次头像，避免空框一直留到下次点击。
+            const current = this.barracksInfoCurrent;
+            if (current && this.barracksInfoView) {
+                this.barracksInfoView.show(current, this.legendCardArtFrames.get(current.cardId) ?? null);
+            }
         }).catch(error => { if (ZCDC_LOG_WARNINGS) console.warn('[ZCGame] 卡牌展示图预加载失败', error); });
     }
 
@@ -441,6 +639,7 @@ export class ZCGame extends Component {
 
         const selectingSpawn = (setupConfig.map.cityMode ?? 'fixed') === 'select';
         this.hudView.initialize({ deferMapIntro: selectingSpawn });
+        this.loadBarracksInfo();
         if (this.seatProfiles.size > 0) {
             // 名字 + 头像一起交给 HUD（多队伍改造后按席位渲染，不再是「我方/敌方」两槽）。
             this.hudView.setSeatProfiles(this.seatProfiles);
@@ -472,6 +671,7 @@ export class ZCGame extends Component {
             buildingFramesByCardId: this.buildingFramesByCardId,
             buildingFrames: prepared.buildingFrames,
             legendPortraitFrames: this.legendPortraitFrames,
+            skillAnnouncePrefab: () => this.skillAnnouncePrefab,
         };
         this.renderWorld = new ZCGameRenderWorld({
             owner: this, presentationArt,
@@ -499,20 +699,19 @@ export class ZCGame extends Component {
             killBannerPrefab: prepared.killBannerPrefab,
             // 传说卡横幅弹在屏幕正中 ⇒ 挂全屏层；mapLayer 是 ScrollView 的 content，会跟着拖动跑。
             overlayLayer: this.hudView.node,
+            // 大招通报在玩家名字下方往下排队（用户口径 2026-11-25）⇒ 锚点取左侧玩家列表，
+            // 视图侧按它的底边算第一条的顶边。列表还没建时视图会退回样式里的兜底坐标。
+            skillAnnounceAnchor: this.hudView.playerList ? this.hudView.playerList.node : null,
             // 中立资源点「神器充能」格显示玩家携带的那件神器（整局一张，逐个地块视图注入）。
             artifactIconFrame: prepared.artifactIconFrame,
             // 自选地图局的中立资源格盖成问号（资源进游戏才随机，别剧透是箱子还是金矿）。
             unknownResourceFrame: prepared.unknownResourceFrame,
             neutralResourceFrames: prepared.neutralResourceFrames,
-            // 野怪集火按钮的三态底图（frame_01/02/03 ⇒ locked/focus/cancel）。
-            monsterFocusFrames: prepared.monsterFocusFrames,
             ownerNames: this.seatProfiles,
             // 中立资源获取特效：飞向 HUD 金币栏的那把金币贴图。
             goldCoinFrame: prepared.goldCoinFrame,
-            // 自选主城区域气泡底图（frame_01 绿 / frame_02 红，九宫格）。
-            spawnRegionFrames: prepared.spawnRegionFrames,
-            spawnRegionHintPrefab: prepared.spawnRegionHintPrefab,
             // 金币粒子落点 = 整个 CoinPanel 面板（不是 GoldLabel / coin 子图标）。
+            spawnRegionHintPrefab: prepared.spawnRegionHintPrefab,
             coinPanelNode: this.hudView.coinPanel,
             artifactButtonNode: this.hudView.artifactButton.node,
             decorPrefab: prepared.decorPrefab,
@@ -524,6 +723,9 @@ export class ZCGame extends Component {
         });
         this.loadLegendPortraits();
         this.loadLegendCardArt();
+        this.loadSkillAnnouncePrefab();
+        this.loadSettlementOutcomePrefab();
+        this.loadBossWarningBanner();
         this.loadDefenceBossArt();
         if (selection) {
             this.renderWorld.initialize(setupConfig.map);

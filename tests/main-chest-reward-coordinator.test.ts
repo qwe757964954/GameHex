@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { createControllerContext } from './helpers/controller-context';
 import { loadTsModule } from './helpers/cc-sandbox';
@@ -38,6 +39,7 @@ function createCoordinatorFixture() {
 
     const modules: Record<string, unknown> = {
         '/ControllerBase': { ControllerBase },
+        '/ResourceScope': { ResourceScope },
         '/EventMgr': {
             EventMgr: {
                 instance: {
@@ -57,26 +59,55 @@ function createCoordinatorFixture() {
         '/TerritoryEvents': { TerritoryUiEvent },
         '/TerritoryChestOpenPage': {
             TerritoryChestOpenPage: {
-                open: async (params: { userData: unknown }) => {
+                open: async (params: { scope?: ResourceScope; userData: unknown }) => {
+                    if (params.scope?.disposed) return null;
                     const record = { userData: params.userData, closeCalls: 0 };
                     chestPopups.push(record);
                     if (chestGatePromise) await chestGatePromise;
-                    return { close: () => { record.closeCalls++; } };
+                    const popup = {
+                        close: () => {
+                            record.closeCalls++;
+                        },
+                    };
+                    if (params.scope?.disposed) {
+                        popup.close();
+                        return null;
+                    }
+                    params.scope?.defer(() => popup.close());
+                    return popup;
                 },
             },
         },
         '/TerritoryChestOpenLayout': layout,
         '/HeroObtainPage': {
             HeroObtainPage: {
-                open: async (params: { userData: any; onClose: () => void }) => {
-                    const record = { ...params, closeCalls: 0 };
-                    heroOpens.push(record);
-                    return {
-                        close: () => {
-                            record.closeCalls++;
-                            params.onClose();
+                open: async (params: { scope?: ResourceScope; userData: any; onClose: () => void }) => {
+                    if (params.scope?.disposed) return null;
+                    let closed = false;
+                    let detach = () => {};
+                    const origOnClose = params.onClose;
+                    const record = {
+                        ...params,
+                        closeCalls: 0,
+                        onClose: () => {
+                            if (closed) return;
+                            closed = true;
+                            detach();
+                            origOnClose();
                         },
                     };
+                    heroOpens.push(record);
+                    const popup = {
+                        close: () => {
+                            if (closed) return;
+                            closed = true;
+                            detach();
+                            record.closeCalls++;
+                            origOnClose();
+                        },
+                    };
+                    detach = params.scope?.defer(() => popup.close()) ?? (() => {});
+                    return popup;
                 },
             },
         },

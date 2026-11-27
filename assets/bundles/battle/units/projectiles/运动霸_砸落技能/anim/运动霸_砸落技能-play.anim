@@ -1,0 +1,187 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "运动霸_砸落技能-play",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 24,
+  "speed": 1,
+  "wrapMode": 1,
+  "events": [],
+  "_duration": 1.375,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0416666667,
+            0.0833333333,
+            0.125,
+            0.1666666667,
+            0.2083333333,
+            0.25,
+            0.2916666667,
+            0.3333333333,
+            0.375,
+            0.4166666667,
+            0.4583333333,
+            0.5,
+            0.5416666667,
+            0.5833333333,
+            0.625,
+            0.6666666667,
+            0.7083333333,
+            0.75,
+            0.7916666667,
+            0.8333333333,
+            0.875,
+            0.9166666667,
+            0.9583333333,
+            1.0,
+            1.0416666667,
+            1.0833333333,
+            1.125,
+            1.1666666667,
+            1.2083333333,
+            1.25,
+            1.2916666667,
+            1.3333333333
+          ],
+          "_values": [
+            {
+              "__uuid__": "f3a194ab-6a56-48f1-a1a4-e6b247a3f903@f9941"
+            },
+            {
+              "__uuid__": "476d9c8d-20f9-4185-a51f-0d656159b953@f9941"
+            },
+            {
+              "__uuid__": "f3519ff5-833e-4ff8-9c6e-a7cb4a77c8c9@f9941"
+            },
+            {
+              "__uuid__": "9989fe97-c2dd-4d1e-b881-eacdf2479d05@f9941"
+            },
+            {
+              "__uuid__": "2b696fbf-412e-43a7-965d-9115310190ad@f9941"
+            },
+            {
+              "__uuid__": "ef9b7060-28be-4435-8c3a-025191198228@f9941"
+            },
+            {
+              "__uuid__": "2c5af20a-1ae8-4836-a12c-5e29209be6f1@f9941"
+            },
+            {
+              "__uuid__": "c3688955-9a05-4fd3-a507-c9ab78ef5842@f9941"
+            },
+            {
+              "__uuid__": "65f80d46-ee38-48ec-bfb7-bd8e03b96c00@f9941"
+            },
+            {
+              "__uuid__": "377ccb75-992d-4857-92c3-bef336932833@f9941"
+            },
+            {
+              "__uuid__": "4b346cd1-a3e9-47f9-b08c-54919c6736f6@f9941"
+            },
+            {
+              "__uuid__": "5153f8ca-7a2d-45dd-8aaa-45b5b16c0a12@f9941"
+            },
+            {
+              "__uuid__": "114e154a-6519-426b-bfd9-fe616f9680ca@f9941"
+            },
+            {
+              "__uuid__": "547ab483-b979-402f-aded-7a337d9eb8d6@f9941"
+            },
+            {
+              "__uuid__": "04095a21-8313-41dc-9801-bf6f4328b93c@f9941"
+            },
+            {
+              "__uuid__": "aaeaf22e-9e0b-48fd-b4ee-386d37fdd53d@f9941"
+            },
+            {
+              "__uuid__": "0fe0f1e5-a7e7-4d49-ac9b-3d5409f4c3a5@f9941"
+            },
+            {
+              "__uuid__": "818e868f-bfae-49c6-91de-5901f375f9c5@f9941"
+            },
+            {
+              "__uuid__": "505e02e9-f1ca-47dd-8d1a-6682833afc32@f9941"
+            },
+            {
+              "__uuid__": "0aa8e538-d70f-4ce4-a094-a3a75b7363dd@f9941"
+            },
+            {
+              "__uuid__": "5074722e-779b-41b2-9ee4-8bf9ed99e669@f9941"
+            },
+            {
+              "__uuid__": "cf022942-604c-4bfa-9373-6ae0948d22f2@f9941"
+            },
+            {
+              "__uuid__": "0d6f72a0-1d16-4729-9b05-004ab80aa0ca@f9941"
+            },
+            {
+              "__uuid__": "3ed4b408-29cb-4c43-b206-d66dff960221@f9941"
+            },
+            {
+              "__uuid__": "591c8af9-5098-4f9e-b694-811f3436b67a@f9941"
+            },
+            {
+              "__uuid__": "0e1d8ff9-214e-463c-bf41-45b01a24bfad@f9941"
+            },
+            {
+              "__uuid__": "3f7a12c9-3d89-4bd8-8db6-44a1e6374523@f9941"
+            },
+            {
+              "__uuid__": "0e77d9b7-3569-4e78-89c7-906de19ad381@f9941"
+            },
+            {
+              "__uuid__": "07cc5af5-8deb-440e-ba69-432df963755b@f9941"
+            },
+            {
+              "__uuid__": "ffe133a1-baee-4691-84c0-df62f93e364e@f9941"
+            },
+            {
+              "__uuid__": "18d11f0b-0dac-42ea-869b-3b160c8370a3@f9941"
+            },
+            {
+              "__uuid__": "f127f265-cd36-48c5-a0fd-e5008c309432@f9941"
+            },
+            {
+              "__uuid__": "380662ac-c124-4434-be98-e09f01ff0ccd@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

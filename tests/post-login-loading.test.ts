@@ -9,6 +9,7 @@ import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
 import { PostLoginController } from '../assets/script/app/loading/PostLoginController';
+import { PostLoginEvent } from '../assets/script/app/loading/PostLoginEvents';
 import { resolvePostLoginIdentity } from '../assets/script/app/loading/PostLoginContract';
 import type { PostLoginIdentity } from '../assets/script/app/loading/PostLoginContract';
 import { createControllerContext } from './helpers/controller-context';
@@ -35,6 +36,7 @@ function loadPostLogin(options: { startRatio?: number; saved?: string; load?: ()
         const context = { exports, console: { warn() {}, error() {} }, require(name: string) {
             if (name === 'cc') return { Prefab: class {}, sys: { localStorage: { getItem() { reads++; return options.saved ?? null; } } } };
             if (name.endsWith('/ControllerBase')) return { ControllerBase };
+            if (name.endsWith('/PostLoginEvents')) return { PostLoginEvent };
             if (name.endsWith('/PostLoginController')) return options.controllerError
                 ? { PostLoginController: class { constructor() { throw options.controllerError; } } } : { PostLoginController };
             if (name.endsWith('/CardRepository')) return { cardRepository: { bindHeroSession: (session, owner) => heroSessions.push({ session, owner }) } };

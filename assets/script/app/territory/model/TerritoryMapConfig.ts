@@ -49,7 +49,7 @@ export function isTerritoryChestSite(site: Pick<TerritorySite, 'type'>): boolean
 }
 
 /** 全量类型数组（配表解析校验用，顺序与常量表一致）。 */
-export const TERRITORY_SITE_TYPES: readonly TerritorySiteType[] = Object.values(TERRITORY_SITE_TYPE);
+const TERRITORY_SITE_TYPES: readonly TerritorySiteType[] = Object.values(TERRITORY_SITE_TYPE);
 
 export interface TerritoryUnlock {
     requiredCells: number[];

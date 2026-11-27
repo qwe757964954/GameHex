@@ -1,5 +1,6 @@
 /**
- * 第 37 批：巨力坚果 68002「亡者护盾」100204 的护盾表现。
+ * 第 37 批：巨力坚果 68002「巨力护盾」100204 的护盾表现。
+ * 🔴 2026-11-25 设计案统一命名：原「亡者护盾」→「巨力护盾」。
  *
  * 用户原话：「巨力坚果没有释放刀盾兵的护盾效果」。
  *
@@ -39,7 +40,7 @@ const CHAIN = 100204;
 const SKILL_ID = 30802;
 /** 与配表逐字一致（三档只差护盾时长）。*/
 const SHIELD_SECONDS = [10, 11, 12];
-const UNLOCKS = [12, 24, 36];
+const UNLOCKS = [7, 24, 36];
 
 function readRows(name: string): Array<Record<string, unknown>> {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as
@@ -149,7 +150,7 @@ test('100204 三档：30% 最大生命 + 10/11/12 秒，两份产物逐格同值
         plan.forEach((row, index) => {
             const bag = JSON.parse(String(row.skillParamJson)) as Record<string, number>;
             assert.equal(String(row.unitId), UNIT_ID);
-            assert.equal(String(row.skillName), '亡者护盾');
+            assert.equal(String(row.skillName), '巨力护盾');
             assert.equal(String(row.behaviorKey), 'skill_params', '参数袋车道（造型由代码按单位补）');
             assert.equal(String(row.triggerEvent), 'active');
             assert.equal(Number(row.cooldown), 12);

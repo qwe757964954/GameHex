@@ -1,4 +1,5 @@
 import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { RedDot } from '../common/RedDot';
 import { HJ_SPRITE_SIMPLE } from './HangArt';
 
 const { ccclass, property } = _decorator;
@@ -41,8 +42,8 @@ export class HangSweepButton extends Component {
     @property({ type: Label, tooltip: '`x10` 形态的花费文案' })
     cost: Label = null!;
 
-    @property({ type: Node, tooltip: '红点（FGUI `com_rd`；截图无红点 ⇒ 默认隐藏，留待红点系统接）' })
-    redDot: Node = null!;
+    @property({ type: RedDot, tooltip: '红点（工程通用红点；截图无红点 ⇒ 默认隐藏）' })
+    redDot: RedDot = null!;
 
     /** `title` 在「否」页的位置（组件内相对中心的局部坐标）。 */
     private static readonly TITLE_POS_NOT_FREE = { x: 10, y: -10 };
@@ -89,6 +90,6 @@ export class HangSweepButton extends Component {
 
     /** 红点显隐（本轮恒 `false`）。 */
     renderRedDot(visible: boolean): void {
-        this.redDot.active = visible;
+        this.redDot.setRedDot(visible);
     }
 }

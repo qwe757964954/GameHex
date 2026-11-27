@@ -3,24 +3,40 @@ import { test } from 'node:test';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { LeagueEditController } from '../assets/script/app/league/LeagueEditController';
 import { LeagueEditModel } from '../assets/script/app/league/LeagueEditModel';
-import { LeagueEditEvent, type ILeagueEditViewState } from '../assets/script/app/league/LeagueEditEvents';
+import { LeagueEditEvent, type ILeagueEditViewState, type LeagueEditOutput } from '../assets/script/app/league/LeagueEditEvents';
 import { LEAGUE_TIP_FAILED, LEAGUE_TIP_OFFLINE } from '../assets/script/app/league/LeagueTexts';
 import type { LeagueRequestResult } from '../assets/script/app/league/LeagueRepository';
 import { createControllerContext } from './helpers/controller-context';
 
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 function fixture(type = 1, content = '初值') {
-    const owner = {}, states: ILeagueEditViewState[] = [], tips: string[] = [], cancelled: object[] = [];
+    const owner = {}, observer = {}, states: ILeagueEditViewState[] = [], tips: string[] = [], cancelled: object[] = [];
     const requests: Array<{ type: number; content: string; caller: object; resolve: (value: LeagueRequestResult) => void; reject: (error: Error) => void }> = [];
     let closed = 0;
     const model = new LeagueEditModel({ type, content });
-    const controller = new LeagueEditController(createControllerContext(), {
-        owner, model,
+    const controller = new LeagueEditController(createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => cancelled.push(caller),
+        },
+    }), {
+        model,
         repository: { edit: (type, content, caller) => new Promise((resolve, reject) => requests.push({ type, content, caller, resolve, reject })) },
-        view: { render: state => states.push(state), close: () => { closed++; } },
-        feedback: { tip: text => tips.push(text) },
-        requests: { removeCaller: caller => cancelled.push(caller) },
     });
+    EventMgr.instance.on(LeagueEditEvent.Output, (output: LeagueEditOutput, source: object) => {
+        if (source !== controller) return;
+        switch (output.kind) {
+            case 'render':
+                states.push(output.state);
+                break;
+            case 'tip':
+                tips.push(output.text);
+                break;
+            case 'close':
+                closed++;
+                break;
+        }
+    }, observer);
     controller.start();
     const intent = (kind: 'submit' | 'change', value = model.content) =>
         EventMgr.instance.emit(LeagueEditEvent.Intent, { kind, content: value });
@@ -45,7 +61,6 @@ test('edit model preserves raw content and rejects empty, placeholder and invali
 test('edit controller rejects invalid submissions and gates duplicate requests', async () => {
     const h = fixture(2);
     try {
-        h.controller.start();
         h.intent('submit', ''); h.intent('submit', '***');
         assert.equal(h.requests.length, 0);
         h.intent('submit', 'wx-raw'); h.intent('submit', 'wx-raw');

@@ -15,6 +15,7 @@ import { assetPath } from './helpers/asset-paths';
 
 const GAME_SRC = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const CONTROLLER_SRC = readFileSync('assets/script/app/zcds/application/ZCBattleRuntimeController.ts', 'utf8');
+const COMPOSITION_SRC = readFileSync('assets/script/app/bootstrap/battle/BattleComposition.ts', 'utf8');
 const PROC_SRC = readFileSync('assets/script/app/zcds/application/ZCBattleEntryBuilder.ts', 'utf8');
 const HUD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
 const WORLD_SRC = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
@@ -29,7 +30,8 @@ test('★★HUD 意图由外部运行控制器集中订阅，视图仅派发', (
         assert.match(CONTROLLER_SRC, new RegExp(`this\\.listen\\(ZCGameUiEvent\\.${event},`));
         assert.match(HUD_SRC, new RegExp(`emit\\(ZCGameUiEvent\\.${event}`));
     }
-    assert.match(CONTROLLER_SRC, /this\.services\.popups\.openRank\(/);
+    assert.match(CONTROLLER_SRC, /kind:\s*'openRank'/);
+    assert.match(COMPOSITION_SRC, /ZCGameRankBoard\.open\(/);
     assert.match(CONTROLLER_SRC, /this\.view\.resetCamera\(\)/);
     assert.doesNotMatch(HUD_SRC, /new .*Controller|ZCHudActions/);
 });

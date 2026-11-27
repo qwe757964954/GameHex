@@ -10,14 +10,12 @@ import type { ZCFloatText, ZCSnapshot, ZCUnitState } from '../assets/script/app/
 import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import {
-    ZCAttackResolutionSystem, type IZCAttackResolutionContext,
-} from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+    ZCAttackResolutionSystem, type IZCAttackResolutionContext } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
-import {
-    ZC_SPLASH_SHOT_IMPACT_PREFAB_PATH, ZC_SPLASH_SHOT_MISSILE_PREFAB_PATH,
-    splashShotSlowStatusId, zcIsSplashShotBehavior, zcSplashShotEffectPaths,
-} from '../assets/script/app/zcds/model/ZCSplashShotFx';
+import { ZC_EFFECT_BEHAVIOR_KEYS, ZC_EFFECT_PATHS, zcEffectPathsForBehavior } from '../assets/script/app/zcds/model/ZCEffectCatalog';
+import { splashShotSlowStatusId } from '../assets/script/app/zcds/model/ZCEffectTuning';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -129,7 +127,7 @@ test('101104 孢子凝珠：三档减速 15/20/25%·2/2/3s，半径恒定 90', (
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(rows.length, 3);
     assert.deepEqual(rows.map((row) => Number(row.modifierId)), [94011041, 94011042, 94011043]);
-    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36], '技能 4 = 12/24/36');
+    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [7, 24, 36], '技能 4 = 7/24/36');
     for (const [index, row] of rows.entries()) {
         assert.equal(row.unitId, '68011');
         assert.equal(row.behaviorKey, 'spore_burst');
@@ -208,12 +206,11 @@ test('splash_shot / spore_burst 必须双登记 + 表现路径进加载清单', 
         assert.match(runtimeSource, new RegExp(`register\\('${key}'`),
             `ZCSkillRuntime 没注册 ${key} ⇒ 参数永远进不了运行时`);
     }
-    assert.equal(zcIsSplashShotBehavior('splash_shot'), true);
-    assert.equal(zcIsSplashShotBehavior('spore_burst'), true);
-    assert.equal(zcIsSplashShotBehavior('random_strike'), false);
-    assert.deepEqual(zcSplashShotEffectPaths('splash_shot'),
-        [ZC_SPLASH_SHOT_MISSILE_PREFAB_PATH, ZC_SPLASH_SHOT_IMPACT_PREFAB_PATH]);
-    assert.deepEqual(zcSplashShotEffectPaths(null), [], '别的行为键不许被收进清单');
+    assert.deepEqual(zcEffectPathsForBehavior(ZC_EFFECT_BEHAVIOR_KEYS.splashShot),
+        [ZC_EFFECT_PATHS.splashMissile, ZC_EFFECT_PATHS.burstImpact]);
+    assert.deepEqual(zcEffectPathsForBehavior(ZC_EFFECT_BEHAVIOR_KEYS.sporeBurst),
+        [ZC_EFFECT_PATHS.splashMissile, ZC_EFFECT_PATHS.burstImpact]);
+    assert.deepEqual(zcEffectPathsForBehavior(null), [], '别的行为键不许被收进清单');
 
     //  资源清单：本局有这条车道的单位才收它的两条 prefab。
     const unit = (unitId: string) => ({ unitId, attackProfile: { effectPrefabPath: null, impactEffectPrefabPath: null } });
@@ -222,11 +219,11 @@ test('splash_shot / spore_burst 必须双登记 + 表现路径进加载清单', 
         [unit('68013'), unit('68011'), unit('68001')],
         { skillPlans: [plan('68013', 'splash_shot'), plan('68011', 'random_strike')], textOverrides: new Map() },
     );
-    assert.ok(withShot.effectPaths.includes(ZC_SPLASH_SHOT_MISSILE_PREFAB_PATH), '弹体必须进加载清单');
-    assert.ok(withShot.effectPaths.includes(ZC_SPLASH_SHOT_IMPACT_PREFAB_PATH), '爆点必须进加载清单');
+    assert.ok(withShot.effectPaths.includes(ZC_EFFECT_PATHS.splashMissile), '弹体必须进加载清单');
+    assert.ok(withShot.effectPaths.includes(ZC_EFFECT_PATHS.burstImpact), '爆点必须进加载清单');
     const withoutShot = buildZCVisualResourcePlan(
         [unit('68001')], { skillPlans: [plan('68001', 'random_strike')], textOverrides: new Map() });
-    assert.equal(withoutShot.effectPaths.includes(ZC_SPLASH_SHOT_MISSILE_PREFAB_PATH), false);
+    assert.equal(withoutShot.effectPaths.includes(ZC_EFFECT_PATHS.splashMissile), false);
 });
 
 test('splashReadyAt 必须登记进快照白名单（不还原会读档白送一发）', () => {
@@ -318,11 +315,11 @@ test('溅射车道：射一枚弹，弹体带弹体/爆点特效、爆点半径 
     const state = makeState(units);
     const { context, pushed } = shotContext(units, SHOT_PARAMS[0], { id: enemy.id, x: 40, y: 0 });
 
-    assert.equal(ZCAttackResolutionSystem.castSplashShot(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castSplashShot(state, caster, context), true);
     assert.equal(pushed.length, 1, '一次施法只射一枚');
     const projectile = pushed[0];
-    assert.equal(projectile.effectPrefabPath, ZC_SPLASH_SHOT_MISSILE_PREFAB_PATH);
-    assert.equal(projectile.impactEffectPrefabPath, ZC_SPLASH_SHOT_IMPACT_PREFAB_PATH);
+    assert.equal(projectile.effectPrefabPath, ZC_EFFECT_PATHS.splashMissile);
+    assert.equal(projectile.impactEffectPrefabPath, ZC_EFFECT_PATHS.burstImpact);
     //  90 表值 px × combatDistanceScale 0.3 = 27 世界 px（屏上 90 × 0.76875 ≈ 69px）
     assert.ok(Math.abs(Number(projectile.splashRadius) - 27) < 1e-6);
     assert.equal(projectile.splashDamageRate, 1, '旁溅必须与直击同额（给 0 就等于不炸）');
@@ -338,7 +335,7 @@ test('孢子凝珠：命中状态跟着弹体走（不是「出手就挂」）',
     const state = makeState(units);
     const { context, pushed } = shotContext(units, SPORE_PARAMS[0], { id: enemy.id, x: 40, y: 0 }, '68011');
     const slowId = splashShotSlowStatusId(15, 2);
-    assert.equal(ZCAttackResolutionSystem.castSplashShot(state, caster, context, slowId), true);
+    assert.equal(ZCSkillResolutionSystem.castSplashShot(state, caster, context, slowId), true);
     assert.equal(pushed[0].onHitStatusId, slowId,
         '减速必须随弹体在命中时挂（`resolveProjectileHit` 读 `onHitStatusId`）');
 });
@@ -351,7 +348,7 @@ test('参数不全 / 目标跑出射程 / 射程内没人：返回 false 且不�
     const state = makeState(units);
 
     const broken = shotContext(units, { shotCooldown: 12, shotRadius: 90 }, { id: enemy.id, x: 40, y: 0 });
-    assert.equal(ZCAttackResolutionSystem.castSplashShot(state, caster, broken.context), false,
+    assert.equal(ZCSkillResolutionSystem.castSplashShot(state, caster, broken.context), false,
         '缺 shotDamageRate ⇒ 不出弹');
     assert.equal(broken.pushed.length, 0);
 
@@ -360,7 +357,7 @@ test('参数不全 / 目标跑出射程 / 射程内没人：返回 false 且不�
     const farUnits = [caster, far];
     const farState = makeState(farUnits);
     const outside = shotContext(farUnits, SHOT_PARAMS[0], { id: far.id, x: 400, y: 0 });
-    assert.equal(ZCAttackResolutionSystem.castSplashShot(farState, caster, outside.context), false,
+    assert.equal(ZCSkillResolutionSystem.castSplashShot(farState, caster, outside.context), false,
         '锁定目标跑出射程 ⇒ 不放，也不换目标');
     assert.equal(outside.pushed.length, 0);
 });

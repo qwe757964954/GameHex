@@ -16,7 +16,7 @@ export interface IItemIconRef {
 /** 人工白名单（优先级高于路径直通），当前为空。 */
 export const ITEM_ICON_ALIASES: ReadonlyMap<string, IItemIconRef> = new Map<string, IItemIconRef>([]);
 
-export const ITEM_ICON_PATH_ROOT = 'icons';
+const ITEM_ICON_PATH_ROOT = 'icons';
 
 /** 路径形态 icon → 加载参数；只认 `icons/` 前缀，裸名返回 null。 */
 export function splitIconPath(iconPath: string): IItemIconRef | null {

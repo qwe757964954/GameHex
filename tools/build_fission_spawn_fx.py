@@ -4,7 +4,8 @@
 
 背景：美术把 26 张散帧丢进
   assets/bundles/battle/units/projectiles/分裂菇_生成分身/
-（`132 SLBLJS vfx_skill_darknix_01_01~26.png`，原始画布 1185×1185）
+（`132 SLBLJS vfx_skill_darknix_01_01~26.png`，原始画布 1185×1185；2026-11-26 已按
+屏上尺寸烘成 156×156，`01_06.png` 当日补回，26 帧齐全）
 没有 prefab、没有 anim clip。而特效播放链路（`ZCCombatEvent.effectPrefabPath`
 → `ZCGameLoader` 按路径 `assets.load(path, Prefab)` → `ZCCombatEffectView.mountVisual`
 → `animation.stop()/play(clip)`）**只认 prefab 路径**，所以必须按工程既有结构补一张。
@@ -16,18 +17,20 @@
 
 三条与「散帧序列」强相关的取法（错了就是「特效静默不出现」）：
 
-  1. **contentSize 取原始画布 1185，不取裁剪后的 rect**。
-     这 26 帧的裁剪框从 171×172 一路长到 912×868（爆发式扩散），
+  1. **contentSize 取整张画布，不取裁剪后的 rect**。
+     这 25 帧的裁剪框从 22×23 一路长到 120×116（爆发式扩散，156 画布上的数字），
      按 frame_01 的裁剪尺寸定画布会把整段爆发压成一小坨。
-     `_isTrimmedMode=false` ⇒ 每帧都按 1185 画布整张画进同一个 contentSize，
+     `_isTrimmedMode=false` ⇒ 每帧都按 156 画布整张画进同一个 contentSize，
      帧与帧之间不会互相抽动，爆发该多大就多大。
   2. **`_sizeMode = 0`（CUSTOM）**：序列帧尺寸不许跟着 spriteFrame 变。
   3. **`wrapMode = 1`（Normal / 播一遍）**：这是一次性的「生成」爆点，
      循环播会变成一盏一直闪的灯。
 
-尺寸：`TARGET_BURST_SCREEN_PX` 是**最大那一帧在屏上的宽度**（屏上 px），
-不是整张画布 —— 反算 `SCALE = 目标 / 最大裁剪宽`，屏上画布 = 1185 × SCALE。
-改大小只改这一个常量重跑；不要改 prefab 的 `_lscale` 与目录里的 `nodeScale` 两处。
+尺寸：贴图已经是屏上尺寸，`_lscale` 恒为 1，目录里也没有 `nodeScale` ——
+不要再加回来。`TARGET_BURST_SCREEN_PX` 是**最大那一帧在屏上的宽度**，
+反算 `SCALE = 目标 / 最大裁剪宽`，正常应恒等于 1；一旦算出别的数字，说明
+散图被重新烘过且画布与目标不符，改画布重烘（`tools/resize_fx_frames.py --size 156`），
+不要靠 prefab 缩放去凑。
 
 已有 `.prefab.meta` / `.anim.meta` 时复用其 uuid（被代码常量与 prefab 引用后别再换身份）。
 """
@@ -41,8 +44,12 @@ DIR_NAME = '分裂菇_生成分身'
 PREFAB_NAME = '分裂菇_生成分身'
 CLIP_NAME = '分裂菇_生成分身'
 FRAME_PREFIX = '132 SLBLJS vfx_skill_darknix_01_'
+#  美术按 01~26 命名：按目录里真实存在的帧决定序列，缺帧时不硬等编号。
 FRAME_COUNT = 26
-#  最大那一帧（frame_12 / 13，912×880）在屏上的宽度。
+#  时间轴按 26 拍排：模型侧 `ZC_SUMMON_SPAWN_FX_SECONDS` 是 26/24，clip `_duration` 必须对齐；
+#  缺帧时末帧多定格一拍，不会让后段爆发被事件寿命切掉。
+TIMELINE_FRAMES = 26
+#  最大那一帧（frame_12 / 13，156 画布上 120×116）在屏上的宽度。
 TARGET_BURST_SCREEN_PX = 120
 #  26 帧 / 24fps ≈ 1.083s：与 `ZCGameModel` 里 `ZC_SUMMON_SPAWN_FX_SECONDS` 必须一致，
 #  短了会在播到一半时被事件寿命回收（后段爆发看不到），长了会把末帧定格多挂一会儿。
@@ -54,8 +61,10 @@ def new_file_id() -> str:
     return base64.urlsafe_b64encode(os.urandom(16)).decode('ascii').rstrip('=')
 
 
-def frame_names():
-    return [f'{FRAME_PREFIX}{index:02d}.png' for index in range(1, FRAME_COUNT + 1)]
+def frame_names(directory: str):
+    """按编号顺序取目录里真实存在的帧（缺帧时不会硬等 26 张）。"""
+    names = [f'{FRAME_PREFIX}{index:02d}.png' for index in range(1, FRAME_COUNT + 1)]
+    return [name for name in names if os.path.exists(os.path.join(directory, name))]
 
 
 def read_sprite_frame(path: str):
@@ -74,7 +83,7 @@ def read_sprite_frame(path: str):
     }
 
 
-def build_clip(frames):
+def build_clip(frames, duration: float):
     """cc.AnimationClip：一条 ObjectTrack 绑 `cc.Sprite.spriteFrame`，一次性播完。"""
     step = 1 / FPS
     times = [round(index * step, 10) for index in range(len(frames))]
@@ -88,8 +97,8 @@ def build_clip(frames):
         #  1 = Normal：只播一遍，停在末帧；事件寿命与 `_duration` 对齐，末帧停不了几毫秒。
         'wrapMode': 1,
         'events': [],
-        #  末帧也要占满一拍，否则最后一格只闪 0 秒。
-        '_duration': round(len(frames) * step, 10),
+        #  末帧也要占满一拍，否则最后一格只闪 0 秒；缺帧时按 TIMELINE_FRAMES 取，别把寿命缩短。
+        '_duration': round(duration, 10),
         '_keys': [],
         '_stepness': 0,
         'curveDatas': {},
@@ -181,7 +190,7 @@ def build_prefab(frame, canvas: int, scale: float, clip_uuid: str):
             '_spriteFrame': {'__uuid__': frame['uuid'], '__expectedType__': 'cc.SpriteFrame'},
             '_type': 0,
             '_fillType': 0,
-            #  CUSTOM：26 帧裁剪框差得极大，跟着 spriteFrame 走会整体抽动。
+            #  CUSTOM：逐帧裁剪框差得极大，跟着 spriteFrame 走会整体抽动。
             '_sizeMode': 0,
             '_fillCenter': {'__type__': 'cc.Vec2', 'x': 0, 'y': 0},
             '_fillStart': 0,
@@ -254,13 +263,14 @@ def ensure_directory_meta(directory: str) -> None:
 
 def main():
     directory = os.path.join(ROOT, DIR_NAME)
-    names = frame_names()
+    names = frame_names(directory)
     frames = [read_sprite_frame(os.path.join(directory, name)) for name in names]
     canvas = frames[0]['rawWidth']
     if any(frame['rawWidth'] != canvas or frame['rawHeight'] != canvas for frame in frames):
-        raise SystemExit('这 26 帧的原始画布不一致，不能共用同一个 contentSize')
+        raise SystemExit('这组帧的原始画布不一致，不能共用同一个 contentSize')
     widest = max(frames, key=lambda frame: frame['width'])
     scale = round(TARGET_BURST_SCREEN_PX / widest['width'], 6)
+    duration = round(TIMELINE_FRAMES / FPS, 10)
     prefab_path = os.path.join(directory, f'{PREFAB_NAME}.prefab')
     meta_path = prefab_path + '.meta'
 
@@ -271,7 +281,7 @@ def main():
     anim_path = os.path.join(anim_dir, f'{CLIP_NAME}.anim')
     anim_meta_path = anim_path + '.meta'
     clip_uuid = reuse_uuid(anim_meta_path)
-    write_json(anim_path, build_clip(frames))
+    write_json(anim_path, build_clip(frames, duration))
     write_json(anim_meta_path, {
         'ver': '2.0.4',
         'importer': 'animation-clip',
@@ -294,15 +304,14 @@ def main():
         'userData': {'syncNodeName': PREFAB_NAME},
     }, '\r\n')
 
-    duration = len(frames) / FPS
-    print(f'帧数 {len(frames)}，原始画布 {canvas}×{canvas}')
+    print(f'帧数 {len(frames)}（时间轴 {TIMELINE_FRAMES} 拍），画布 {canvas}×{canvas}')
     print(f'裁剪框 range：{min(f["width"] for f in frames)}×{min(f["height"] for f in frames)}'
           f' ~ {widest["width"]}×{widest["height"]}（{widest["name"]}）')
     print(f'SCALE {scale} ⇒ 最大一帧屏上 {widest["width"] * scale:.1f}×{widest["height"] * scale:.1f} px，'
           f'整张画布屏上 {canvas * scale:.1f} px')
     print(f'序列帧 @ {FPS}fps，`_duration` = {duration:.4f}s，wrapMode=Normal（播一遍）')
     print(f'写出 {prefab_path} / {anim_path}')
-    print(f'⚠️ 模型侧 `ZC_SUMMON_SPAWN_FX_SECONDS` 必须等于 {duration:.4f}')
+    print(f'⚠️ 模型侧 `ZC_SUMMON_SPAWN_FX_SECONDS` 必须等于 {duration:.4f}（{TIMELINE_FRAMES}/24）')
 
 
 if __name__ == '__main__':

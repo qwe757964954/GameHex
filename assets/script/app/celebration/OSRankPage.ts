@@ -1,6 +1,7 @@
 import { _decorator, Label, Node } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
+import { RedDot } from '../common/RedDot';
 import { Toast } from '../common/Toast';
 import { CelebrationFrames } from './CelebrationFrames';
 import { OSTabButton } from './OSTabButton';
@@ -53,7 +54,7 @@ const { ccclass, property } = _decorator;
  */
 
 /** 倒计时刷新间隔（老端 `toolSet.addTimer(1000, this.UpdateTime, this)`）。 */
-export const CL_TICK_SECONDS = 1;
+const CL_TICK_SECONDS = 1;
 
 /** 首次打开停在哪一页 —— FGUI 原稿 `页签 selected="1"`。 */
 export const CL_DEFAULT_TAB = 1;
@@ -110,20 +111,20 @@ export class OSRankPage extends PopupBase {
     @property({ type: Node, tooltip: 'RankDetailBtn：详细排名>（FGUI btn_rank）' })
     rankDetailBtn: Node = null!;
 
-    @property({ type: Node, tooltip: 'RankDetailBtn/RedDot：老端从不点亮，每趟写 false' })
-    rankDetailRedDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'RankDetailBtn/RedDot：老端从不点亮，每趟写 false（工程通用红点）' })
+    rankDetailRedDot: RedDot = null!;
 
     @property({ type: Node, tooltip: 'HelpBtn：帮助（FGUI btn_help）' })
     helpBtn: Node = null!;
 
-    @property({ type: Node, tooltip: 'HelpBtn/RedDot：老端从不点亮，每趟写 false' })
-    helpRedDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'HelpBtn/RedDot：老端从不点亮，每趟写 false（工程通用红点）' })
+    helpRedDot: RedDot = null!;
 
     @property({ type: Node, tooltip: 'GoBuildBtn：前往提升>（FGUI btn_go_build）' })
     goBuildBtn: Node = null!;
 
-    @property({ type: Node, tooltip: 'GoBuildBtn/RedDot：老端从不点亮，每趟写 false' })
-    goBuildRedDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'GoBuildBtn/RedDot：老端从不点亮，每趟写 false（工程通用红点）' })
+    goBuildRedDot: RedDot = null!;
 
     /** 当前快照（`reload()` 写入；未加载时为 `null`）。 */
     private _snapshot: ICelebrationSnapshot | null = null;
@@ -229,9 +230,9 @@ export class OSRankPage extends PopupBase {
         this.tabShop.render(shopTab, false);
 
         // 三处「老端从不点亮」的红点显式写 false，防 prefab 初值回归。
-        this.rankDetailRedDot.active = false;
-        this.helpRedDot.active = false;
-        this.goBuildRedDot.active = false;
+        this.rankDetailRedDot.setRedDot(false);
+        this.helpRedDot.setRedDot(false);
+        this.goBuildRedDot.setRedDot(false);
     }
 
     /**

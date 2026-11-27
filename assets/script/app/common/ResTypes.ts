@@ -9,7 +9,7 @@
  * 手抄映射只作登录前兜底（`FALLBACK_RES_ICON_ART`），表落地后以表为准。
  */
 import {
-    COMMON_ICON_ART_ROOT as ART_COMMON_ICON_ROOT,
+    COMMON_ICON_ART_ROOT,
     RESBAR_ART_ROOT,
     RESOURCE_ICON_ART_ROOT,
     spriteFramePath,
@@ -17,35 +17,12 @@ import {
 } from '../ArtPaths';
 import { toCount } from '../../core/value/Coerce';
 import { asRow, parseRowsToMap } from '../../core/table/RowParse';
-import {
-    CARD_LEVEL_UP_TABLE as CORE_CARD_LEVEL_UP_TABLE,
-    ITEM_TABLE as CORE_ITEM_TABLE,
-    OPEN_TABLE as CORE_OPEN_TABLE,
-    ROLE_PROPERTY_TABLE as CORE_ROLE_PROPERTY_TABLE,
-} from '../../core/config/TableNames';
 import type { IResGoodsInfo } from '../../core/types/Reward';
 
 export type { IResGoodsInfo };
 
 /** 顶部货币条最多几格（老端 `组件_资源栏` 里 `组件_资源信息` 的摆位上限）。 */
 export const RES_BAR_MAX_SLOTS = 3;
-
-/** `roleProperty` 表名（`RefUtil` 的 `resName`，不带后缀）。 */
-export const ROLE_PROPERTY_TABLE = CORE_ROLE_PROPERTY_TABLE;
-
-/** `open.json` 的表名（`RefBase._RefMgropen` / `RefMgrBase('open')`）。 */
-export const OPEN_TABLE = CORE_OPEN_TABLE;
-
-/** `item` 表名（`resShowType` 里那些不是 `roleProperty` 的 id 落这张表）。 */
-export const ITEM_TABLE = CORE_ITEM_TABLE;
-
-/**
- * `cardLevelUp` 表名。
- *
- * 只为 `costCardID` 而来：卡牌碎片的 `item.quality` 填的是**卡牌品阶**，不是道具品质档，
- * 底框要先按它抬一档（见 `ItemDetailTable.itemFrameQualityOf`）。
- */
-export const CARD_LEVEL_UP_TABLE = CORE_CARD_LEVEL_UP_TABLE;
 
 /** 继承链最深几层（防表里配出环）。老端只有一层 `preResId`，这里放宽到 8 层够用。 */
 const MAX_PRE_DEPTH = 8;
@@ -79,26 +56,6 @@ export const FALLBACK_RES_ICON_ART: Readonly<Record<string, string>> = {
     exp: '图标_经验值',
 };
 
-/**
- * 通用图标目录（`icons/common`）：`item` 表按路径直通的图，以及少量 `roleProperty` 图标。
- * 值转发 `ArtPaths.COMMON_ICON_ART_ROOT`；别写成 `ArtPaths.COMMON_ART_ROOT`（那是 `image/common`，
- * 通用底图与按钮，不是图标目录，名字像但不是一个东西）。
- */
-export const COMMON_ICON_ART_ROOT = ART_COMMON_ICON_ROOT;
-
-/**
- * `roleProperty` 里不落 `icons/resource/` 的裸名图标，必须逐名覆盖，不能猜。
- *
- * 老端 `icon` 是 FGUI 资源名，由 FGUI 包查找定位，名字里不含目录；本端把图平铺到
- * `resources/image|icons/*`，所以「这个名字当初拷进哪个目录」只能查实盘：
- *   - `icons/common/`：图标_联盟贡献、图标_补天神石；
- *   - `image/main/resbar/`：图标_经验值；
- *   - 其余默认 `icons/resource/`。
- *
- * 只认 `icons/resource` 的症状是这 3 张图静默加载失败（加载器只 warn 并返回 null），
- * 奖励格只剩品质框。`tests/league-store-donate-discount.test.ts` 会拿真表现算实盘位置，
- * 与这张表逐条对齐；美术挪目录或表里新增例外，用例立刻红。
- */
 export const ROLE_PROPERTY_ICON_ROOT_OVERRIDE: Readonly<Record<string, string>> = {
     '图标_联盟贡献': COMMON_ICON_ART_ROOT,
     '图标_补天神石': COMMON_ICON_ART_ROOT,

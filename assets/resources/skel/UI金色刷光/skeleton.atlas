@@ -1,0 +1,69 @@
+
+skeleton.png
+size: 236,236
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+qietu/jiesuan_guang_1
+  rotate: false
+  xy: 2, 177
+  size: 230, 55
+  orig: 271, 60
+  offset: 17, 2
+  index: -1
+qietu/jiesuan_guang_2
+  rotate: false
+  xy: 2, 130
+  size: 212, 45
+  orig: 219, 48
+  offset: 4, 1
+  index: -1
+qietu/jiesuan_guang_5
+  rotate: true
+  xy: 2, 72
+  size: 56, 57
+  orig: 60, 60
+  offset: 1, 3
+  index: -1
+qietu/jiesuan_guang_7
+  rotate: false
+  xy: 216, 143
+  size: 5, 5
+  orig: 6, 6
+  offset: 0, 1
+  index: -1
+qietu/jiesuan_guang_8
+  rotate: false
+  xy: 216, 162
+  size: 10, 13
+  orig: 12, 14
+  offset: 1, 0
+  index: -1
+qietu/jiesuan_guang_9
+  rotate: false
+  xy: 216, 150
+  size: 9, 10
+  orig: 9, 10
+  offset: 0, 0
+  index: -1
+qietu/jiesuan_guang_jinbi
+  rotate: true
+  xy: 61, 55
+  size: 31, 33
+  orig: 31, 33
+  offset: 0, 0
+  index: -1
+qietu/jiesuan_jinbidi
+  rotate: false
+  xy: 61, 88
+  size: 103, 40
+  orig: 103, 40
+  offset: 0, 0
+  index: -1
+qietu/jiesuan_jinbidui
+  rotate: true
+  xy: 166, 56
+  size: 72, 52
+  orig: 72, 52
+  offset: 0, 0
+  index: -1

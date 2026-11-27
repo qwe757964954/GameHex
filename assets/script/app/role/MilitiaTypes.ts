@@ -1,19 +1,6 @@
-/**
- * 民兵「天赋」模块的类型与常量（**零引擎依赖**，可直接 import 单测）。
- *
- * 老端对应：`client/assets/script/app/game/ctrl/army/militia/`
- * （`LayerMiltiaMain` 主界面 + `LayerMiltiaMenuMenu` 菜单层 + `TabMiltiaTalent` 天赋分页）。
- *
- * 新端只迁**天赋**这一支（皮肤 tab 不迁）：角色页左侧导航「天赋」（`NavMilitia`）点开
- * `ui/Role/TabMilitiaTalent`，列表 + 详情 + 激活。
- */
+/** 民兵天赋列表、详情和激活使用的类型与配置常量。 */
 
-/**
- * 兵种 id：民兵（`ArmyTypeId.MinBing`，老端 `CtrlArmy.ts`）。
- *
- * ⚠️ 整个天赋模块**只服务这一个兵种** —— `armyLevel` 表里 669 行按 id 分兵种
- * （66014 = 民兵，201 级），取错 id 会拉到别人的等级曲线上。
- */
+/** 民兵兵种 ID，用于从跨兵种的 `armyLevel` 配置中筛选民兵等级行。 */
 export const MILITIA_ARMY_ID = 66014;
 
 /** 老端兜底等级（`getLevel()` 读不到 `CmdArmyLevel` 时返回 1）。 */

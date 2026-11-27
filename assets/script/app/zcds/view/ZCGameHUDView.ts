@@ -1,5 +1,6 @@
 import type { IZCBattleRenderModel } from '../application/ZCBattleRuntimeContract';
 import { _decorator, Button, Color, Component, EventMouse, EventTouch, Label, Layout, Node, ScrollView, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
+import type { Prefab } from 'cc';
 import { tween, type Tween } from 'cc';
 import { Widget } from 'cc';
 import { ZCGameHudScoreSlot } from './ZCGameHudScoreSlot';
@@ -15,6 +16,25 @@ import type { ZCHexConfig } from '../model/ZCMapConfig';
 import { mapToViewX, mapToViewY, ZC_HEX_VIEW_WIDTH, ZC_HEX_VIEW_HEIGHT, ZC_MAP_PRESENTATION_SCALE } from './ZCGameViewUtil';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
+import {
+    createZCUISpineBannerNode,
+    destroyZCUISpineBanner,
+    isZCUISpineBannerAlive,
+    type IZCUISpineBannerNode,
+} from './ZCUISpineBannerFx';
+import { zcUiBannerClipSecondsOf } from '../model/ZCUISpineBannerStyle';
+import {
+    ZC_BATTLE_START_ANIMATION,
+    ZC_BATTLE_START_CENTER_OFFSET_Y,
+    ZC_BATTLE_START_FALLBACK_SECONDS,
+} from '../model/ZCBattleStartStyle';
+import {
+    ZC_BOSS_WARNING_ANIMATION,
+    ZC_BOSS_WARNING_CENTER_OFFSET_Y,
+    ZC_BOSS_WARNING_FALLBACK_SECONDS,
+    zcShouldPlayBossWarning,
+} from '../model/ZCBossWarningStyle';
+import type { ZCDefenceWaveProgress } from '../model/ZCGameModel';
 
 const { ccclass, property } = _decorator;
 /**
@@ -229,6 +249,31 @@ export class ZCGameHUDView extends Component {
     private mapIntroPlayed = false;
     private mapIntroPlaying = false;
     private mapIntroTween: Tween<Node> | null = null;
+    /**
+     * 镜头是否正停在全景、还没开始推镜头。
+     *
+     * 这是「对局开始特效」唯一的可播窗口（用户 2026-11-25：「镜头最高还没开始推镜头时，
+     * 播放一次对局开始特效」）。骨架是异步加载的，常常在 `playMapIntro` 之后几帧才到货，
+     * 所以要留着这个窗口等它（见 {@link setBattleStartEffect}）。
+     */
+    private mapIntroHolding = false;
+    /** 本局开局特效预制体；`ZCGame` 异步注入，没到货就跳过。*/
+    private battleStartPrefab: Prefab | null = null;
+    private battleStartBanner: IZCUISpineBannerNode | null = null;
+    /** 本局是否已经播过（一局只播一次；`playMapIntro` 重跑会复位）。*/
+    private battleStartPlayed = false;
+    /**
+     * 塔防 BOSS 波预警：预制体、正在播的那条、以及「上次播过的波 id」。
+     *
+     * 与开局横幅不同的地方只有一个判据来源 —— 那条靠镜头的停留窗，这条靠每帧的
+     * `defenceWaveProgress`（见 {@link playBossWarningEffect} / `ZCBossWarningStyle`）。
+     */
+    private bossWarningPrefab: Prefab | null = null;
+    private bossWarningBanner: IZCUISpineBannerNode | null = null;
+    /** 上一次播过预警的 `currentWaveId`；同一波只播一次（多段 BOSS 也各播各的）。*/
+    private bossWarningWaveId: number | null = null;
+    /** 最近一帧的波次进度：预制体异步到货时用它补播（BOSS 波可能比 prefab 先到）。*/
+    private bossWarningProgress: Readonly<ZCDefenceWaveProgress> | null = null;
     private settlementOverviewTween: Tween<Node> | null = null;
     private settlementOverviewRequested = false;
     private settlementOverviewDone = false;
@@ -342,6 +387,7 @@ export class ZCGameHUDView extends Component {
             this.mapIntroTween = null;
         }
         this.mapIntroPlaying = false;
+        this.mapIntroHolding = false;
         const scale = this.mapOverviewScale;
         const center = this.mapCenterAtScale(scale);
         this.mapLayer.setScale(scale, scale, 1);
@@ -367,6 +413,7 @@ export class ZCGameHUDView extends Component {
             this.mapIntroTween = null;
         }
         this.mapIntroPlaying = false;
+        this.mapIntroHolding = false;
         const scale = this.mapOverviewScale;
         const center = this.mapCenterAtScale(scale);
         this.clearDrag();
@@ -481,6 +528,11 @@ private fillPlayerRow(node: Node, index: number): void {
     render(model: IZCBattleRenderModel): void {
         const state = model.snapshot;
         const defence = model.defenceWaveProgress;
+        //  BOSS 波来袭预警：守城局每帧问一次，按 `currentWaveId` 去重（见 `playBossWarningEffect`）。
+        //  🔴 放在这里而不是模型的事件队列里：波次进度本来就是每帧给的 HUD 状态，
+        //  再走一条一次性事件队列就要额外处理"存档恢复 / 中途重进"的补播，反而更容易漏。
+        this.bossWarningProgress = defence;
+        this.playBossWarningEffect();
         // 守城（塔防）局：顶部信息带（计时 + 四格）整体收起 —— 蓝湖「BOSS」稿那一帧只有左上角的首领条，
         // 而首领条（`ZCBossPanel`，由 `ZCGame` 实例化）高 173px、居中的四格会与它重叠。
         this.topInfoPanel.active = defence === null && !this.spawnSelectionMode;
@@ -707,6 +759,7 @@ private fillPlayerRow(node: Node, index: number): void {
             this.mapIntroTween = null;
         }
         this.mapIntroPlaying = false;
+        this.mapIntroHolding = false;
         if (this.settlementOverviewTween) {
             this.settlementOverviewTween.stop();
             this.settlementOverviewTween = null;
@@ -756,6 +809,10 @@ private fillPlayerRow(node: Node, index: number): void {
         this.bindEvents();
     }
     protected onDestroy(): void {
+        this.clearBattleStartBanner();
+        this.battleStartPrefab = null;
+        this.clearBossWarningBanner();
+        this.bossWarningPrefab = null;
         if (this.mapIntroTween) {
             this.mapIntroTween.stop();
             this.mapIntroTween = null;
@@ -898,8 +955,16 @@ private fillPlayerRow(node: Node, index: number): void {
         this.mapOffsetX = overviewCenter.x;
         this.mapOffsetY = overviewCenter.y;
         this.mapIntroPlaying = true;
+        //  镜头到最高点、还没开始推 —— 开局特效就在这一拍（见 `playBattleStartEffect`）。
+        //  复位「已播」：同一 HUD 实例开下一局（`initialize`）时 `mapIntroPlayed` 也会复位。
+        this.mapIntroHolding = true;
+        this.battleStartPlayed = false;
+        this.clearBattleStartBanner();
+        this.playBattleStartEffect();
         this.mapIntroTween = tween(this.mapLayer)
             .delay(ZCGameHUDView.MAP_OVERVIEW_HOLD_SECONDS)
+            //  推镜头一开始就关窗：用户口径要的是"最高点那一拍"，不是"入场全程"。
+            .call(() => { this.mapIntroHolding = false; })
             .to(ZCGameHUDView.MAP_ZOOM_DURATION_SECONDS, {
                 scale: new Vec3(settleScale, settleScale, 1),
                 position: new Vec3(rest.x, rest.y, 0),
@@ -912,6 +977,96 @@ private fillPlayerRow(node: Node, index: number): void {
                 this.clearDrag();
             })
             .start();
+    }
+
+    /**
+     * 注入本局「对局开始」特效的骨架（`ZCGame` 异步加载后交过来）。
+     *
+     * 骨架必然晚于 `playMapIntro`（那条是 `initialize` 里同步跑的）⇒ 到货时若镜头**还停在
+     * 全景**就当场补播；已经推完镜头就不再补（用户口径是"镜头最高、还没推镜头时"）。
+     *
+     * `null` = 没加载到 / 已退出：静默跳过，开局流程不依赖它。
+     */
+    setBattleStartEffect(prefab: Prefab | null): void {
+        this.battleStartPrefab = prefab;
+        this.playBattleStartEffect();
+    }
+
+    /** 开局特效的唯一播放入口（幂等：一局一次，且只在全景停留期内）。*/
+    private playBattleStartEffect(): void {
+        if (!this.mapIntroHolding || this.battleStartPlayed) return;
+        const prefab = this.battleStartPrefab;
+        if (!prefab) return;
+        //  同一帧里 `playMapIntro` 会先把结果清掉，这里再建 —— 顺序在调用点上已定死。
+        this.battleStartPlayed = true;
+        const banner = createZCUISpineBannerNode(prefab, ZC_BATTLE_START_ANIMATION, this.node, {
+            name: 'BattleStartFx',
+            centerY: ZC_BATTLE_START_CENTER_OFFSET_Y,
+        });
+        this.battleStartBanner = banner;
+        //  播完就收：节点挂在 HUD 根上，留着下一局会看到上一局的横幅。
+        //  时长读不出来时用兜底值 —— 宁可多留一会儿，也不能永久挂着。
+        const clip = zcUiBannerClipSecondsOf(banner.skeleton.skeletonData, ZC_BATTLE_START_ANIMATION);
+        const life = clip > 0 ? clip + 0.1 : ZC_BATTLE_START_FALLBACK_SECONDS;
+        this.scheduleOnce(() => this.clearBattleStartBanner(banner), life);
+    }
+
+    /**
+     * 收掉开局特效。
+     *
+     * `only` 给定时只收那一条（`scheduleOnce` 排的是本局那个节点）；下一局开场前调无参版本，
+     * 把上一局可能残着的横幅清干净 —— 否则重开一局会先看到上一局的"对战开始"闪一下。
+     */
+    private clearBattleStartBanner(only?: IZCUISpineBannerNode): void {
+        const banner = this.battleStartBanner;
+        if (!banner || (only && banner !== only)) return;
+        this.battleStartBanner = null;
+        if (isZCUISpineBannerAlive(banner)) destroyZCUISpineBanner(banner);
+    }
+
+    /**
+     * 注入塔防「BOSS 波来袭」预警特效的预制体（`ZCGame` 异步加载后交过来）。
+     *
+     * `null` = 没加载到 / 非塔防局 / 已退出：静默跳过，对局流程不依赖它。
+     * 到货时会立刻试着补播一次 —— BOSS 波可能比 prefab 先到（尤其第一波就是 BOSS 的短局）。
+     */
+    setBossWarningEffect(prefab: Prefab | null): void {
+        this.bossWarningPrefab = prefab;
+        this.playBossWarningEffect();
+    }
+
+    /**
+     * BOSS 波预警的唯一播放入口（每帧调用，靠 `currentWaveId` 去重）。
+     *
+     * 判据全在 `zcShouldPlayBossWarning`（零 cc，可单测）：守城局 + 当前波是 BOSS 波 +
+     * 这一波没播过。放到最上层的兄弟节点（`createZCUISpineBannerNode` 内部 `setSiblingIndex` 末位），
+     * 免得被顶部信息带 / 首领条盖住。
+     */
+    private playBossWarningEffect(): void {
+        const progress = this.bossWarningProgress;
+        const prefab = this.bossWarningPrefab;
+        if (!progress || !prefab) return;
+        if (!zcShouldPlayBossWarning(progress, this.bossWarningWaveId)) return;
+        this.bossWarningWaveId = progress.currentWaveId;
+        const banner = createZCUISpineBannerNode(prefab, ZC_BOSS_WARNING_ANIMATION, this.node, {
+            name: 'BossWarningFx',
+            centerY: ZC_BOSS_WARNING_CENTER_OFFSET_Y,
+        });
+        this.bossWarningBanner = banner;
+        //  与开局横幅同口径：播完就收，节点挂在 HUD 根上留着会叠到下一波。
+        const clip = zcUiBannerClipSecondsOf(banner.skeleton.skeletonData, ZC_BOSS_WARNING_ANIMATION);
+        this.scheduleOnce(
+            () => this.clearBossWarningBanner(banner),
+            clip > 0 ? clip + 0.1 : ZC_BOSS_WARNING_FALLBACK_SECONDS,
+        );
+    }
+
+    /** 收掉预警横幅（`only` 给定时只收那一条；无参 = 全收，销毁时用）。*/
+    private clearBossWarningBanner(only?: IZCUISpineBannerNode): void {
+        const banner = this.bossWarningBanner;
+        if (!banner || (only && banner !== only)) return;
+        this.bossWarningBanner = null;
+        if (isZCUISpineBannerAlive(banner)) destroyZCUISpineBanner(banner);
     }
 
     /**

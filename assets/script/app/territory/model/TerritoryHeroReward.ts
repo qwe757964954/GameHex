@@ -51,7 +51,7 @@ export const TERRITORY_HERO_FLIGHT_SECONDS = 0.62;
 export const TERRITORY_HERO_FLIGHT_STAGGER = 0.055;
 
 /** 二次贝塞尔控制点的拱高系数（乘 |dy|）。 */
-export const TERRITORY_HERO_FLIGHT_ARC_RATIO = 0.42;
+const TERRITORY_HERO_FLIGHT_ARC_RATIO = 0.42;
 
 /**
  * 这一批飞几枚：按「奖励种类」放大一点点（一格只给 1 种经验也别只飞孤零零一枚），

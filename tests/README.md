@@ -43,24 +43,24 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 反向可达与路径字面量两条机械判据兜底）。
 
 <!-- TEST-INDEX:BEGIN -->
-共 615 个测试文件、189,671 行、7,128 条用例（2026-11-16 实测；`npm run index:tests` 可重算）。
+共 650 个测试文件、201,294 行、7,483 条用例（2026-11-16 实测；`npm run index:tests` 可重算）。
 
 | 前缀 | 文件 | 用例 | 已进路由表 |
 | --- | --- | --- | --- |
-| `zcds` | 197 | 2006 | 37 |
-| `territory` | 101 | 1333 | 29 |
-| `bigmap` | 66 | 529 | 11 |
-| `card` | 31 | 323 | 7 |
-| `guide` | 19 | 214 | 19 |
-| `league` | 18 | 493 | 17 |
-| `main` | 17 | 159 | 3 |
-| `chest` | 11 | 92 | 2 |
-| `battle` | 9 | 101 | 3 |
+| `zcds` | 212 | 2168 | 37 |
+| `territory` | 104 | 1371 | 29 |
+| `bigmap` | 67 | 538 | 11 |
+| `card` | 31 | 344 | 7 |
+| `role` | 21 | 121 | 0 |
+| `guide` | 19 | 227 | 19 |
+| `league` | 18 | 494 | 17 |
+| `main` | 18 | 164 | 3 |
+| `chest` | 11 | 95 | 2 |
+| `battle` | 9 | 109 | 3 |
 | `matching` | 8 | 58 | 0 |
-| `role` | 8 | 49 | 0 |
 | `login` | 6 | 27 | 6 |
 | `map` | 4 | 133 | 0 |
-| `popup` | 4 | 31 | 0 |
+| `popup` | 4 | 33 | 0 |
 | `pvp` | 4 | 26 | 0 |
 | `common` | 3 | 14 | 0 |
 | `framework` | 3 | 22 | 0 |
@@ -70,6 +70,7 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 | `auto` | 2 | 10 | 2 |
 | `component` | 2 | 2 | 0 |
 | `config` | 2 | 9 | 0 |
+| `equip` | 2 | 9 | 0 |
 | `firstRecharge` | 2 | 43 | 0 |
 | `game` | 2 | 14 | 0 |
 | `hero` | 2 | 16 | 2 |
@@ -80,12 +81,12 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 | `preview` | 2 | 11 | 0 |
 | `procedure` | 2 | 16 | 1 |
 | `reddot` | 2 | 26 | 0 |
-| `reward` | 2 | 20 | 1 |
-| `store` | 2 | 35 | 0 |
-| `tab` | 2 | 13 | 0 |
+| `reward` | 2 | 23 | 1 |
+| `store` | 2 | 36 | 0 |
+| `tab` | 2 | 14 | 0 |
 | `ui` | 2 | 15 | 0 |
 | `verify` | 2 | 17 | 0 |
-| 其余 62 个单文件前缀 | 62 | 1132 | 15 |
+| 其余 62 个单文件前缀 | 62 | 1139 | 15 |
 <!-- TEST-INDEX:END -->
 
 单文件前缀（一个功能一个文件，按需 grep）：`activity`、`art`、`battletoken`、`bootstrap`、

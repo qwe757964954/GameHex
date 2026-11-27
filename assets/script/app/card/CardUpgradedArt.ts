@@ -1,5 +1,7 @@
-import type { SpriteFrame } from 'cc';
-import type { ZCCardRarity } from '../zcds/model/ZCCombatCatalog';
+import { Prefab, type SpriteFrame } from 'cc';
+import { scopeAssetService, type AssetService } from '../../core/asset/AssetService';
+import type { ResourceScope } from '../../core/asset/ResourceScope';
+import type { ZCCardRarity, ZCDeckCard } from './CardLineupTypes';
 import type { ZCCardClass } from './CardLineupTypes';
 import { loadArt, loadIconByArtPath } from './CardLineupIcons';
 
@@ -22,21 +24,40 @@ const UPGRADE_POPUP_ROOT = 'image/carddetail/upgrade_popup';
 /** 720×1610 整屏背景走 main-pages 独立目录，避免进 carddetail 自动图集被缩糊。 */
 const BACKGROUND_ROOT = 'image/carddetail_bg';
 
-export interface ICardUpgradedChrome {
-    readonly background: SpriteFrame | null;
-    readonly frame: SpriteFrame | null;
+export interface ICardUpgradedArtBundle {
+    readonly chrome: {
+        readonly background: SpriteFrame | null;
+        readonly frame: SpriteFrame | null;
+    };
+    readonly classIcon: SpriteFrame | null;
+    readonly heroPrefab: Prefab | null;
 }
 
-/** 背景是整屏 720×1610，走 `image/carddetail_bg` 独立目录，不参与 carddetail 图集。 */
-export function loadCardUpgradedChrome(rarity: ZCCardRarity): Promise<ICardUpgradedChrome> {
-    const skin = RARITY_SKIN[rarity];
-    return Promise.all([
-        loadArt(`kpxx_bg_${skin}`, BACKGROUND_ROOT),
-        loadArt(`frame_${skin}`, UPGRADE_POPUP_ROOT),
-    ]).then(([background, frame]) => ({ background, frame }));
-}
-
-/** 职业图标沿用阵容页的 `yx_zhiye_*` 40×40。 */
-export function loadCardUpgradedClassIcon(cardClass: ZCCardClass): Promise<SpriteFrame | null> {
-    return loadIconByArtPath(CLASS_ICON[cardClass]);
+export async function loadCardUpgradedArt(
+    assets: AssetService,
+    card: ZCDeckCard,
+    cardClass: ZCCardClass,
+    scope: ResourceScope,
+): Promise<ICardUpgradedArtBundle> {
+    const skin = RARITY_SKIN[card.rarity];
+    const path = card.unitPrefabPath;
+    try {
+        // 骨骼缺失时仍显示弹窗，已加载的 prefab 由本次弹窗作用域释放。
+        const hero = path
+            ? scopeAssetService(assets, scope).load(path, Prefab).catch((error: unknown) => {
+                console.warn(`[CardUpgradedArt] 升级弹窗骨骼加载失败：${path}`, error);
+                return null;
+            })
+            : null;
+        const [background, frame, classIcon, heroPrefab] = await Promise.all([
+            loadArt(`kpxx_bg_${skin}`, BACKGROUND_ROOT),
+            loadArt(`frame_${skin}`, UPGRADE_POPUP_ROOT),
+            loadIconByArtPath(CLASS_ICON[cardClass]),
+            hero,
+        ]);
+        return { chrome: { background, frame }, classIcon, heroPrefab };
+    } catch (error) {
+        console.warn('[CardUpgradedArt] 升级弹窗美术加载失败', error);
+        return { chrome: { background: null, frame: null }, classIcon: null, heroPrefab: null };
+    }
 }

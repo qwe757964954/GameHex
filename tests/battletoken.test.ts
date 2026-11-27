@@ -44,10 +44,12 @@ import {
     BT_SHARED_CHECK,
     BT_SHARED_LOCK_MASK,
     btSpriteType,
+    } from '../assets/script/app/battletoken/BattleTokenArt';
+import {
+    QUALITY_FRAME_NAMES,
     qualityFrameLevel,
     qualityFrameName,
-    } from '../assets/script/app/battletoken/BattleTokenArt';
-import { QUALITY_FRAME_NAMES } from '../assets/script/app/common/QualityFrameArt';
+} from '../assets/script/app/common/QualityFrameArt';
 import {
     BT_CFG_LEVEL_UP_COST,
     BT_CFG_MAX_LEVEL,
@@ -956,7 +958,8 @@ test('prefab 存在，根节点是第一个 cc.Node 且 cc.Prefab.data 指向它
     assert.equal(PREFAB_NODES[0]!._parent as unknown, null, '根节点没有父节点');
     assert.deepEqual(transformOf('BattleToken'), { w: 720, h: 1280, ax: 0.5, ay: 0.5 });
     // 100 个节点是「4 页签共用一套内容 + 2 个列表模板」的结果，数量变了先确认结构
-    assert.equal(PREFAB_NODES.length, 102);
+    // +10 = 5 个 RedDot 各由「根 + Dot」换成「根 + Icon/Spine/Title」（每个净增 2 个节点）
+    assert.equal(PREFAB_NODES.length, 112);
 });
 
 test('battletoken › ⚠️ 所有节点的 `_layer` 都是 UI_2D（落在 DEFAULT 会让整棵子树不渲染）', () => {
@@ -992,6 +995,8 @@ test('battletoken › ⚠️ 所有节点的 `_layer` 都是 UI_2D（落在 DEFA
  * `CCPropertyOverrideInfo` 只出现在嵌套实例的属性覆盖里（`ui/common/TabButton` 的 4 个实例）。
  */
 const ENGINE_ENTRY_TYPES = new Set(['CCPropertyOverrideInfo']);
+/** 工程通用红点组件（`assets/script/app/common/RedDot.ts`），跨模块共用，不算本模块脚本。 */
+const SHARED_CIDS = new Set(['5fa5aSCCTRI/Y8zkguS79+z']);
 
 test('⚠️ 每个脚本组件的 `__type__` 都能从对应 `.ts.meta` 的 uuid 反解出来（防 cid 抄错成 MissingScript）', () => {
     const expected = new Map<string, string>();
@@ -1000,9 +1005,11 @@ test('⚠️ 每个脚本组件的 `__type__` 都能从对应 `.ts.meta` 的 uui
     }
     const used = new Set(
         PREFAB
-            .filter((entry) => entry && typeof entry.__type__ === 'string' && !entry.__type__.startsWith('cc.'))
+            .filter((entry) => entry && typeof entry.__type__ === 'string'
+                && !entry.__type__.startsWith('cc.')
+                && !entry.__type__.startsWith('sp.'))
             .map((entry) => entry.__type__ as string)
-            .filter((type) => !ENGINE_ENTRY_TYPES.has(type)),
+            .filter((type) => !ENGINE_ENTRY_TYPES.has(type) && !SHARED_CIDS.has(type)),
     );
     for (const cid of used) {
         assert.equal(cid.length, 23, `cid 长度必须是 23 位：${cid}`);
@@ -1323,8 +1330,8 @@ test('两个列表：`content` 锚点 (0.5,1) + 唯一子节点是行模板（`V
             assert.deepEqual(
                 ((node(`${slot}/RedDot`)._children as Array<{ __id__: number }>) ?? [])
                     .map((ref) => String(PREFAB[ref.__id__]!._name)),
-                ['Dot'],
-                '红点内部那层 Dot',
+                ['Icon', 'Spine', 'Title'],
+                '红点内部是工程通用三层结构',
             );
         }
         const lefts = slots.map((s) => canvasBox(s).left - canvasBox(`${contentPath}/${tpl}`).left);

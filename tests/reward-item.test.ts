@@ -11,7 +11,7 @@ import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import type { AssetService, AssetLoadOptions } from '../assets/script/core/asset/AssetService';
 import { assetPath } from './helpers/asset-paths';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
-import { REWARD_ITEM_DETAIL_INTENT } from '../assets/script/app/common/RewardItemEvents';
+import { REWARD_GEM_DETAIL_INTENT, REWARD_ITEM_DETAIL_INTENT } from '../assets/script/app/common/RewardItemEvents';
 import * as itemDetailTable from '../assets/script/app/itemdetail/ItemDetailTable';
 import * as resTypes from '../assets/script/app/common/ResTypes';
 import * as gemReward from '../assets/script/app/common/GemReward';
@@ -96,15 +96,17 @@ function loadClass(overrides: Record<string, unknown> = {}): {
     // 组件内部会读表 + 拼路径：这些纯函数在单测里给最小桩（帧加载走 `assets`，没注入就是 null）
     const stubs: Record<string, unknown> = {
         '../../framework/event/EventMgr': { EventMgr },
-        './RewardItemEvents': { REWARD_ITEM_DETAIL_INTENT },
+        './RewardItemEvents': { REWARD_ITEM_DETAIL_INTENT, REWARD_GEM_DETAIL_INTENT },
         '../../core/asset/ResourceScope': { ResourceScope },
         '../../framework/ref/RefUtil': { RefUtil: { instance: { getRefAllAsync: async () => [] } } },
         '../ArtPaths': { spriteFramePathOf: (path: string) => path },
         '../itemdetail/ItemDetailArtLoader': { itemQualityFrameRelPath: () => 'image/common/cu_quality_01' },
         '../itemdetail/ItemDetailTable': itemDetailTable,
         './GemReward': gemReward,
-        '../common/ResTypes': {
+        '../../core/config/TableNames': {
             ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty', CARD_LEVEL_UP_TABLE: 'cardLevelUp',
+        },
+        '../common/ResTypes': {
             resBarCellOfRefId: () => null, resBarIconSpritePath: () => '',
         },
         ...overrides,
@@ -262,6 +264,7 @@ test('公共奖励格点击派发当前物品意图，复用后不打开旧物�
 test('奖励详情由组合根响应，层级覆盖结算、预览不伪造背包数量，销毁后退订', async () => {
     const exports: Record<string, any> = {};
     const opened: Array<Record<string, any>> = [];
+    const openedGems: Array<Record<string, any>> = [];
     const code = ts.transpileModule(readFileSync('assets/script/app/bootstrap/ProcedureBootstrap.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
     }).outputText;
@@ -269,9 +272,12 @@ test('奖励详情由组合根响应，层级覆盖结算、预览不伪造背�
         if (name === 'cc') return { Component: class {}, _decorator: { ccclass: () => value => value } };
         if (name.endsWith('/CardRepository')) return { cardRepository: { bindHeroSession() {} } };
         if (name.endsWith('/EventMgr')) return { EventMgr };
-        if (name.endsWith('/RewardItemEvents')) return { REWARD_ITEM_DETAIL_INTENT };
+        if (name.endsWith('/RewardItemEvents')) return { REWARD_ITEM_DETAIL_INTENT, REWARD_GEM_DETAIL_INTENT };
         if (name.endsWith('/PopupDef')) return { PopupLayer: { SYSTEM: 1 } };
         if (name.endsWith('/ItemInfoPage')) return { ItemInfoPage: { open: async options => { opened.push(options); } } };
+        if (name.endsWith('/RoleGemInfoPopup')) {
+            return { RoleGemInfoPopup: { open: async options => { openedGems.push(options); return null; } } };
+        }
         if (name.endsWith('/GameNet')) return { GameNet: { instance: { addEvent() {}, removeEvent() {} } } };
         if (name.endsWith('/FW')) return { FW: {} };
         return {};
@@ -286,9 +292,21 @@ test('奖励详情由组合根响应，层级覆盖结算、预览不伪造背�
         assert.equal(opened[0].userData.number, 0);
         assert.equal(opened[0].layer, 1);
         assert.equal(opened[0].allowMultiple, true);
+
+        // 宝石奖励不走物品详情：gemId 原样进宝石详情，层级同样压在结算页之上。
+        EventMgr.instance.emit(REWARD_GEM_DETAIL_INTENT, { gemId: '1006001' });
+        EventMgr.instance.emit(REWARD_GEM_DETAIL_INTENT, { gemId: '' });
+        EventMgr.instance.emit(REWARD_GEM_DETAIL_INTENT, { gemId: 'abc' });
+        assert.equal(openedGems.length, 1);
+        assert.equal(openedGems[0].userData.gemId, '1006001');
+        assert.equal(openedGems[0].layer, 1);
+        assert.equal(openedGems[0].allowMultiple, true);
+        assert.equal(opened.length, 1, '宝石意图不能再落到 ItemInfoPage');
     } finally { bootstrap.onDestroy(); }
     EventMgr.instance.emit(REWARD_ITEM_DETAIL_INTENT, { resId: 18003 });
     assert.equal(opened.length, 1);
+    EventMgr.instance.emit(REWARD_GEM_DETAIL_INTENT, { gemId: '1006001' });
+    assert.equal(openedGems.length, 1);
 });
 
 test('通用奖励广播可由真实 ProtoCoder 按消息 ID 解码并识别为广播', async () => {
@@ -332,7 +350,7 @@ test('通用奖励广播转交原始奖励明细，缺省列表为空，宿主�
         if (name === 'cc') return { Component: class {}, _decorator: { ccclass: () => value => value } };
         if (name.endsWith('/CardRepository')) return { cardRepository: { bindHeroSession() {} } };
         if (name.endsWith('/EventMgr')) return { EventMgr };
-        if (name.endsWith('/RewardItemEvents')) return { REWARD_ITEM_DETAIL_INTENT };
+        if (name.endsWith('/RewardItemEvents')) return { REWARD_ITEM_DETAIL_INTENT, REWARD_GEM_DETAIL_INTENT };
         if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
         if (name.endsWith('/FW')) return { FW: { ShowReward: goods => rewards.push(goods) } };
         return {};
@@ -613,4 +631,47 @@ test('宝石奖励：CmdGoods.quality 优先于末四位推导，resId 只给部
     await flushFrames();
     assert.equal(h.loads.filter((path) => path === 'icons/gem/图标_宝石_橙色').length >= 1, true);
     view.onDestroy();
+});
+
+test('宝石奖励格点击派发宝石详情意图，复用成道具后回到物品详情', async () => {
+    const h = createRewardLifecycleFixture(undefined, {
+        '../../framework/ref/RefUtil': { RefUtil: { instance: { getRefAllAsync: async (table: string) => {
+            if (table === 'gem') return [{ resId: 1000000, desc: '头盔宝石' }];
+            if (table === 'gemQuality') return [{ quality: 7, desc: '粉色', icon: '图标_宝石_粉色' }];
+            return [];
+        } } } },
+    });
+    const view = h.createView();
+    const listeners = new Map<string, () => void>();
+    view.node = {
+        active: true,
+        on: (event: string, handler: () => void, owner: object) => listeners.set(event, handler.bind(owner)),
+    };
+    const owner = {};
+    const gems: string[] = [];
+    const items: number[] = [];
+    EventMgr.instance.on(REWARD_GEM_DETAIL_INTENT, intent => gems.push(intent.gemId), owner);
+    EventMgr.instance.on(REWARD_ITEM_DETAIL_INTENT, intent => items.push(intent.resId), owner);
+    try {
+        view.onLoad();
+        const click = listeners.get('click');
+        assert.ok(click);
+
+        // 宝石格：resId 是 gemId，不能落到「未知物品」的物品详情。
+        view.render({ resId: 1006001, amount: 1 });
+        await flushFrames();
+        click();
+        assert.deepEqual(gems, ['1006001']);
+        assert.deepEqual(items, []);
+
+        // 同一格复用成普通道具后，意图跟着切回物品详情。
+        view.render({ resId: 16014, amount: 1 });
+        await flushFrames();
+        click();
+        assert.deepEqual(items, [16014]);
+        assert.deepEqual(gems, ['1006001']);
+    } finally {
+        EventMgr.instance.offTarget(owner);
+        view.onDestroy();
+    }
 });

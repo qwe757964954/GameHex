@@ -1,4 +1,5 @@
-import { _decorator, Button, Component, Label, Node } from 'cc';
+import { _decorator, Button, Component, Label } from 'cc';
+import { RedDot } from '../common/RedDot';
 import { Toast } from '../common/Toast';
 import { MainTaskDetailPage } from './MainTaskDetailPage';
 import { mainTaskRepository, subscribeMainTaskChange } from './MainTaskRepository';
@@ -29,8 +30,8 @@ export class MainTaskEntry extends Component {
     @property({ type: Label, tooltip: 'Label: task entry title' })
     label: Label = null!;
 
-    @property({ type: Node, tooltip: 'RedDot：可领取红点（只有 `FINISH` 才亮）' })
-    redDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'RedDot：可领取红点（通用 `RedDot`，只有 `FINISH` 才亮）' })
+    redDot: RedDot = null!;
 
     /** 数据端口；测试 / 探针可替换。 */
     private repo: IMainTaskRepository = mainTaskRepository;
@@ -87,7 +88,8 @@ export class MainTaskEntry extends Component {
         this.node.active = snapshot.visible && MainTaskEntry.guideUnlocked;
         // 入口固定显示短标题，任务名与进度由详情弹窗展示。
         this.label.string = snapshot.configured ? MAIN_TASK_TEXTS.entryLabel : '';
-        this.redDot.active = snapshot.showRedDot;
+        // 红点走工程通用 `RedDot`（与七格页签 / 活动入口同款），布尔直接喂给组件归一化。
+        this.redDot.setRedDot(snapshot.showRedDot);
     }
 
     /** 节点还活着吗（异步回来时宿主可能已被销毁）。 */

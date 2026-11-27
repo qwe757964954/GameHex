@@ -62,6 +62,15 @@ function loadGame(instantiate: (prefab: unknown) => unknown, emit = (_event: str
             if (name === '../battle/BattleResultService') return {
                 BattleResultService: { ensureListening() {} },
             };
+            // `initialize` 里同步发起三条可选预制体特效的预加载（大招通报 / 结算胜负 / 对局开始）。
+            // 这条桩给**空路径** ⇒ 命中 `loadBattlePrefab` 的 `if (!path) return`，不碰资源表；
+            // 不补的话 `ZC_BATTLE_FX_PATHS` 走下面的 `return {}` 变 undefined，读
+            // `.battleStartBanner` 直接 TypeError（2026-11-25 加开局特效时踩到）。
+            if (name.endsWith('/ZCGameResourcePlan')) return {
+                ZC_BATTLE_FX_PATHS: {
+                    skillAnnounce: '', settlementOutcome: '', battleStartBanner: '',
+                },
+            };
             return {};
         },
     };

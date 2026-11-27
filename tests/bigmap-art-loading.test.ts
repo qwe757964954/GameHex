@@ -41,7 +41,6 @@ test('同一作用域中的重复建筑资源仅加载一次，布局指定背�
         load: async (path: string) => { calls.push(path); return { path }; },
     };
     const art = await artLoader()(assets, { disposed: false }, 'custom/world');
-    assert.equal(calls.filter((path) => path.endsWith('/construction/spriteFrame')).length, 1);
     assert.equal(art.background.path, 'custom/world/spriteFrame');
     assert.equal(art.tiledBackground.path, 'bigMapBG/spriteFrame');
     assert.equal(art.baseTileGrass.path, 'image/buildings/img_land_01/spriteFrame');
@@ -64,7 +63,7 @@ test('基础贴图未完成时其他资源组已经发起，不串行等待六�
     } }, { disposed: false });
     await new Promise((resolve) => setImmediate(resolve));
     try {
-        for (const path of ['concept/sprites/construction', 'concept/ui/stamina', 'image/buildings/img_land_01', 'main/city/btn_quick_fight']) {
+        for (const path of ['concept/ui/top_wood', 'concept/ui/stamina', 'image/buildings/img_land_01', 'main/city/btn_quick_fight']) {
             assert.ok(paths.some((entry) => entry.endsWith(`${path}/spriteFrame`)), `${path} 不应等待其他资源组`);
         }
     } finally { finish(); await loading; }
@@ -126,7 +125,7 @@ test('页面存活时，缺图和真实加载失败仍告警并使用现有兜�
     }, new ResourceScope('bigmap'), 'custom/world', new Map([['wood', 'icons/item/图标_木材']]));
     assert.equal(art.tiledBackground, null);
     assert.equal(art.background.path, 'custom/world/spriteFrame');
-    assert.equal(art.resources.get('wood').path, 'image/concept/sprites/wood/spriteFrame');
+    assert.equal(art.resources.get('wood').path, 'image/concept/ui/top_wood/spriteFrame');
     assert.equal(warnings.length, 2);
     assert.match(String(warnings[0][0]), /资源未命中.*bigMapBG/);
     assert.equal(warnings[1][1], failure);

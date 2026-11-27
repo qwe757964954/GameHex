@@ -330,7 +330,7 @@ export const TERRITORY_GAIN_BURST_FADE_SECONDS = 0.25;
 export const TERRITORY_GAIN_BURST_SURFACE_FADE_SECONDS = 0.12;
 
 /** 基础缩放的基准值（`1` = icon 的设计边长）与随机幅度 ⇒ 实际 0.8 ~ 1.2。 */
-export const TERRITORY_GAIN_BURST_BASE_SCALE = 1;
+const TERRITORY_GAIN_BURST_BASE_SCALE = 1;
 export const TERRITORY_GAIN_BURST_SCALE_JITTER = 0.2;
 
 /**

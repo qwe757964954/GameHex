@@ -5,7 +5,7 @@ import { MainTab } from '../assets/script/app/main/MainTabModel';
 import { MAIN_PAGES_BUNDLE } from '../assets/script/core/asset/BundleCatalog';
 import { createControllerContext } from './helpers/controller-context';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
-import { MainTabEvent } from '../assets/script/app/main/MainTabEvents';
+import { MainTabEvent, type MainTabOutput } from '../assets/script/app/main/MainTabEvents';
 
 function harness() {
     const context = createControllerContext();
@@ -15,15 +15,9 @@ function harness() {
         requests.push({ path, bundle: options?.bundle, resolve: value => resolve(value as InstanceType<typeof _type>), reject, scope: options.scope });
     });
     let overlay = false;
-    const owner = {};
+    const owner = {}, outputOwner = {};
     const controller = new MainTabController(context, {
-        owner,
         assetType: class {},
-        failed() {},
-        view: {
-            showPage: page => shown.push(page),
-            renderNav: tab => selected.push(tab)
-        },
         world: {
             openWorld: async () => { overlay = true; },
             closeWorld: () => { overlay = false; },
@@ -40,6 +34,16 @@ function harness() {
             reportClick: tab => { reported.push(tab); }
         },
     });
+    EventMgr.instance.on(MainTabEvent.Output, (output: MainTabOutput<object>, source: object) => {
+        if (source !== controller) return;
+        if (output.kind === 'showPage') shown.push(output.page);
+        else if (output.kind === 'renderNav') selected.push(output.tab);
+    }, outputOwner);
+    const originalDispose = controller.dispose.bind(controller);
+    controller.dispose = () => {
+        EventMgr.instance.offTarget(outputOwner);
+        originalDispose();
+    };
     controller.start();
     return { controller, requests, shown, selected, reported, owner };
 }

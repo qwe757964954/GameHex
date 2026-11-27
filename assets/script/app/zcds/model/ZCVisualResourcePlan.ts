@@ -4,7 +4,12 @@ import {
     ZC_EFFECT_BEHAVIOR_SPECS,
     zcEffectMissilePathsForUnit,
     zcEffectPathsForBehavior,
+    zcRangeRingPathsForUnit,
+    zcSelfAuraLandingPath,
 } from './ZCEffectCatalog';
+import { zcLanceEffectPrefabPathsForUnit } from './ZCLanceFx';
+import { zcTrapFlightPathsForUnit } from './ZCTrapFx';
+import { zcBulletRainImpactPathsForUnit } from './ZCProjectileDropStyle';
 
 export interface IZCVisualDependency {
     readonly unitId: string;
@@ -91,9 +96,27 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
                 if (!behaviorKeys.has(spec.behaviorKey)) continue;
                 paths.push(...zcEffectPathsForBehavior(spec.behaviorKey, unit.unitId));
             }
+            // 「落地那一击」是**另一张表**（`SELF_AURA_LANDING_FX_BY_UNIT`），不在 behavior 组里
+            // ⇒ 不单独收的话，本局没有那位施法单位时这条路径根本不加载：
+            // 区域照常结算、天上什么都没砸下来、且不报错。
+            // 2026-11-25 第 51 批换冰法师通用子弹时才发现这条漏收（旧 `iceCone` 是靠
+            // 冰法师在场时被 `attackProfile.effectPrefabPath` 顺带收进去的）。
+            for (const key of behaviorKeys) paths.push(zcSelfAuraLandingPath(key, unit.unitId));
         }
         // 追踪导弹的弹体 / 爆炸只在目录的按单位表里登记，pvpSkill 任何一行都不携带。
         paths.push(...zcEffectMissilePathsForUnit(unit.unitId));
+        // 弹道雨的**命中特效**同理（第 56 批）：弹体掉完就消失，地上的那一下全靠这条路径。
+        // 漏收 = 子弹到点凭空没了、落点什么都没有，且不报错。
+        paths.push(...zcBulletRainImpactPathsForUnit(unit.unitId));
+        // 技能范围指示白环同理：只在 `ZCSkillRangeRingFx` 的按单位名单里（戈壁狂箭 / 冰山陨落 /
+        // 篮球火 三张卡），配置行的造型槽里没有它。
+        paths.push(...zcRangeRingPathsForUnit(unit.unitId));
+        // 破阵术的弹体也不在 `attackProfile` 里（`lanceProfileOf` 现造，2026-11-26 第 57 批）：
+        // 漏收 = 投枪飞出去是一根隐形的枪，伤害照常结算、画面全无。
+        paths.push(...zcLanceEffectPrefabPathsForUnit(unit.unitId));
+        // 投掷陷阱的**飞行段**美术同理（`ZC_TRAP_FLIGHT_PREFAB_BY_UNIT`，2026-11-26 第 57 批）：
+        // 漏收 = 蘑菇只有落地之后那一半，「丢出去」的过程什么都没有。
+        paths.push(...zcTrapFlightPathsForUnit(unit.unitId));
         return paths;
     }).filter((path): path is string => !!path));
 

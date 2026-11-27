@@ -1,17 +1,22 @@
 import { _decorator, Button, Component, Label, Sprite, SpriteFrame } from 'cc';
 import { EventMgr } from '../../framework/event/EventMgr';
-import { REWARD_ITEM_DETAIL_INTENT } from './RewardItemEvents';
+import { REWARD_GEM_DETAIL_INTENT, REWARD_ITEM_DETAIL_INTENT } from './RewardItemEvents';
 import { ComponentController } from '../../framework/controller/ComponentController';
 import type { ResourceScope } from '../../core/asset/ResourceScope';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { spriteFramePathOf } from '../ArtPaths';
 import { itemQualityFrameRelPath } from '../itemdetail/ItemDetailArtLoader';
 import { cardItemIdsOf, itemFrameQualityOf } from '../itemdetail/ItemDetailTable';
-import { GEM_QUALITY_TABLE, GEM_TABLE, gemRewardOf, parseGemQualityRows, parseGemRows, type IGemTables } from './GemReward';
 import {
-    CARD_LEVEL_UP_TABLE,
-    ITEM_TABLE,
-    ROLE_PROPERTY_TABLE,
+    GEM_QUALITY_TABLE,
+    GEM_TABLE,
+    gemRewardOf,
+    parseGemQualityRows,
+    parseGemRows,
+    type IGemTables,
+} from './GemReward';
+import { CARD_LEVEL_UP_TABLE, ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
+import {
     resBarCellOfRefId,
     resBarIconSpritePath,
     type IItemRefRow,
@@ -85,6 +90,8 @@ export class RewardItemView extends Component {
     /** 本格当前的品质覆盖 + 图标覆盖（同上，异步回来时确认没被复用）。 */
     private currentQuality = 0;
     private currentIconPath = '';
+    /** 本格当前是否是宝石（`resId` 是 gemId）：点击走宝石详情，不进物品详情。 */
+    private currentIsGem = false;
 
     private get resourceScope(): ResourceScope {
         return this.controller.scope;
@@ -101,6 +108,11 @@ export class RewardItemView extends Component {
 
     private onClick(): void {
         if (!Number.isSafeInteger(this.currentResId) || this.currentResId <= 0) return;
+        if (this.currentIsGem) {
+            // 宝石的 resId 是实例 id（gemId）：物品详情两张表都查不到，会落到「未知物品」。
+            EventMgr.instance.emit(REWARD_GEM_DETAIL_INTENT, { gemId: String(this.currentResId) });
+            return;
+        }
         EventMgr.instance.emit(REWARD_ITEM_DETAIL_INTENT, { resId: this.currentResId });
     }
 
@@ -155,6 +167,9 @@ export class RewardItemView extends Component {
         this.currentResId = data.resId;
         this.currentQuality = Number(data.quality) > 0 ? Math.floor(Number(data.quality)) : 0;
         this.currentIconPath = data.iconPath ?? '';
+        // 表已加载过的话先同步判一次，避免第一帧点击落在「还没 await 回来」的空档；
+        // 首次加载完成前 `gemTables` 为空，`applyFrames` 会再按真实表值刷新这个标记。
+        this.currentIsGem = gemRewardOf(data.resId, this.currentQuality, RewardItemView.gemTables) !== null;
         this.node.active = true;
 
         const amount = Math.floor(data.amount);
@@ -181,6 +196,7 @@ export class RewardItemView extends Component {
         if (this.currentQuality !== qualityOverride) return;
         //  宝石不是道具：`resId` 是宝石实例 id（gemId），品质 / 图标走 `gem` + `gemQuality`。
         const gem = gemRewardOf(resId, qualityOverride, RewardItemView.gemTables);
+        this.currentIsGem = gem !== null;
         const quality = gem ? gem.quality : RewardItemView.qualityOf(resId);
         //  卡牌道具（碎片 / 民兵 / 金矿）的品质是「卡牌品阶」，底框要抬一档才是卡牌本身的颜色（绿/蓝/紫/金）。
         const frameQuality = itemFrameQualityOf(quality, !gem && RewardItemView.cardItemIds.has(resId));

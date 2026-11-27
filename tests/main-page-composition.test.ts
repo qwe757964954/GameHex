@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import { ControllerBase, type IControllerResources } from '../assets/script/framework/controller/ControllerBase';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { VIEW_LIFECYCLE } from '../assets/script/framework/ui/ViewLifecycle';
 import { StoreController } from '../assets/script/app/store/StoreController';
@@ -13,6 +14,9 @@ import { CardLineupUiEvent } from '../assets/script/app/card/CardLineupEvents';
 import { RoleController } from '../assets/script/app/role/RoleController';
 import { RoleEvent } from '../assets/script/app/role/RoleEvents';
 import { LeagueTabController } from '../assets/script/app/league/LeagueTabController';
+import { LeagueTabEvent } from '../assets/script/app/league/LeagueTabEvents';
+import { LeagueJoinController } from '../assets/script/app/league/LeagueJoinController';
+import { LeagueJoinEvent } from '../assets/script/app/league/LeagueJoinEvents';
 import { createControllerContext } from './helpers/controller-context';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -28,7 +32,7 @@ function fixture() {
     class RolePage {
         renders = 0;
         async renderSnapshot() { this.renders++; }
-        selectBag() {} async showBag() {}
+        selectBag() {} async showBag() {} async finishDecompose() {}
     }
     class LeagueTabPage {}
     class MainPage {}
@@ -36,29 +40,68 @@ function fixture() {
     let purchases = 0, loads = 0, guideDisposes = 0;
     const pendingRoles: Array<(value: object) => void> = [];
     const removedCallers: object[] = [];
+    const storeCallers: object[] = [];
+    const roleCallers: object[] = [];
+    const contextRemovedCallers: object[] = [];
     const openedPopups: Array<{ kind: string; userData: unknown; closeCalls: number; open?: boolean }> = [];
     const pendingTips: Array<{
         resolve: (popup: { isPopupOpen: boolean; close(): void } | null) => void;
         onClose?: () => void;
     }> = [];
+    const openWithScope = async (
+        params: { scope?: ResourceScope } | undefined,
+        factory: () => Promise<{ isPopupOpen?: boolean; close(): void } | null>,
+    ) => {
+        const scope = params?.scope;
+        if (scope?.disposed) return null;
+        const popup = await factory();
+        if (!popup) return null;
+        if (scope?.disposed) {
+            popup.close();
+            return null;
+        }
+        if (scope) {
+            const rawClose = popup.close.bind(popup);
+            let closed = false;
+            let detach = () => {};
+            popup.close = () => {
+                if (closed) return;
+                closed = true;
+                detach();
+                rawClose();
+            };
+            detach = scope.defer(() => {
+                if (popup.isPopupOpen !== false) popup.close();
+            });
+        }
+        return popup;
+    };
     const popupStub = (kind: string) => ({
-        open: async (params?: { userData?: unknown }) => {
+        open: (params?: { scope?: ResourceScope; userData?: unknown }) => openWithScope(params, async () => {
             const record = { kind, userData: params?.userData, closeCalls: 0 };
             openedPopups.push(record);
             await tick();
-            return { close: () => { record.closeCalls++; } };
-        },
+            return {
+                close: () => {
+                    record.closeCalls++;
+                },
+            };
+        }),
     });
     const exports: Record<string, unknown> = {};
     const imports: Record<string, unknown> = {
         ControllerBase: { ControllerBase },
+        ResourceScope: { ResourceScope },
         EventMgr: { EventMgr },
         ViewLifecycle: { VIEW_LIFECYCLE },
         StorePage: { StorePage }, CardLineupPage: { CardLineupPage }, RolePage: { RolePage },
         LeagueTabPage: { LeagueTabPage }, MainPage: { MainPage }, MainTerritoryMap: { MainTerritoryMap },
         StoreController: { StoreController }, CardLineupController: { CardLineupController },
         RoleController: { RoleController }, LeagueTabController: { LeagueTabController },
-        StoreActions: { storeAction: async () => { purchases++; } },
+        LeagueJoinController: { LeagueJoinController },
+        StoreEvents: { StoreEvent }, CardLineupEvents: { CardLineupUiEvent },
+        RoleEvents: { RoleEvent }, LeagueTabEvents: { LeagueTabEvent }, LeagueJoinEvents: { LeagueJoinEvent },
+        StoreActions: { storeAction: async (_k: unknown, _c: unknown, req?: { caller: object }) => { purchases++; if (req) storeCallers.push(req.caller); } },
         CardRepository: {
             cardRepository: {
                 loadArtConfig: async () => ({}),
@@ -77,12 +120,21 @@ function fixture() {
         LeagueInfoPage: { LeagueInfoPage: popupStub('LeagueInfoPage') },
         CommonTips: {
             CommonTips: {
-                open: (params: { onClose?: () => void }) => new Promise(resolve => {
-                    pendingTips.push({ resolve, onClose: params?.onClose });
-                }),
+                open: (params: { scope?: ResourceScope; onClose?: () => void }) => openWithScope(
+                    params,
+                    () => new Promise(resolve => {
+                        pendingTips.push({ resolve, onClose: params?.onClose });
+                    }),
+                ),
             },
         },
-        RoleRepository: { roleRepository: { load: () => new Promise(resolve => pendingRoles.push(resolve)) } },
+        RoleRepository: { roleRepository: {
+            load: () => new Promise(resolve => pendingRoles.push(resolve)),
+            decomposeEquips: async (_ids: readonly string[], caller: object) => {
+                roleCallers.push(caller);
+                return { status: 'ok', removedIds: [], rewards: [] };
+            },
+        } },
         FW: { FW: { showTip() {}, ShowReward() {} } },
         GameNet: { GameNet: { instance: { removeCaller: (caller: object) => removedCallers.push(caller) } } },
         GuideComposition: { GuideComposition: class { dispose() { guideDisposes++; } } },
@@ -93,7 +145,12 @@ function fixture() {
     const Composition = exports.MainPageComposition as new (
         context: unknown, root: unknown, presented: () => void, requestOwner?: object,
     ) => ControllerBase;
-    const bind = (view: object, requestOwner?: object) => new Composition(createControllerContext(), {
+    const bind = (view: object, requestOwner?: object) => new Composition(createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => contextRemovedCallers.push(caller),
+        },
+    }), {
         getComponent: (type: new () => object) => view instanceof type ? view : null,
         getComponentInChildren: () => null,
     }, () => {}, requestOwner);
@@ -106,7 +163,7 @@ function fixture() {
     }, () => {});
     return {
         bind, failAfterCard, StorePage, CardLineupPage, RolePage,
-        pendingRoles, removedCallers, openedPopups, pendingTips,
+        pendingRoles, removedCallers, contextRemovedCallers, storeCallers, roleCallers, openedPopups, pendingTips,
         get purchases() { return purchases; },
         get loads() { return loads; },
         get guideDisposes() { return guideDisposes; },
@@ -147,12 +204,20 @@ test('hero view receives only presentation resources and ready data after its re
 test('role disable and destruction cancel late data while a later enable can refresh', async () => {
     const f = fixture(), page = new f.RolePage(), binding = f.bind(page);
     try {
-        phase(page, 'ready'); phase(page, 'enabled'); phase(page, 'disabled');
+        phase(page, 'ready'); phase(page, 'enabled');
+        EventMgr.instance.emit(RoleEvent.Intent, { kind: 'decompose', ids: ['11'] });
+        await tick();
+        assert.equal(f.roleCallers.length, 1);
+        assert.equal(f.roleCallers[0] instanceof RoleController, true, 'RoleController 自身充当网络请求 caller');
+        phase(page, 'disabled');
+        assert.equal(f.contextRemovedCallers.includes(f.roleCallers[0]), true, '页签失活取消 RoleController 自身请求归属');
         f.pendingRoles.shift()({}); await tick(); assert.equal(page.renders, 0);
         phase(page, 'enabled'); f.pendingRoles.shift()({}); await tick(); assert.equal(page.renders, 1);
         phase(page, 'enabled'); phase(page, 'destroyed'); f.pendingRoles.shift()({});
         await tick(); assert.equal(page.renders, 1); assert.equal(binding.isDisposed, true);
-        assert.equal(f.removedCallers.includes(page), true, '角色页销毁时应移除在途网络请求 caller');
+        assert.equal(f.removedCallers.includes(page), false, 'RolePage 视图不再充当网络请求 caller');
+        assert.equal(f.removedCallers.length, 0, '不冗余对 RoleController 调用 GameNet.removeCaller');
+        assert.equal(f.contextRemovedCallers.filter(caller => caller === f.roleCallers[0]).length, 2, '失活与销毁均由基类移除 RoleController caller');
     } finally { binding.dispose(); }
 });
 
@@ -169,29 +234,41 @@ test('scoped popups close when resolved after disposal and dispose is idempotent
     const f = fixture(), page = new f.CardLineupPage(), binding = f.bind(page);
     try {
         phase(page, 'ready');
+        EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'openUpgrade', card: { id: 'c1' }, level: 1 });
+        await tick();
         EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'edit' });
-        assert.equal(f.openedPopups.length, 1);
+        assert.equal(f.openedPopups.length, 2);
         binding.dispose();
         binding.dispose();
         assert.equal(f.guideDisposes, 1, '重复 dispose 不重复释放内部组合');
+        assert.equal(f.openedPopups[0].closeCalls, 1, '已挂载弹窗随作用域同步关闭');
         await tick();
-        assert.equal(f.openedPopups[0].closeCalls, 1, '组合已释放时关闭迟到弹窗');
+        assert.equal(f.openedPopups[1].closeCalls, 1, '组合已释放时关闭迟到弹窗');
     } finally {
         binding.dispose();
     }
 });
 
-test('store controller cleans up fallback caller when requestOwner is omitted', () => {
+test('store controller cleans up fallback caller when requestOwner is omitted', async () => {
     const f = fixture();
     const hostOwner = {};
     const storeWithoutOwner = new f.StorePage();
     const storeWithOwner = new f.StorePage();
     const a = f.bind(storeWithoutOwner);
     const b = f.bind(storeWithOwner, hostOwner);
+    phase(storeWithoutOwner, 'ready');
+    phase(storeWithOwner, 'ready');
+    EventMgr.instance.emit(StoreEvent.Action, { kind: 'buyGoods', context: { section: 'goods', rowId: 1 } }, storeWithoutOwner);
+    EventMgr.instance.emit(StoreEvent.Action, { kind: 'buyGoods', context: { section: 'goods', rowId: 2 } }, storeWithOwner);
+    await tick();
+    assert.equal(f.storeCallers.length, 2);
+    const [withoutOwnerCaller, withOwnerCaller] = f.storeCallers;
+    assert.equal(withOwnerCaller, hostOwner, '已传 requestOwner 时请求归属外层宿主');
+    assert.notEqual(withoutOwnerCaller, storeWithoutOwner, 'StorePage 视图不充当网络 caller');
     a.dispose();
-    assert.equal(f.removedCallers.length, 1, '未传 requestOwner 时由组合层兜底移除 StoreController caller');
+    assert.equal(f.contextRemovedCallers.includes(withoutOwnerCaller), true, '未传 requestOwner 时由 StoreController 自动释放自身 caller');
     b.dispose();
-    assert.equal(f.removedCallers.length, 1, '已传 requestOwner 时交由外层宿主统一清理');
+    assert.equal(f.removedCallers.length, 0, '不冗余对 StoreController 重复调用 GameNet.removeCaller');
 });
 
 test('role popups no longer receive callback closures and role gem dialog cancel is idempotent', async () => {

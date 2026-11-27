@@ -1,7 +1,6 @@
 import { _decorator, Button, Color, Label, Node, Sprite } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { EventMgr } from '../../framework/event/EventMgr';
-import { Toast } from '../common/Toast';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import type { CardSkillListPresentation, ICardSkillCost } from './CardPresentations';
 import { CardSkillTierView } from './CardSkillTierView';
@@ -95,9 +94,6 @@ export class CardSkillPage extends PopupBase {
         label.color = cost && cost.owned < cost.need ? this.insufficientColor : this.enoughColor;
     }
 
-    notify(kind: 'offline' | 'failed'): void {
-        Toast.show(kind === 'offline' ? CARD_LINEUP_TEXTS.skillUpgradeOffline : CARD_LINEUP_TEXTS.skillUpgradeFailed);
-    }
     private readonly onUpgradeClick = (): void => {
         EventMgr.instance.emit(CardPopupEvent.SkillIntent);
     };

@@ -229,7 +229,10 @@ test('样式与接线：描边不遮地块，底板和姓名牌复用九宫格�
     }
     const source = read('assets/script/app/guide/ui/GuideDialogView.ts');
     assert.doesNotMatch(source, /private advance\s*:|ensureBound|Phase\s*\+=|new Node\('DebugSkip'/);
-    assert.match(source, /emit\(GuideEvent\.Advance, \{ stepId: this\.stepId \}, this\)/);
+    // `emit` 的第三个参数是**可选**的事件来源（`EventBus.emit(event, payload?, source?)`），
+    // 只作为第二个参数透给 handler；`GuideController.onAdvance` 只读 `payload.stepId`。
+    // 所以这里不拿 `, this` 当契约 —— 真正要钉的是「推进意图走事件、且带上当前 stepId」。
+    assert.match(source, /emit\(GuideEvent\.Advance, \{ stepId: this\.stepId \}\)/);
 });
 
 test('光圈坐标：取之前必须刷新世界矩阵（分帧建格时 worldPosition 是脏的）', () => {

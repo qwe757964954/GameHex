@@ -35,7 +35,7 @@ export const ITEM_INFO_REWARD_ITEM_SIZE = 96;
  * 真源是转表产出的 `ItemType`，这里只是显示名表：枚举改名不影响它，但新增类型要两边一起加，
  * 否则新类型会静默显示成空（页面会把整行藏掉）。11~13（客户端 / 通用 / 军师）暂无界面在用，先不映射。
  */
-export const ITEM_TYPE_NAMES: Readonly<Record<number, string>> = {
+const ITEM_TYPE_NAMES: Readonly<Record<number, string>> = {
     1: '普通',
     2: '头像',
     3: '宝箱',

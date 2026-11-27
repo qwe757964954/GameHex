@@ -41,7 +41,7 @@ import { _decorator, Button, Node } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { loadArt } from '../card/CardLineupIcons';
-import { LEAGUE_ART_ROOT } from './LeagueArt';
+import { LEAGUE_ART_ROOT } from '../ArtPaths';
 import { settleLeagueWrite } from './LeagueWriteFlow';
 import { LeagueNorthRewardRow } from './LeagueNorthRewardRow';
 import { LeagueNorthTab, LEAGUE_NORTH_TAB_ART_NAMES } from './LeagueNorthTab';

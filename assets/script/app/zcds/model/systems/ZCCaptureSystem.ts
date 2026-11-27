@@ -238,12 +238,17 @@ export class ZCCaptureSystem {
                 // 只能靠开发触发的中立资源可步行穿过，因此允许补给经过，资源仍由原流程领取。
                 if (neighbor.owner !== owner && (neighbor.owner !== 'neutral' || neighbor.building !== 'none'
                     || !(neighbor.wallHp <= 0)
-                    || !requiresResourceClaim(neighbor, neutralResourceItemOf(neighbor.neutralResourceId)?.resourceType))) continue;
+                    || !this.allowsNeutralSupply(neighbor))) continue;
                 supplied.add(neighborId);
                 queue.push(neighborId);
             }
         }
         return supplied;
+    }
+
+    private allowsNeutralSupply(hex: ZCHexState): boolean {
+        const type = neutralResourceItemOf(hex.neutralResourceId)?.resourceType;
+        return type !== undefined && requiresResourceClaim(hex, type);
     }
 
     private speedMultiplier(count: number): number {
@@ -275,8 +280,9 @@ export class ZCCaptureSystem {
 }
 
 function requiresResourceClaim(hex: ZCHexState, type: ZCNeutralResourceType | undefined): boolean {
-    return type === ZCNeutralResourceType.Horn
-        || (type === ZCNeutralResourceType.Extension && !hex.neutralFeature?.claimed);
+    if (type === ZCNeutralResourceType.Horn) return true;
+    if (type === ZCNeutralResourceType.Monster) return false;
+    return hex.neutralResourceId != null && !hex.neutralFeature?.claimed;
 }
 
 function isActive(unit: ZCUnitState): boolean {

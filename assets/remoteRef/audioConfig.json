@@ -48,4 +48,6 @@
 {"key":"战斗中抽空","value":"resources://塔防/音效/战斗中抽空"},
 {"key":"战斗中抽蓝绿","value":"resources://塔防/音效/战斗中抽蓝绿"},
 {"key":"战斗中抽紫","value":"resources://塔防/音效/战斗中抽紫"},
-{"key":"战斗中抽金","value":"resources://塔防/音效/战斗中抽金"}]
+{"key":"战斗中抽金","value":"resources://塔防/音效/战斗中抽金"},
+{"key":"升级成功通用音效","value":"resources://塔防/音效/升级成功通用音效"},
+{"key":"升级失败通用音效","value":"resources://塔防/音效/升级失败通用音效"}]

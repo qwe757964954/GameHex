@@ -1,8 +1,8 @@
-import { withTimeout } from '../../net/RequestGuard';
+import { ResourceScope } from '../../../core/asset/ResourceScope';
+import { type ScopedRequestOutcome, withTimeout } from '../../net/RequestGuard';
 import { isBigMapCampId, normalizeBigMapCampInfos, type IBigMapCampInfo } from '../model/BigMapCampInfo';
 import { normalizeBigMapCampRoleInfos, type IBigMapCampRoleInfo, type IBigMapRoleEvent } from '../model/BigMapCampRoleInfo';
 import {
-    BIGMAP_CAMP_MOVE_TEXT,
     BIGMAP_CAMP_MOVE_TYPE,
     isBigMapCampMoveSucceeded,
     normalizeBigMapCampMoveRequest,
@@ -23,8 +23,8 @@ export interface IBigMapCampGateway {
      *和据点状态（占领/开放）来自两条不同协议，任一条失败都不该拖垮另一条。
      */
     fetchRoles(campId: number): Promise<unknown>;
-    /** 迁城（`CmdSlgCampMoveReqMsg`）——写操作，与上面三条读请求分开走。 */
-    requestMove(body: IBigMapCampMoveRequest): Promise<unknown>;
+    /** 迁城（`CmdSlgCampMoveReqMsg`）——写操作，返回四态以区分 CmdTips 拒单与未确认。 */
+    requestMove(body: IBigMapCampMoveRequest): Promise<ScopedRequestOutcome>;
 
 }
 
@@ -55,11 +55,33 @@ export class BigMapCampRepository {
     /** 正在迁城的据点 id（0 = 空闲）。迁城是写操作，同页串行。 */
     private movingCampId = 0;
     /** 缓存变化监听（Presenter 用它把角色广播转成一次视图重绘）。 */
+    readonly scope: ResourceScope;
     private listeners: (() => void)[] = [];
     private revision = 0;
-    private isDisposed = false;
 
-    constructor(private readonly gateway: IBigMapCampGateway, private readonly now = Date.now) {}
+    constructor(
+        private readonly gateway: IBigMapCampGateway,
+        private readonly now = Date.now,
+        scope?: ResourceScope,
+    ) {
+        this.scope = scope ?? new ResourceScope('bigmap-camp-repository');
+        this.scope.defer(() => {
+            this.gateway.dispose?.();
+            this.listeners = [];
+            this.snapshots.clear();
+            this.pending.clear();
+            this.simplePendingIds.clear();
+            this.simpleTasks.clear();
+            this.followUpIds = null;
+            this.followUpQueued = false;
+            this.appliedRevisions.clear();
+            this.updatedAt.clear();
+            this.roleSnapshots.clear();
+            this.roleRevisions.clear();
+            this.roleUpdatedAt.clear();
+            this.movingCampId = 0;
+        });
+    }
 
     get(campId: number): IBigMapCampInfo | null {
         return this.snapshots.get(campId) ?? null;
@@ -89,7 +111,7 @@ export class BigMapCampRepository {
      *调用方据此决定「维持原样」还是「显示失败」，不要用 `false` 去清空已有列表。
      */
     refreshRoles(campId: number, force = false): Promise<boolean> {
-        if (this.isDisposed || !isBigMapCampId(campId)) return Promise.resolve(false);
+        if (this.scope.disposed || !isBigMapCampId(campId)) return Promise.resolve(false);
         const key = `roles:${campId}`;
         const pending = this.pending.get(key);
         if (force) this.roleRevisions.set(campId, ++this.revision);
@@ -112,7 +134,7 @@ export class BigMapCampRepository {
      *@returns `true` = 本轮至少有一座城真的拿到了名单（空列表也算），调用方据此重绘
      */
     refreshRolesFor(campIds: readonly number[], force = false): Promise<boolean> {
-        if (this.isDisposed) return Promise.resolve(false);
+        if (this.scope.disposed) return Promise.resolve(false);
         const window = BIGMAP_CAMP_REFRESH_SECONDS * 1000;
         const due = Array.from(new Set(campIds.filter(isBigMapCampId)))
             .filter((id) => force || this.now() - (this.roleUpdatedAt.get(id) ?? -Infinity) >= window);
@@ -141,24 +163,39 @@ export class BigMapCampRepository {
         pos: number,
         moveType: BigMapCampMoveType = BIGMAP_CAMP_MOVE_TYPE.Normal,
     ): Promise<IBigMapCampMoveResult> {
-        if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
+        if (this.scope.disposed) {
+            return { ok: false, status: 'disposed' };
+        }
         const request = normalizeBigMapCampMoveRequest(campId, pos, moveType);
-        if (!request) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.invalid };
-        if (this.movingCampId !== 0) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.busy };
+        if (!request) {
+            return { ok: false, status: 'invalid' };
+        }
+        if (this.movingCampId !== 0) {
+            return { ok: false, status: 'busy' };
+        }
         this.movingCampId = request.campId;
         try {
-            const response = await withTimeout(
+            const outcome = await withTimeout(
                 this.gateway.requestMove(request),
                 READ_TIMEOUT_MS,
-                () => null,
+                (): ScopedRequestOutcome => ({ status: 'unconfirmed' }),
             );
-            if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
-            if (!isBigMapCampMoveSucceeded(response, request)) {
-                return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.failed };
+            if (this.scope.disposed) {
+                return { ok: false, status: 'disposed' };
             }
-            return { ok: true, message: BIGMAP_CAMP_MOVE_TEXT.moved };
+            if (outcome.status === 'rejected') {
+                //服务端已通过 CmdTips 提示原因，不再补第二条客户端失败提示。
+                return { ok: false, status: 'rejected' };
+            }
+            if (outcome.status === 'offline') {
+                return { ok: false, status: 'offline' };
+            }
+            if (outcome.status !== 'ok' || !isBigMapCampMoveSucceeded(outcome.response, request)) {
+                return { ok: false, status: 'failed' };
+            }
+            return { ok: true, status: 'ok' };
         } catch {
-            return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.failed };
+            return { ok: false, status: 'failed' };
         } finally {
             this.movingCampId = 0;
         }
@@ -166,7 +203,7 @@ export class BigMapCampRepository {
 
     /** 按角色身份跨据点迁移；未查询的目标不补造名单，广播版本阻止旧查询回写。 */
     applyRoleEvent(campId: number, event: IBigMapRoleEvent): boolean {
-        if (this.isDisposed) return false;
+        if (this.scope.disposed) return false;
         let changed = false;
         for (const [oldCampId, roles] of this.roleSnapshots) {
             if (oldCampId === campId) continue;
@@ -224,26 +261,11 @@ export class BigMapCampRepository {
     }
 
     dispose(): void {
-        if (this.isDisposed) return;
-        this.isDisposed = true;
-        this.gateway.dispose?.();
-        this.listeners = [];
-        this.snapshots.clear();
-        this.pending.clear();
-        this.simplePendingIds.clear();
-        this.simpleTasks.clear();
-        this.followUpIds = null;
-        this.followUpQueued = false;
-        this.appliedRevisions.clear();
-        this.updatedAt.clear();
-        this.roleSnapshots.clear();
-        this.roleRevisions.clear();
-        this.roleUpdatedAt.clear();
-        this.movingCampId = 0;
+        this.scope.dispose();
     }
 
     private refresh(campIds: readonly number[], isDetail: boolean, fullBatch = false): Promise<boolean> {
-        if (this.isDisposed) return Promise.resolve(false);
+        if (this.scope.disposed) return Promise.resolve(false);
         const ids = Array.from(new Set(campIds.filter(isBigMapCampId))).sort((a, b) => a - b);
         if (ids.length === 0) return Promise.resolve(false);
         // 只发「没缓存或已过期」的城：视野集合一变（快速滑动/缩放）时，旧城不再跟着重发。
@@ -306,7 +328,7 @@ export class BigMapCampRepository {
             this.followUpQueued = false;
             const next = this.followUpIds;
             this.followUpIds = null;
-            if (next == null || this.isDisposed) return;
+            if (next == null || this.scope.disposed) return;
             void this.refresh(next, false, true);
         });
     }
@@ -318,7 +340,7 @@ export class BigMapCampRepository {
     private async loadRoles(campId: number, revision: number): Promise<boolean> {
         try {
             const response = await withTimeout(this.gateway.fetchRoles(campId), READ_TIMEOUT_MS, () => null);
-            if (this.isDisposed) return false;
+            if (this.scope.disposed) return false;
             const infos = normalizeBigMapCampRoleInfos(response, campId);
             //`null` = 整包不可用（超时 / 串包 / 结构坏）⇒ 保留旧快照，别把列表抹空。
             if (!infos) return false;
@@ -340,7 +362,7 @@ export class BigMapCampRepository {
                 isDetail ? this.gateway.fetchDetail(ids) : this.gateway.fetchSimple(ids),
                 READ_TIMEOUT_MS, () => null,
             );
-            if (this.isDisposed) return false;
+            if (this.scope.disposed) return false;
             const infos = normalizeBigMapCampInfos(response, isDetail);
             if (!infos) return false;
             const requested = new Set(ids);

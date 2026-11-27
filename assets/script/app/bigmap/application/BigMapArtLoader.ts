@@ -8,10 +8,10 @@ import {
     type BigMapResType, type IBigMapBuildingConfig, type IBigMapCampConfig,
 } from '../model/BigMapTypes';
 import {
-    BIGMAP_BASE_FALLBACK_ART, BIGMAP_BASE_SPRITE_NAMES, BIGMAP_BASE_TILE_DIRT, BIGMAP_BASE_TILE_GRASS,
-    BIGMAP_CONCEPT_SPRITE_ROOT, BIGMAP_DECOR_GRASS_ART, BIGMAP_DECOR_ROCK_ART,
+    BIGMAP_BASE_FALLBACK_ART, BIGMAP_BASE_TILE_DIRT, BIGMAP_BASE_TILE_GRASS,
+    BIGMAP_DECOR_GRASS_ART, BIGMAP_DECOR_ROCK_ART,
     BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS, BIGMAP_LEGACY_WASTELAND_BG,
-    BIGMAP_PLATE_FILES, BIGMAP_PLATE_FLAG_FILE, BIGMAP_PLATE_KEYS, BIGMAP_STAMINA_ART,
+    BIGMAP_PLATE_FILES, BIGMAP_PLATE_FLAG_FILE, BIGMAP_PLATE_KEYS, BIGMAP_RES_ICON_ART,
     BIGMAP_TILED_BG_ART, BIGMAP_WORLD_CITY_ART, BIGMAP_WORLD_HOME_ART,
     BIGMAP_WORLD_MONSTER_ART, toBigMapArtPath, worldCampArtFor,
     type IBigMapHudUiKey, type IBigMapPlateKey,
@@ -31,7 +31,6 @@ export interface IBigMapArt {
     /** 基地地皮：草地 / 泥土（蓝湖「大地图(1)」的 126×117 六边切片）。 */
     readonly baseTileGrass: SpriteFrame | null;
     readonly baseTileDirt: SpriteFrame | null;
-    readonly construction: SpriteFrame | null;
     readonly buildings: ReadonlyMap<number, SpriteFrame | null>;
     readonly camps: ReadonlyMap<number, SpriteFrame | null>;
     /** 据点名条（按归属四选一）与「谁占着」小旗。缺图时标记退回手画角标，不影响布局。 */
@@ -46,7 +45,7 @@ export interface IBigMapArt {
  *只装配表现资源；世界视图优先连续底图，缺图时回退 JSON 背景；地图坐标和规则只来自布局链。
  *
  *@param resourceIcons 资源类型 → 背包道具图标路径（`item.icon`，来自 `bigmapResource.itemId`）。
- *  有就走背包那份图，没有 / 加载失败退回 `image/concept/sprites/<resType>` 概念图。
+ *  有就走背包那份图，没有 / 加载失败退回 `BIGMAP_RES_ICON_ART`（`image/concept/ui/top_*`，与顶栏同一套）。
  *@param buildingConfigs 基地建筑配置。优先用表里的 `baseBuildIcon`（`building.icon`），
  *  没配 / 加载失败才退回通用建筑图（`BIGMAP_BASE_FALLBACK_ART`）。
  *
@@ -108,7 +107,6 @@ export async function loadBigMapArt(
         load(BIGMAP_DECOR_GRASS_ART),
         load(BIGMAP_TILED_BG_ART),
     ]);
-    const sprite = (name: string): Promise<SpriteFrame | null> => load(`${BIGMAP_CONCEPT_SPRITE_ROOT}/${name}`);
     /**
      *表里配了 `baseBuildIcon` 但没加载到的（建筑 id:路径）。
      *
@@ -150,13 +148,12 @@ export async function loadBigMapArt(
             const frame = await load(itemIcon);
             if (frame) return [key, frame] as const;
         }
-        //没配 itemId / 表还没导 / 图缺失 ⇒ 退回大地图自己的概念图，绝不留空图标。
-        //`stamina` 那张图在 `image/concept/ui/` 下（不在 sprites），2026-11-12 起单独直读。
-        return [key, key === 'stamina' ? await load(BIGMAP_STAMINA_ART) : await sprite(key)] as const;
+        //没配 itemId / 表还没导 / 图缺失 ⇒ 退回同一套顶栏图标（`concept/ui/top_*`），绝不留空图标。
+        //2026-11-26 起 item 表 18501-18504 已改指这套图，兜底与正式配置同源，不会两套观感。
+        return [key, await load(BIGMAP_RES_ICON_ART[key])] as const;
     }));
     const baseTask = Promise.all([
         load(BIGMAP_BASE_TILE_GRASS), load(BIGMAP_BASE_TILE_DIRT),
-        ...BIGMAP_BASE_SPRITE_NAMES.map((name) => sprite(name)),
     ]);
     //名条是整条原尺寸贴图，走自己的加载分支、不参与任何九宫覆写（见 `BIGMAP_PLATE_KEYS` 注释）。
     const plateTask = Promise.all(BIGMAP_PLATE_KEYS.map(async (key) => (
@@ -164,7 +161,7 @@ export async function loadBigMapArt(
     )));
     const plateFlagTask = load(BIGMAP_PLATE_FLAG_FILE);
     const [[backdrop, home, city, monster, rock, grass, tiledBackground], buildingEntries,
-        hudEntries, resourceEntries, [baseTileGrass, baseTileDirt, construction, conceptRock, conceptGrass], campEntries,
+        hudEntries, resourceEntries, [baseTileGrass, baseTileDirt], campEntries,
         plateEntries, plateFlag] = await Promise.all([
         terrainTask, buildingTask, hudTask, resourceTask, baseTask, campTask, plateTask, plateFlagTask,
     ]);
@@ -176,8 +173,8 @@ export async function loadBigMapArt(
     }
     return { background: backdrop, tiledBackground, ground: null,
         groundVariants: [], home: home ?? buildings.get(71001) ?? null, city, monster,
-        rock: conceptRock ?? rock, grass: conceptGrass ?? grass,
-        baseTileGrass, baseTileDirt, construction, buildings,
+        rock, grass,
+        baseTileGrass, baseTileDirt, buildings,
         camps: new Map(campEntries.map(([id, frame]) => [id, frame ?? city])),
         hud: new Map(hudEntries), plates: new Map(plateEntries), plateFlag,
         resources: new Map(resourceEntries) };

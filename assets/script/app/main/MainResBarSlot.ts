@@ -1,16 +1,13 @@
 import { _decorator, Color, Component, instantiate, Label, Node, Prefab, Sprite, SpriteFrame, UITransform } from 'cc';
-import type { ResBarSlot } from './MainResBarTypes';
+import { formatResBarAmountText, type ResBarSlot } from './MainResBarTypes';
 import { loadResBarSprite } from './MainResBarArt';
 import {
-    formatResBarCountText,
     formatResBarSpendFloat,
-    parseResBarCountText,
     resBarCountValue,
     resBarHitFx,
     resBarSpendFlashColor,
     resBarSpendFloatFx,
     resBarSpendFx,
-    type IResBarCountText,
 } from './MainResBarFeedback';
 
 const { ccclass, property } = _decorator;
@@ -64,17 +61,16 @@ export class MainResBarSlot extends Component {
 
     // ── 加：击中反馈（`hitElapsed < 0` = 没在播）──────────────────────────────
     private hitElapsed = -1;
-    /** 滚动起点 / 终点（整数，含后缀单独存）。 */
+    /** 滚动起点 / 终点（原始整数）。 */
     private hitFrom = 0;
     private hitTo = 0;
-    private hitBase: IResBarCountText = { value: 0, suffix: '' };
     /**
-     * 反馈期间到达的**新数值文本**（`render` 只暂存、不写）。
+     * 反馈期间到达的**新的一格数据**（`render` 只暂存、不写）。
      *
      * 为什么不能直接写：数字滚动途中被 `CmdRole` 的推包重写一次，玩家看到的是
-     * 「滚到一半突然跳回新值」—— 比不滚还糟。所以攒到收尾再落地。
+     * 「滚到一半突然跳回新值」—— 比不滚还糟。所以攒到收尾整格落地。
      */
-    private pendingValueText: string | null = null;
+    private pendingSlot: ResBarSlot | null = null;
     /** 基准缩放（prefab 上的原值；反馈只写「基准 × fx」，不覆盖宿主的美术设定）。 */
     private iconBaseScale = 1;
     private labelBaseScale = 1;
@@ -83,7 +79,6 @@ export class MainResBarSlot extends Component {
     private spendElapsed = -1;
     private spendFrom = 0;
     private spendTo = 0;
-    private spendBase: IResBarCountText = { value: 0, suffix: '' };
     /** 这一笔扣了多少（飘字文本用）。 */
     private spendAmount = 0;
     /** 数字节点的原始 y（`labelHop` 是相对它的位移）。 */
@@ -97,12 +92,20 @@ export class MainResBarSlot extends Component {
     private spendFloatStartY = 0;
     private spendFloatX = 0;
     /**
-     * 上一次**落定**在 label 上的数值（首帧前 / 整格隐藏后为 `null`）。
+     * 上一次**落定**在 label 上的原始数值（首帧前 / 整格隐藏后为 `null`）。
      *
      * 用途单一：`ResBar` 每次重渲染前拿它和新值比，**变小了就是一次扣除** ⇒
      * 扣除反馈不需要每个花钱的地方各自调一次（漏一处就少一处反馈）。
      */
     private settledValue: number | null = null;
+    /**
+     * 落定值的**换算口径**（资源键 + 体力上限）。
+     *
+     * 读数在滚动途中要按同一口径重算文本 —— 显示文本已经缩写（`122.3M`），
+     * 反解析不回原值，所以口径必须单独记着。
+     */
+    private settledKey = '';
+    private settledCap = 0;
 
     onLoad(): void {
         this.icon.trim = false;
@@ -121,38 +124,37 @@ export class MainResBarSlot extends Component {
     /**
      * 播一次「被奖励击中」：图标弹一下 + 数字从 `当前值 - amount` 滚到 `当前值`。
      *
-     * ## `amount` 与「当前值」的关系（为什么从 label 反读，不读缓存）
+     * ## `amount` 与「当前值」的关系（为什么读落定值，不读缓存）
      *
-     * 此刻 label 上已经是**发奖后**的数值（`CmdRole` 的推包早于开箱表演落地），
+     * 此刻落定值已经是**发奖后**的数值（`CmdRole` 的推包早于开箱表演落地，`render` 已写完），
      * 所以「原值 = 当前值 - amount」是唯一说得通的读法；`roleProperty` 里的 `endMax`
      * 之类也没法反推。
      *
-     * `amount <= 0` / 文本解析不出数字（登录前骨架期）⇒ **只弹跳不滚动**：
+     * `amount <= 0` / 首次渲染前（`settledValue === null`）⇒ **只弹跳不滚动**：
      * 宁可少一段动画，也不要显示一个凭空算出来的数。
      */
     playGainFeedback(amount: number): void {
         if (!this.node.active) return;
         // 两条时间轴不能同时写一个 label：新的一次反馈直接接管（后到的说了算）。
         this.cancelSpend();
-        const base = parseResBarCountText(this.valueLabel.string);
-        this.hitBase = base;
-        this.hitTo = base.value;
+        const to = Math.max(0, this.settledValue ?? 0);
+        this.hitTo = to;
         const delta = Number.isFinite(amount) && amount > 0 ? amount : 0;
-        this.hitFrom = Math.max(0, this.hitTo - delta);
-        this.pendingValueText = null;
+        this.hitFrom = Math.max(0, to - delta);
+        this.pendingSlot = null;
         this.hitElapsed = 0;
         this.applyHit();
     }
 
     /**
-     * 新文本比「落定值」**少多少**；`0` = 没扣（涨了 / 首帧 / 文本解析不出数字）。
+     * 新数值比「落定值」**少多少**；`0` = 没扣（涨了 / 首帧 / 数据脏）。
      *
-     * 调用方（`ResBar.reload`）据此决定要不要播扣除反馈；`> 0` 时把同一个 `valueText`
+     * 调用方（`ResBar.reload`）据此决定要不要播扣除反馈；`> 0` 时把同一格（含扣后原值）
      * 原样传给 {@link playSpendFeedback}，两边对"扣到多少"的口径就只有一个来源。
      */
-    spendDeltaOf(valueText: string): number {
+    spendDeltaOf(amount: number): number {
         if (this.settledValue === null) return 0;
-        const next = parseResBarCountText(valueText).value;
+        const next = Number.isFinite(amount) ? amount : 0;
         const delta = this.settledValue - next;
         return delta > 0 ? delta : 0;
     }
@@ -162,22 +164,21 @@ export class MainResBarSlot extends Component {
      * 同时在这一格上方飘一条 `-N`（需求 2026-11-03 第 2 条）。
      *
      * @param amount 扣了多少（`<= 0` / 非有限数 ⇒ 整段跳过：没扣就别演）。
-     * @param valueText 扣完之后的**显示文本**（带 `当前/上限` 那种后缀）。不传则用 label
-     *   当前的文本当作"已经扣完"——只给「值已经落地、但走不到 `render`」的调用方用。
+     * @param next 扣完之后的**那一格数据**（`amount` 是扣后原值）。`ResBar.reload` 在
+     *   `render` 之前调，必须传；不传时按「已落定的当前值」当扣后值 —— 只给
+     *   「值已经落地、但走不到 `render`」的调用方用。
      *
      * 🔴 顺序不能反：如果先把新值写进 label 再演，玩家看到的是「先扣、再闪」，
      *    与需求「闪烁、跳动、**再**扣除」正好相反。所以这里立刻把 label 钉回 `spendFrom`。
      */
-    playSpendFeedback(amount: number, valueText?: string): void {
+    playSpendFeedback(amount: number, next?: ResBarSlot | null): void {
         if (!this.node.active) return;
         if (!Number.isFinite(amount) || amount <= 0) return;
         this.cancelHit();
-        const base = parseResBarCountText(valueText ?? this.valueLabel.string);
-        this.spendBase = base;
-        this.spendTo = base.value;
+        this.spendTo = next ? next.amount : Math.max(0, this.settledValue ?? 0);
         this.spendAmount = Math.max(1, Math.round(amount));
         this.spendFrom = this.spendTo + this.spendAmount;
-        this.pendingValueText = valueText ?? null;
+        this.pendingSlot = next ?? null;
         this.spendElapsed = 0;
         this.prepareSpendFloat();
         this.applySpend();
@@ -212,8 +213,10 @@ export class MainResBarSlot extends Component {
         this.cancelSpend();
         // `cancelSpend` 没在播时会早退，飘字得单独收一次（它可能正飘着而时间轴刚结束）。
         this.hideSpendFloat();
-        this.pendingValueText = null;
+        this.pendingSlot = null;
         this.settledValue = null;
+        this.settledKey = '';
+        this.settledCap = 0;
     }
 
     /** @param slot null = 整格隐藏。 */
@@ -224,12 +227,9 @@ export class MainResBarSlot extends Component {
             return;
         }
         this.node.active = true;
-        // 反馈在播 ⇒ 只暂存（见 `pendingValueText` 的注释）；否则照旧直写，并记下落定值。
-        if (this.isFeedbackPlaying) this.pendingValueText = slot.valueText;
-        else {
-            this.valueLabel.string = slot.valueText;
-            this.settledValue = parseResBarCountText(slot.valueText).value;
-        }
+        // 反馈在播 ⇒ 只暂存（见 `pendingSlot` 的注释）；否则整格落地。
+        if (this.isFeedbackPlaying) this.pendingSlot = slot;
+        else this.applySlot(slot);
         if (this.plus) this.plus.active = this.alwaysShowPlus || slot.showPlus;
 
         const current = ++this.token;
@@ -247,6 +247,18 @@ export class MainResBarSlot extends Component {
         });
     }
 
+    /**
+     * 整格落地：换算口径（key / 上限）、原始值、显示文本一起换。
+     *
+     * 这三者必须成对写 —— 只写文本再回头反解析，缩写（`122.3M`）会丢精度。
+     */
+    private applySlot(slot: ResBarSlot): void {
+        this.settledKey = slot.key;
+        this.settledCap = slot.cap;
+        this.settledValue = slot.amount;
+        this.valueLabel.string = slot.valueText;
+    }
+
     /** 按当前 `hitElapsed` 写一帧（缩放 + 文本）。 */
     private applyHit(): void {
         const fx = resBarHitFx(this.hitElapsed);
@@ -254,18 +266,22 @@ export class MainResBarSlot extends Component {
         this.icon.node.setScale(this.iconBaseScale * fx.iconScale, this.iconBaseScale * fx.iconScale, 1);
         this.valueLabel.node.setScale(this.labelBaseScale * fx.labelScale, this.labelBaseScale * fx.labelScale, 1);
         const value = resBarCountValue(this.hitFrom, this.hitTo, fx.countRatio);
-        this.valueLabel.string = formatResBarCountText(this.hitBase, value);
+        this.valueLabel.string = formatResBarAmountText(this.settledKey, value, this.settledCap);
     }
 
-    /** 收尾：复原缩放，把暂存的新文本落地（没有暂存就落到滚动终点）。 */
+    /** 收尾：复原缩放，把暂存的新数据落地（没有暂存就落到滚动终点）。 */
     private finishHit(): void {
         this.hitElapsed = -1;
         this.icon.node.setScale(this.iconBaseScale, this.iconBaseScale, 1);
         this.valueLabel.node.setScale(this.labelBaseScale, this.labelBaseScale, 1);
-        const pending = this.pendingValueText;
-        this.pendingValueText = null;
-        this.valueLabel.string = pending ?? formatResBarCountText(this.hitBase, this.hitTo);
-        this.settledValue = parseResBarCountText(this.valueLabel.string).value;
+        const pending = this.pendingSlot;
+        this.pendingSlot = null;
+        if (pending) {
+            this.applySlot(pending);
+            return;
+        }
+        this.settledValue = this.hitTo;
+        this.valueLabel.string = formatResBarAmountText(this.settledKey, this.hitTo, this.settledCap);
     }
 
     /** 按当前 `spendElapsed` 写一帧（缩放 + 位移 + 字色 + 文本）。 */
@@ -283,7 +299,7 @@ export class MainResBarSlot extends Component {
         const alpha = Math.round(this.labelBaseColor.a * fx.labelAlpha);
         this.valueLabel.color = new Color(r, g, b, alpha);
         const value = resBarCountValue(this.spendFrom, this.spendTo, fx.countRatio);
-        this.valueLabel.string = formatResBarCountText(this.spendBase, value);
+        this.valueLabel.string = formatResBarAmountText(this.settledKey, value, this.settledCap);
         this.applySpendFloat();
     }
 
@@ -350,10 +366,14 @@ export class MainResBarSlot extends Component {
         this.valueLabel.node.setPosition(this.valueLabel.node.position.x, this.labelBaseY, 0);
         this.valueLabel.color = new Color(
             this.labelBaseColor.r, this.labelBaseColor.g, this.labelBaseColor.b, this.labelBaseColor.a);
-        const pending = this.pendingValueText;
-        this.pendingValueText = null;
-        this.valueLabel.string = pending ?? formatResBarCountText(this.spendBase, this.spendTo);
-        this.settledValue = parseResBarCountText(this.valueLabel.string).value;
+        const pending = this.pendingSlot;
+        this.pendingSlot = null;
+        if (pending) {
+            this.applySlot(pending);
+            return;
+        }
+        this.settledValue = this.spendTo;
+        this.valueLabel.string = formatResBarAmountText(this.settledKey, this.spendTo, this.settledCap);
     }
 
     /** 中止「加」的那条时间轴（不碰扣的那条，也不碰暂存值）。 */

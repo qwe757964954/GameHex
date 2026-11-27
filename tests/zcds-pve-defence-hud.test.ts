@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import { runInNewContext } from 'node:vm';
+import * as outcomeStyle from '../assets/script/app/zcds/model/ZCSettlementOutcomeStyle';
 
 /**
  * 守城（塔防）HUD 首领条那两块文字的格式口径。
@@ -63,6 +64,11 @@ function loadGameModule(): typeof import('../assets/script/app/zcds/ZCGame') {
     runInNewContext(code, { exports, require: (name: string) => {
             if (name.endsWith('/ComponentController')) return componentControllerModule();
         if (name === 'cc') return STUB_CC;
+        //  `ZCGame` 结算分支会按状态决定播不播胜负 UI 特效。这里给**真模块**：映射函数
+        //  是纯的，而 `settlementOutcomeSkeleton` 在桩实例上恒为 null ⇒ 走到 `if (!data) return`
+        //  就停，不会去建节点。若给 `{}`，`playOutcomeEffect` 会抛 `is not a function`，
+        //  把「扣血 → 扫场」的顺序用例整条带红（2026-11-25 加特效时踩到）。
+        if (name === './model/ZCSettlementOutcomeStyle') return outcomeStyle;
         return {};
     } });
     return exports as typeof import('../assets/script/app/zcds/ZCGame');

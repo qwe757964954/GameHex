@@ -33,6 +33,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import test from 'node:test';
 
+import { LEAGUE_ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
     LEAGUE_ART_BACK,
     LEAGUE_ART_BOTTOM_BAR,
@@ -46,7 +47,6 @@ import {
     LEAGUE_ART_PIC07,
     LEAGUE_ART_PROGRESS_BG,
     LEAGUE_ART_PROGRESS_FILL,
-    LEAGUE_ART_ROOT,
     LEAGUE_ART_SEARCH_BTN,
     LEAGUE_ART_SLICED,
     LEAGUE_ART_TAB_DOWN,

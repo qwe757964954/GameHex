@@ -92,9 +92,6 @@ export function giftCurrencyIconRef(): IItemIconRef {
     return { root: resIconRoot(name), name };
 }
 
-/** 品质框定义在 `common/QualityFrameArt`。 */
-export { QUALITY_FRAME_NAMES, qualityFrameName } from '../common/QualityFrameArt';
-
 /** 取某个礼包美术图的装配路径；`key` 未知时返回 `null`。 */
 export function giftArtPath(key: string): string | null {
     const name = GIFT_ART_NAMES[key];

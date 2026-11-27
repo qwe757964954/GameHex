@@ -37,6 +37,17 @@
 | **伤害统计的柱子 = 占全队总量的占比**（分母从「列内最大值」改成「该席位全队合计」，2026-11-24，见 §43） | `ZCDamageStats.damageStatsBarRatio(value, total)` / `buildDamageStatsColumns` 的 `totalOwn` / `totalEnemy` / `RunAwayUnitItem.render(value, total, …)` | `tests/zcds-damage-stats.test.ts`、`tests/zcds-settlement.test.ts` |
 | 开局归属扩散波 | `ZCClaimWave` / `buildClaimWavePlan`、`ZCHexView.setClaimWave` | `tests/zcds-territory-claim-wave.test.ts` |
 | 胜利结算三段式扫场（铺场/回正/脉冲） | `ZCVictorySweep` / `zcDeepFactionColor`、`setSweepOwner`、`appendHexPulseOutlineSegments` | `tests/zcds-progress.test.ts`、`tests/zcds-outline-layer.test.ts` |
+| **结算胜负 UI 特效与地块翻转同起同落**（胜利/失败两段骨架、720 宽铺满、时长 = 扫场总时长，2026-11-25，见 §46） | `ZCGame.playOutcomeEffect` / `advanceOutcomeEffect`、`ZCGameRenderWorld.victorySweepSeconds`、`ZCSettlementOutcomeStyle`、`view/ZCUISpineBannerFx`、`model/ZCUISpineBannerStyle`、`ZC_BATTLE_FX_PATHS.settlementOutcomeSkeleton` | `tests/zcds-outcome-effect.test.ts` |
+| **对局开始「开局对战」横幅**（全景停留 0.45s 内播一次、推镜头即关窗、720 宽铺满，2026-11-25，见 §48） | `ZCGameHUDView.playMapIntro` / `setBattleStartEffect` / `playBattleStartEffect`、`ZCBattleStartStyle`、`view/ZCUISpineBannerFx`、`ZC_BATTLE_FX_PATHS.battleStartBanner` | `tests/zcds-battle-start.test.ts` |
+| **冰法师通用子弹**（急冻瓜【急冻光线】弹体 + 【冰山陨落】落地一击共用；循环序列帧、朝向 −90°、落地 180°，2026-11-25，见 §50） | `ZC_EFFECT_PATHS.iceMageBullet` / `.iceMageBulletImpact`、`ZC_EFFECT_MISSILE_BY_UNIT['68024']`、`ZCSelfAuraFx.ZC_SELF_AURA_LANDING_ANGLE_DEGREES`、`tools/build_ice_mage_bullet_fx.py` | `tests/zcds-ice-mage-bullet-batch51.test.ts` |
+| **区域洒弹：子弹从区域上方垂直下落**（篮球天才 / 急冻瓜 / 杰克藕；纯表现，判定圆心仍是落点，2026-11-25，见 §51） | `model/ZCProjectileDropStyle.ts`（`ZC_BULLET_DROP_UNITS` / `ZC_BULLET_DROP_HEIGHT_PX` / `zcBulletDropHeightOf` / `zcBulletDropOffsetPx`）→ `ZCGameTypes.dropFromPx` → `ZCCombatEffectView` / `ZCSkillResolutionSystem`（self_aura 落地 · `random_strike`）/ `ZCGroundZoneSystem.resolveWave` | `tests/zcds-bullet-drop-batch52.test.ts` |
+| **角色前后关系：层 + 屏幕 y**（分身垫底 / 地面按 y / 飞行与中立野怪整体在地面之上，y 大的先画，与墙砖同口径；2026-11-26 第 55 批，见 §54） | `model/ZCCharacterDrawOrder.ts`（`zcCharacterTierOf` / `zcCharacterDrawOrder` / `ZC_CHARACTER_TIER_SUMMON&#124;GROUND&#124;AIR`）、`ZCGameRenderWorld.characterLayer` / `ensureCharacterLayer` / `attachToCharacterLayer` / `renderCharacterOrder`、`ZCHexView.setCharacterLayer` / `syncMonsterTrailingNodes` / `monsterBodyNode` / `monsterTrailingNodes` | `tests/zcds-character-draw-order-batch55.test.ts`、`tests/zcds-resource-unit-preview.test.ts` |
+| **野怪三态染色 + 集火特效贴血条 3px**（未激活压亮且**不压透** / 激活暗红 / 被玩家方打下回原色并播一次出生特效，2026-11-26，见 §53） | `model/ZCMonsterPresentation.ts`（`zcMonsterTintStateOf` / `ZC_MONSTER_TINTS` / `zcMonsterFocusSpineY` / `zcMonsterFocusButtonY`）、`ZCHexView.positionMonsterHeader` / `noteMonsterCapture` / `consumeMonsterCapturedFx` / `monsterFxHost`、`ZCGameRenderWorld.renderNeutralFeatures`（`effectPool.playSpawnFx`） | `tests/zcds-monster-status-batch53.test.ts`、`tests/zcds-resource-unit-preview.test.ts` |
+| **集火：特效美术底边贴血条 3px + 放大 1.5 + 点击提示**（锚点要减 `\|bounds.y\|×scale`；按钮恒可点，「能不能集火」由模型判原因弹吐司；2026-11-26 第 56 批，见 §57） | `model/ZCMonsterPresentation.ts`（`zcMonsterFocusSpineArtLiftPx` / `zcMonsterFocusSpineScale` / `ZC_MONSTER_FOCUS_SPINE_SCALE` / `ZC_MONSTER_FOCUS_TOAST` / `IZCMonsterFocusToggleResult`）、`systems/ZCNeutralFeatureSystem.focusBlockReason` / `toggleFocus`、`ZCGameModel.toggleMonsterFocusResult`、`ZCHexView.monsterFocusSpineArtLiftValue` / `monsterSpineBaseScale` / `renderMonsterFocus`、`ZCBattleRuntimeController.onMonsterFocus` / `showMonsterFocusToast`、`IZCBattleRuntimeServices.toast`、`BattleComposition.createRuntimeServices` | `tests/zcds-monster-focus-batch56.test.ts`、`tests/zcds-monster-status-batch53.test.ts`、`tests/zcds-resource-unit-preview.test.ts` |
+| **塔防 BOSS 波预警 UI 特效**（720 宽 = `_lscale 720÷画布`；按 `currentWaveIsBoss` + `waveId` 去重；只在守城局加载；2026-11-26 第 57 批，见 §58） | `assets/bundles/battle/units/effects/BOSS来袭UI特效/BOSS来袭UI特效.prefab`、`model/ZCBossWarningStyle.ts`（`ZC_BOSS_WARNING_ANIMATION` / `zcShouldPlayBossWarning`）、`model/ZCGameResourcePlan.ZC_BATTLE_FX_PATHS.bossWarningBanner`、`ZCGame.loadBossWarningBanner`、`ZCGameHUDView.setBossWarningEffect` / `playBossWarningEffect`、`ZCUISpineBannerFx` / `ZCUISpineBannerStyle.zcUiBannerScale` | `tests/zcds-boss-warning-batch57.test.ts`、`tests/zcds-battle-start.test.ts`、`tests/zcds-outcome-effect.test.ts` |
+| **弹道雨连发 + 起点抬 25px + 白环 150px/s 滑动 + 子弹 70%**（逐颗 0.1s 出手但伤害仍在施法那拍结算；圈换目标滑过去不瞬移；七颗 prefab 与拖尾同缩 70%；起点 = 角色图片中心 +5px；2026-11-26 第 58 批，见 §60） | `ZCProjectileDropStyle.ZC_BULLET_RAIN_SHOT_INTERVAL_SECONDS` / `ZC_BULLET_RAIN_ORIGIN_LIFT_PX`、`systems/ZCSkillResolutionSystem.strikeTargets`（`fireAt`）、`systems/ZCGroundZoneSystem`（zone 叠加抬升）、`ZCSkillRangeRingFx.ZC_SKILL_RANGE_RING_SLIDE_SPEED`、`ZCGameTypes.ZCCombatEvent.slideFrom*/slideStartAt/slideSeconds`、`view/ZCCombatEffectSlide.zcCombatEffectSlidePoint`、`view/ZCCombatEffectView`、`ZCEffectCatalog.ZC_EFFECT_TRAIL_SPECS`、`tools/build_card_bullet_fx.py` | `tests/zcds-bullet-rain-batch55.test.ts`、`tests/zcds-card-bullet-batch57.test.ts`、`tests/zcds-bullet-drop-batch52.test.ts`、`tests/zcds-combat-effect-placement.test.ts` |
+| **集火按钮的灰跟野怪三态走**（解锁但怪没醒 ⇒ 循环 + **仍压灰**；激活才回原色；定格只跟解锁；2026-11-26 第 59 批，见 §57.7） | `model/ZCMonsterPresentation.zcMonsterFocusSpineVisualOf` / `type ZCMonsterFocusSpineVisual`、`ZCHexView.renderMonsterFocus`（复用 `zcMonsterTintStateOf`）/ `applyMonsterFocusSpine` / `MONSTER_FOCUS_DIM_TINT` | `tests/zcds-monster-focus-grey-batch59.test.ts`、`tests/zcds-resource-unit-preview.test.ts`、`tests/zcds-monster-focus-batch56.test.ts` |
+| **大招通报：传说卡放主动技**（卡面图 + 技能名，白字粗体 + 黑描边 2px、每条主动技各一次、串行各 2.3s；事件路径 + **行为车道路径**，2026-11-25，见 §45 / §45.1） | `ZCGameModel.announceLegendSkillCasts` / `isActiveSkillCast` / `announceActiveCast` / `castWithAnnounce`、`ZCSkillTriggerSystem` 的 `blinkTo(…, behaviorKey)` / `announceCast`、`zcAnnounceSkillNameIndex`、`ZCBattlePresentationQueue.pushSkillAnnounce`（串行游标）、`ZCSkillAnnounceStyle`、`view/ZCSkillAnnounceFx`、`ZC_BATTLE_FX_PATHS.skillAnnounceSkeleton`、美术交付物 `units/effects/大招技能提示特效/大招技能提示特效.prefab`（§45.2，运行时**不读**它）、日志档 `ZCDC_LOG_SKILL_ANNOUNCE` | `tests/zcds-skill-announce.test.ts` |
 | **废墟地块底色按归属方混合灰**（2026-10-29） | `ZCTheme.zcRuinsFactionColor` / `ZCHexView.territoryTint`（`ZCHexView.TERRITORY_FILL_ALPHA`） | `tests/zcds-ruins-tile-color.test.ts` |
 | **废墟建筑不再产金**（主城那一路原来无条件发钱，2026-10-29） | `ZCEconomySystem.tickIncome` / `isIncomeSource`、`isBuildingOperational` | `tests/zcds-ruins-income.test.ts` |
 | 开局金矿格整圈描边呼吸（绿色 · 9px · 棋盘最上层） | `ZCGameViewUtil.zcNeutralHintAlpha` / `ZCHexView.strokeHintOutline` / `ZCGameRenderWorld.ensureHintOutlineGraphics` | `tests/zcds-neutral-hint-outline.test.ts` |
@@ -64,7 +75,7 @@
 | **银币宝箱独立打开动画**（`1023` / `coinBox` ⇒ icon `1→1.3→0` 原地 pop；**不复用** `chest_seq_*` 三档开箱；奖励当场结算不挂动画回调；2026-11-10） | `model/TerritorySilverChestOpen.territorySilverChestIconPop` / `model/TerritoryMapConfig.TERRITORY_SILVER_CHEST_REWARD_ID` / `TerritoryModel.handleUnlockThenPass`（`silverChest: true`）/ `MainTerritoryMap.presentRewards` / `TerritoryMapView.playSilverChestOpen` / `TerritoryStationView.playSilverChestIconPop`、`stepSilverChestPop` | `tests/territory-silver-chest-open.test.ts` |
 | **碎片 / 种族经验飞向底部「英雄」按钮 + 碎片进度长满徽标**（钱包 `7/9` 仍飞资源栏；固定格改落点、随机格补飞行、英雄按钮先 Y 后 X 受击抖动；徽标仅本次新达成、从当前比例长到 100%、多英雄按 `sortLineupCards` 串行；2026-11-10） | `model/TerritoryHeroReward`（`isTerritoryHeroRewardResId` / `territoryHeroFlightFx` / `territoryHeroBadgeFrame` / `detectTerritoryHeroBadges`）/ `view/TerritoryHeroFlight` / `TerritoryMapView.setHeroRewardTargetWorld`、`playHeroRewardFlight` / `MainTerritoryMap.wireRewardCatch`、`playCellGains`、`playHeroBadges`、`findHeroTabButton` / `common/TabButton.playHitFeedback` / `main/HeroFragmentBadge` / `bootstrap/main/TerritoryHeroProgressSource`（`MainPageComposition.mountTerritory` 注入） | `tests/territory-hero-reward.test.ts`、`tests/territory-chest-animation.test.ts`、`tests/tab-button.test.ts` |
 | **巡逻宝箱升级摇奖 + 守护怪头像**（空星槽里虚影呼吸（周期 0.4→0.833s）+ 宝箱**原地 7Hz 颤动**（水平 ±4 / 垂直 ±2 / 缩放 ±8%）+ 逐渐叠纯白；**成功顿 5 帧再换图**、**失败减速泄劲**；落点等回包、最短演满 1.2s；结果 toast 挂**演完**；守护怪读 `levelInfo.levelMonsterGroup` → `monsterCard.headIcon`；2026-11-24 三轮改版，见 §3.53） | `model/TerritoryMonsterBoxRoll`（`monsterBoxPulseAt` / `monsterBoxShakeXAt` · `YAt` · `ScaleAt` / `monsterBoxRollPose`）/ `model/TerritoryCampaignConfig.readTerritoryGuardMonsters` / `model/TerritoryMonsterBoxDetail`（`guards[].headIcon` · `upgradeAttempt`）/ `application/TerritoryModel`（`noteMonsterBoxAttempt` / `notifyMonsterBoxRollSettled`）/ `view/TerritoryMonsterBoxPanel`（`startRoll` / `update` / `applyRollPose` / `prepareStarGhost` / `ensureChestWhite` / `notifyRollSettled`）/ `TerritoryDetailCoordinator.monsterBoxContentOf`（`whiteMaskMaterial`）/ `MainTerritoryMap.prefillMonsterBoxGuardIcons` | `tests/territory-monster-box-roll.test.ts`、`tests/territory-monster-box-prefab-refs.test.ts`、`tests/territory-monster-box-guards.test.ts`、`tests/territory-monster-box-detail.test.ts` |
-| 🔴 **异步 PVP 战斗结束「掉落宝箱获得」动画**（一枚 `hud_chest` 带**三角形拖尾**沿二次贝塞尔弧线从地图胜利格心飞进 `BottomHud/ChestEntry`；飞入后目标 icon 抖「先 Y 后 X」、最后一颗绿点**落地那一拍**才点亮。🔴 11-23 修：触发只认 `victoryBattleCells`（战斗结算存档的一次性边沿），**不认** `victoryClaimCells` —— 服务端 `passCells` 先落 owned ⇒ `startExplore` 被拒 ⇒ 本地零收地，旧口径恒空导致动画静默消失；格心必须在 `scrollToCell` 之后量。回城是全量重拉队列，没有「本次新增一个」的增量信号；绿点用 `chestDropPending` 闩压住，别让数据先亮。11-23 深夜加固：`play()` 返回 true 才落「已播过」的闩；控制台留 5 条 `[ChestDrop]` 排障锚点（哪行出现 = 卡在哪环，见 §3.54 七）。2026-11-22，见 §3.54） | `main/ChestDropFlight`（`chestDropFlightFrame` / `chestDropTrailQuads` / `chestDropHitScale`）/ `main/ChestDropFlightView` / `MainPage.onChestDropFlight`、`tryStartChestDrop`、`onChestDropLanded`、`renderChests` / `MainTerritoryMap.emitChestDropFlight` / `TerritoryMapView.cellWorldPoint` / `ChestEvents.DROP_FLIGHT` / `TerritoryModel.applyStoredBattleResult`、`victoryBattleCells` | `tests/chest-drop-flight.test.ts`、`tests/chest-drop-flight-trigger.test.ts` |
+| 🔴 **异步 PVP 战斗结束「掉落宝箱获得」动画**（一枚 `hud_chest` 带**三角形拖尾**沿二次贝塞尔弧线从地图胜利格心飞进 `BottomHud/ChestEntry`；飞入后目标 icon 抖「先 Y 后 X」、最后一颗绿点**落地那一拍**才点亮。🔴 11-23 修：触发只认 `victoryBattleCells`（战斗结算存档的一次性边沿），**不认** `victoryClaimCells` —— 服务端 `passCells` 先落 owned ⇒ `startExplore` 被拒 ⇒ 本地零收地，旧口径恒空导致动画静默消失；格心必须在 `scrollToCell` 之后量。回城是全量重拉队列，没有「本次新增一个」的增量信号；绿点用 `chestDropPending` 闩压住，别让数据先亮。11-23 深夜加固：`play()` 返回 true 才落「已播过」的闩；控制台留 5 条 `[ChestDrop]` 排障锚点（哪行出现 = 卡在哪环，见 §3.54 七）。🔴 11-23 三次：触发**白名单只认 `asyncPvp`**，删掉 `pvpCell ?? claimCells[0]` 兜底 —— `resolveBattle()` 是所有 `pve` 战斗共用收尾口，塔防（`defence`）/ 普通关（`match`）回城也非空，兜底会让它们一起播（见 §3.54 八）。2026-11-22，见 §3.54） | `main/ChestDropFlight`（`chestDropFlightFrame` / `chestDropTrailQuads` / `chestDropHitScale`）/ `main/ChestDropFlightView` / `MainPage.onChestDropFlight`、`tryStartChestDrop`、`onChestDropLanded`、`renderChests` / `MainTerritoryMap.emitChestDropFlight` / `TerritoryMapView.cellWorldPoint` / `ChestEvents.DROP_FLIGHT` / `TerritoryModel.applyStoredBattleResult`、`victoryBattleCells` | `tests/chest-drop-flight.test.ts`、`tests/chest-drop-flight-trigger.test.ts` |
 | **宝箱详情主按钮加速态**（绿底 `btn_speed_up` + 播放 icon `chest_bolt`；解锁 / 开启仍黄色；**点解锁后整颗按钮同步刷新**，不再只刷倒计时；2026-11-11） | `ChestDetailPanel.applyOpenButton`（唯一写入口）/ `updateCountdown(秒, 计时中, {caption, speedUp})` / `MainPage.chestDetailContentOf`（`openSpeedUp`）、`refreshChestDetailCountdown`、`loadTreasureQueue`（回调改 `refreshTreasureDisplay`）/ `tools/gen_chest_speed_up_button.py`、`tools/patch_chest_detail_speed_up_prefab.py` | `tests/chest-detail-speed-up.test.ts`、`tests/chest-detail-panel.test.ts`、`tests/chest-detail-lifecycle.test.ts` |
 | **预告关卡红色编号气泡 + 异步据点解锁即直开**（预告整关 footprint 只给**虚影承载格**挂一颗红 `frame_02`；气泡按虚影帧抬高，未解锁仍是锁/价格；`asyncPvp` 并入「花银币解锁那一次直开」，已解锁仍弹侦查面板；2026-11-11） | `TerritoryMapView.stationRenderOf`（`isPreviewBattleSite` / `previewBubble` / `levelBubbleAnchorFrame`）/ `TerritoryStationView.renderLevelBubble`、`previewAnchorScale`、`applyLevelBubblePosition` / `TerritoryModel.selectSite`、`isAutoStartSite` / `tools/patch_territory_preview_bubble.py` | `tests/territory-preview-bubble.test.ts`、`tests/territory-presenter.test.ts`、`tests/territory-boss-and-random-building.test.ts`、`tests/territory-chest-bubble.test.ts` |
 | 🔴 **PVP 红气泡里的头像按「红色圆角主体」居中**（`frame_02` 94×45 的圆角主体只到 raw 行 36，`37..44` 是 8px 小尖角 ⇒ `SLICED` 上下切边 1:1 ⇒ 主体中心恒比**节点中心**高 `4px`；头像 `icon_hero_head_40018` 是 auto trim（`offset = -2/-13.5`）+ `trim=false` ⇒ 可见中心比节点中心低 `13.5×46/204 ≈ 3.04px`。旧 `PORTRAIT_Y = 3` 只补了 trim ⇒ 头像贴红框下沿、上方空一大片红。落点统一走 `territoryPvpBubblePortraitPosition(frame, size)`，x / y 都按帧几何算，缺帧兜底与真帧同源；2026-11-23，见 §3.55） | `model/TerritoryLevelBubble`（`FRAME_HEIGHT` / `BODY_BOTTOM_ROW` / `TAIL_ROWS` / `BODY_CENTER_LIFT_Y` / `territoryPvpBubblePortraitPosition`）/ `TerritoryStationView.applyLevelBubbleLayout` / `frame_02.png.meta`、`icon_hero_head_40018.png.meta` | `tests/territory-pvp-bubble-portrait-align.test.ts`、`tests/territory-station-batching.test.ts`、`tests/territory-chest-bubble.test.ts` |
@@ -971,7 +982,7 @@ TerritoryChestView.step() → fireLandings(t) 到达时刻 = flyStart + i×stagg
 1. **不许用 tween**（规则 106/247）：`ResBar.update` 是唯一心跳，`MainResBarSlot` 自己**不挂** `update`。
 2. **每种资源只通知一次落地**（`landedResIds`）：30 枚图标里同一资源占 15 枚，按枚通知会把数字「击」15 次。
 3. **落地通知必须排在停播判断之前**：最后几枚是在收尾段落地的，放到 `stop()` 之后就永远收不到。
-4. **数字滚动期间 `render()` 只暂存不直写**（`pendingValueText`）：`CmdRole` 推包正好落在滚动途中时，
+4. **数字滚动期间 `render()` 只暂存不直写**（`pendingSlot`）：`CmdRole` 推包正好落在滚动途中时，
    直接重写会表现成「滚到一半跳回新值」。
 5. **找资源栏要「从本节点往上逐层问」**，不许从场景根 `getComponentInChildren` ——
    商城 / 天赋页内嵌同一个公共件，从根搜很容易先命中被盖住的那一份（图标飞过去就没了）。
@@ -1024,8 +1035,9 @@ label 上就已经是**扣后**的值了 —— 什么都不做的话玩家看�
 
 
 **为什么不用在花钱的地方一处处调**：扣除的唯一入口是 `ResBar.reload` 里的
-`slot.spendDeltaOf(next.valueText)` —— 每格自己记着「上次落定的数值」(`settledValue`)，
-新值比它小就是一次扣除。这样**所有**来源（挑战扣体力、商城买东西、GM 改值）自动覆盖，
+`slot.spendDeltaOf(next.amount)` —— 每格自己记着「上次落定的**原始数值**」(`settledValue`)，
+新值比它小就是一次扣除。读数文本是换算后的缩写串（`122.3M`），不能反解析，所以比对与滚动
+都只认 `amount`，显示时才过 `formatResBarAmountText`。这样**所有**来源（挑战扣体力、商城买东西、GM 改值）自动覆盖，
 不需要谁记得调一次（漏一处就少一处反馈，而且零报错）。
 `ResBar.playSpendFeedback(key, amount)` 仍然公开，只给「值已落地、但不会再走 `render`」的边角用。
 
@@ -3649,7 +3661,12 @@ fixedResource ⇒ art.fixedResource ⇒ image/territory/buildings/territory_fixe
 
 | 章 | 01 | 02 | 03 | 04 | 05 | 06 | 07 | 合计 |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1023 格数（= 69020 格数） | 25 | 27 | 36 | 15 | 15 | 15 | 15 | **148** |
+| 1023 格数（11-10 当时） | 25 | 27 | 36 | 15 | 15 | 15 | 15 | **148** |
+
+⚠️ **这张表是 11-10 的历史数，别再当现状**。2026-11-26 用户要求把 `chapter_01` 的 10 个 1023
+按位置均匀改配成 `1016/1015/1012`（建筑 `69020 → 69005`），见 §3.58 ⇒ 现在是
+`12 / 27 / 36 / 15 / 15 / 15 / 15 = 135`（`chapter_01` 在 11-26 之前就已经是 22 格而非 25，
+中间有过一次地图调整，不是本轮引入）。
 
 **脚本**：`tools/map-editor/set_chest_building.py`（幂等；`--dry-run` / `--id` / `--no-publish`；
 内置「除 `buildingId` 外字段一律不许变」的硬断言）。
@@ -5217,8 +5234,8 @@ monsterBox.monsterBoxLevel（这一级打哪关）
 - 领地异步据点战斗类型固定 `ZC_BATTLE_TYPE_CHAPTER (1002)` 带 `pve` 上下文
   （`TerritoryModel.battleParamsFor()` → `chapterCellBattleParams` / `chapterTreasureBattleParams`），
   **不是** `BigMapEntry` 的 `slgBattleType`；结算写 `TerritorySaveStore.resolveBattle()`。
-- `MainTerritoryMap.emitChestDropFlight()` 优先挑 `TERRITORY_SITE_TYPE.asyncPvp` 那一格，
-  挑不到用第一格兜底（据点战斗胜利都该掉，不许静默消失）；格心取
+- `MainTerritoryMap.emitChestDropFlight()` **只认** `TERRITORY_SITE_TYPE.asyncPvp` 那一格
+  （白名单，见八：11-23 深夜按用户口径收窄，挑不到就整条不发）；格心取
   `TerritoryMapView.cellWorldPoint(cellId)` 的**世界坐标**，通过 `CHEST_EVENTS.DROP_FLIGHT`
   发给 `MainPage`。老快照 / 测试夹具可能整个不带这两个字段 ⇒ `claimCells?.length` 与
   `sites ?? []` 都要兜，否则 `renderAll` 会带崩整页（本轮第一次全量对拍就红了 7 条转场用例）。
@@ -5341,6 +5358,68 @@ TypeError: ... .cachedLineupPowerText is not a function
 **④ 顺手放宽的守卫**：`tests/main-quick-find-popup-mask.test.ts` 里 `setSiblingIndex` 的断言
 改成只匹配 `setSiblingIndex(this.node.parent.children.length - 1)` —— 同一波空安全收紧把
 `parent ? … : 0` 换成了 `if (this.node.parent) { … }`，语义一致（无父时那个 `: 0` 本来就是空写）。
+
+#### 八、11-23 深夜三次实机：收窄到「只认异步 PVP 据点」
+
+用户原话：
+
+> 「塔防模式结束后回到领地，也播放了战斗宝箱飞入 icon 的动画，只有 pvp 异步据点才需要播放」
+
+**① 兜底那一版为什么错了。** `emitChestDropFlight` 上一版是
+
+```ts
+const cellId = pvpCell ?? claimCells[0];   // ← 去掉
+```
+
+理由是「战斗掉落宝箱对任何据点战斗胜利都成立，不能因为类型没配上就让动画静默消失」。
+这个前提**被证伪**：`TerritorySaveStore.resolveBattle()` 是**所有**带 `pve` 上下文的战斗
+共用的收尾口（唯一调用点 `ZCBattlePreparation.resolvePveResult`，形参就叫
+`pve.territoryCellId`，与 `mode` 无关）⇒ 塔防（`mode = defence`）与普通关（`mode = match`）
+打赢回城时 `victoryBattleCells` 同样非空，于是被这条兜底一起演成宝箱掉落。
+
+**② 修法：白名单，不是黑名单。**
+
+```ts
+const pvpCell = claimCells.find((cellId) => cells.some(
+    (site) => site.cellId === cellId && site.type === TERRITORY_SITE_TYPE.asyncPvp));
+if (pvpCell === undefined) {
+    console.info(`[ChestDrop] 回城边沿：格 ${claimCells.join('/')} 不是异步 PVP 据点，不播宝箱飞行`);
+    return;   // 挑不到 ⇒ 整条不发
+}
+const cellId = pvpCell;
+```
+
+`TERRITORY_SITE_TYPE` 还挂着 `stage` / `boss` / `fixedResource` / `bonus` / `patrolChest`
+⇒ 必须写「只认 `asyncPvp`」，写「排除 defence」等于给未来的新类型自动发宝箱动画。
+
+**③ 语义连带变化**（都是想要的）：
+
+| 输入 | 旧行为 | 新行为 |
+| --- | --- | --- |
+| `sites` 里同格是 `stage` / `boss` / 资源格 | 用第一格兜底、照播 | **不播** |
+| `sites` 整个缺失（老快照 / 夹具） | 用第一格兜底、照播 | **不播**（认不出类型就不演，好过所有模式都演） |
+| 格心 `cellWorldPoint` 落空但类型是 `asyncPvp` | `origin = null` 交回 `MainPage` 用兜底起飞点 | **不变** |
+
+**④ 诊断锚点加一条**：`[ChestDrop] 回城边沿：格 N 不是异步 PVP 据点，不播宝箱飞行`。
+塔防 / 普通关回城出现这行是**正常**；异步 PVP 打赢也出现这行 ⇒ 那一格的 `type` 没配成
+`asyncPvp`（配表问题，不是表现问题）。
+
+**⑤ 用例（`tests/chest-drop-flight-trigger.test.ts`，10 条）**：原第 ⑥ 条拆成
+「只认 asyncPvp（多候选取第一个）」+「`stage` / `boss` / `fixedResource` / `bonus` /
+`patrolChest` 五种类型一律不播」+「格心取不到但类型对 ⇒ 仍发、`origin` 交回 `null`」，
+原第 ⑦ 条里 `sites` 缺失的断言从「照常起飞」改成「不发」，并新增一条源码守卫
+**不许再出现 `pvpCell ?? claimCells[0]`**。
+
+**⑥ 🔴 守卫必须剥注释再扫**：这条守卫的「反面写法」就写在真源注释里（讲清为什么去掉兜底），
+`assert.doesNotMatch(code, /pvpCell\s*(\?\?|\|\|)\s*claimCells\[0\]/)` 直接扫整份源码会
+自己把自己的说明文字当成回归（`territory-mvc-boundary` 踩过同一个坑）。写法：
+
+```ts
+const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+```
+
+**⑦ 反向验证**：把 `?? claimCells[0]` 与 `if (… && false)` 临时加回去 ⇒ 专项 3 条转红
+（正是用户可见的「塔防不播」那条 + `sites` 缺失那条 + 源码守卫），还原后 10/10 绿。
 
 ### 3.55 PVP 红气泡里的头像居中：小尖角抬升 + auto trim 补偿（2026-11-23）
 
@@ -6023,7 +6102,7 @@ Creator 的规则是「被多个包引用时，资源存进**优先级高**的�
 
 | 目录 | 帧 | sample | wrapMode | 动画时长 | 画布 | 烘焙缩放 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `磁电菇_劈雷技能/` | 20（全取） | **30** | 1（一次性） | 0.667s | 237×283 | 0.816372 |
+| `磁电菇_劈雷技能/` | 20（全取） | **30** | 1（一次性） | 0.667s | 193×231 | 1（已烘进贴图） |
 | `雷电冲击/` | 6（第 9~14 帧） | 12 | 2（循环） | 0.5s | 489×144 | 0.575963 |
 
 三条硬口径：
@@ -6367,7 +6446,7 @@ boltDamageRate 1.6·2.0·2.5 / boltRadius 90` 在 `J-技能表`（`PVP技能配�
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `麻辣铁锅_喷射火焰` | 39 | 12 | 1（一次性 3.250s） | 222×168 | **1.278207** | 触发距离 350 反算缩放，**稳态**可见长度 210.5 画布 px ⇒ 屏上 269.06px；判定＝矩形 0~350×宽 140 |
 | `麻辣铁锅_爆炸龙卷` | 32 | 30 | 1（一次性 1.067s） | 449×412 | 0.351831 | 半径 100 ⇒ 屏上直径 153.75 |
-| `麻辣铁锅_凤凰弹` | 17 | 12 | 2（循环） | 派生副本 | 0.650000 | 弹体，无判定（= 火船 1.733333 × 1.5 × 0.25） |
+| `麻辣铁锅_凤凰弹` | 17 | 12 | 2（循环） | 派生副本（同 `396×126`） | 0.650000 | 弹体，无判定（= 旧基准 1.733333 × 1.5 × 0.25，绝对值锁死） |
 
 **喷射火焰的 39 帧怎么来的**：设计案表现列写「需要延长时间时使用循环帧 11-17」。
 落地做法是**把第 11~17 帧重复 3 遍直接拼进同一条 clip**：
@@ -6412,7 +6491,20 @@ boltDamageRate 1.6·2.0·2.5 / boltRadius 90` 在 `J-技能表`（`PVP技能配�
 `units/projectiles/火法师_火船/火法师_火船` 同时被 `pvpSkill 36181「火法师武将技」` 使用，
 挂进 `ZCCombatEffectScale` 会把**别人的技能**一起放大。所以派生一份
 `units/projectiles/麻辣铁锅_凤凰弹`：只写 prefab + meta，复用同一份 clip（`f73e3359`）
-与散图 uuid，`_lscale` 从 1.733333 改成 **2.6**（×1.5），目录里**不放 png**。
+与散图 uuid，`_lscale` 落成 **0.65**（= 1.733333 × 1.5 × 0.25，第三轮的 25% 已烘进 prefab），
+目录里**不放 png**。
+
+📌 **2026-11-26 火船重烘（同一批图集治理）**：`火法师_火船` 的 17 帧从 402×364 裁到
+**396×126**（alpha 并集只有 389×118，上下 240 行全是空）,根 `_lscale` 1.733333 → **1**
+（贴图即屏上尺寸），`_lpos` 补 (−3.77, 3.19)。连带三处同源消费者：
+
+| 消费者 | 改了什么 | 观感 |
+| :--- | :--- | :--- |
+| `火法师_火船.prefab`（36181） | 尺寸/缩放如上 | 船身 364×198 → **210×114** 屏上 px（旧链路是原生 210×114 被放大了 1.733 倍）；1.73 倍硬编码删除 |
+| `麻辣铁锅_凤凰弹.prefab` | `_contentSize` 396×126，`_lscale` **0.65 不动** | **一个像素都不变**（绝对倍率，不跟基准走 ⇒ 生成器改用 `absolute_scale`） |
+| `鹿神守护.prefab` 的 `fx_火船` | `_contentSize` 396×126、`_lpos` 92.2/150 → 88.6/153.6，`_lscale` **1.2 不动** | 不变（1.2 也是绝对倍率） |
+
+🔴 火船**不许**登记进 `ZCCombatEffectScale`（会连带 36181）；凤凰弹保持派生副本也是这个原因。
 
 ### 15.6 配表落点
 
@@ -6983,6 +7075,16 @@ if (!approaching) zone.remainingSeconds -= dt;       // ← 读秒与位移彻�
 拿它来停就是「站桩半局」。同理「施法动作该多久」本质是**动画片段时长**，属于表现、不属于数值槽 ——
 与 `ZC_BLINK_CAST_EFFECT_SECONDS`（瞬间移动特效 0.75s）同一条理由。
 真要逐档不同再单独加参数，别顺手往 `pvpSkillPlan.skillParamJson` 里塞列（那张表三写）。
+
+📌 **2026-11-26 图集治理（`瞬间移动特效`，屏幕尺寸不变）**：18 帧原画布 1296×1228，
+可见内容只有 1166×1166（第 15 帧峰值），根节点靠 `_lscale 0.06861` 缩到 80px。
+而每帧矩形 1300×1232 塞不进 2048 的 auto-atlas（两帧并排 2600 > 2048），
+**18 帧各占一页、合计 109 MB 纹理像素**。
+
+改成按峰值重烘：裁可见并集 `(69,31)-(1235,1197)` → 1166×1166 → 重采样 80×80，
+于是 `_lscale = 1`、`_contentSize = 80×80`、auto-atlas 一页（0.44 MB）；
+18 张 PNG 5.57 MB → 94 KB。屏上尺寸与旧版一致（1166 × 80/1166 = 80px）。
+重烘命令见 `tools/build_blink_fx.py` 文件头，原始帧备份在 `tmp/fx_src_backup/瞬间移动特效/`。
 
 ### 18.2 只在「真放出去」之后写
 
@@ -7798,21 +7900,25 @@ Q3 文案、K 表三条链）+ 结算 7（扩散段折算三态、`auraSlowRatio
 
 ### 26.4 🔴 画布宽 = 环外径，于是尺寸校验变成一条可读等式
 
-    _contentSize.width(340) × _lscale(0.904412) = 307.5 屏上 px = 判定直径
+    _contentSize.width(308) × _lscale(1) = 308 ≈ 307.5 屏上 px = 判定直径
 
-判定直径 = `auraRadius 200 × 2 × 0.76875`（§1.11 的换算）。之所以不「紧贴内容裁切」，
-就是为了让这条等式成立 —— 用例直接读 prefab 验算术，不用在别处再抄一个「可见宽」魔数。
+判定直径 = `auraRadius 200 × 2 × 0.76875` = 307.5（§1.11 的换算）；画布取整到 308，
+差的 0.5 px 就是取整误差。之所以不「紧贴内容裁切」，就是为了让这条等式成立 ——
+用例直接读 prefab 验算术，不用在别处再抄一个「可见宽」魔数。
 代价是环两侧各留一点透明边（环外的火星），可以忽略。
 
-🔴 **尺寸烘在 prefab 的 `_lscale` 里，`ZCCombatEffectScale.NODE_SCALE_BY_PREFAB_PATH` 不登记**
-（未登记 = 宿主倍率 1）。这条 prefab 只服务 102503，没有共用路径的问题，
-所以不需要在两个文件里各写一半数。**改半径就重跑生成器**，别去那张表里找。
+🔴 **贴图就是屏上尺寸，`_lscale` 恒为 1**（2026-11-26 改口径：原来是画布 340 × 0.904412）。
+`ZCCombatEffectScale.NODE_SCALE_BY_PREFAB_PATH` 也不登记（未登记 = 宿主倍率 1）。
+这条 prefab 只服务 102503，没有共用路径的问题，所以倍率一处都不该有。
+**改半径就重跑生成器**（画布跟着 `JUDGE_DIAMETER_SCREEN` 一起变），
+别去 prefab 里手改 `_lscale`，也别去那张表里找。
 
 ### 26.5 🔴 `_lpos` 非零的前提：宿主不能旋转
 
 横向因为「画布宽 = 环外径」已经对称，`_lpos.x` 只剩取整误差（−0.226）；
-纵向要补 —— 环中心在画布中心**下方** 79.5 画布 px（火焰墙全在环上方），
-`_lpos.y = +71.9` 把它补回来，让「环中心 = 节点原点 = 区域圆心 = 施法者脚点」。
+纵向要补 —— 环中心在画布中心**下方**约 72 画布 px（火焰墙全在环上方），
+`_lpos.y = +71.93` 把它补回来，让「环中心 = 节点原点 = 区域圆心 = 施法者脚点」
+（缩图前是 340 画布上的 79.5 × 0.904412 ≈ 71.9，屏上位移没变）。
 
 🔴 这成立的前提是**宿主节点不旋转**：`castSelfAura` 只有配了 `auraFaceTarget` 才写 `angleDegrees`，
 102503 没配 ⇒ 宿主保持 0° ⇒ `_lpos.y` 是纯竖直位移。
@@ -8461,7 +8567,7 @@ export function zcImpactEffectAnchor(ratio, fromX, fromY, toX, toY) {
 | prefab | 使用者 | 本体烘焙 | `nodeScale` | 屏上终值 |
 | :--- | :--- | ---: | ---: | ---: |
 | `雷弹命中`（`thunderBulletImpact`） | 68016 磁电菇 / 68022 雷蕉 | 0.7 | 0.5 | 0.35 |
-| `磁电菇_子弹命中`（`cidianBulletImpact`） | 68008 杰克藕 | 0.4 | 0.5 | **0.2** |
+| `磁电菇_子弹命中`（`cidianBulletImpact`） | 68008 杰克藕 | 1 | —（已删） | **1**（贴图即屏上尺寸，见下） |
 
 两条倍率同为 0.5，但烘焙基准不同 ⇒ **屏上不是一个尺寸**（0.35 vs 0.2）。这是「各自按自己原大小的
 50%」的结果，不是漏改；要「两条一样大」得另给一个数，不能靠合并键。
@@ -8469,12 +8575,18 @@ export function zcImpactEffectAnchor(ratio, fromX, fromY, toX, toY) {
 🔴 别把两个键合成一个：它们是两份独立 prefab（不同帧序、不同色相），合并后只要有一条换美术，
 另一条会被连带改尺寸。
 
+📌 **2026-11-26 图集治理（`磁电菇_子弹命中`，屏幕尺寸不变）**：旧链路是「prefab 烘焙 0.4 × 目录 `nodeScale` 0.5 = 屏上 0.2」，
+画布 458×495 里可见内容只有 308×401（x 75–383 / y 38–439），其余是空白。
+现在把两层倍率全部去掉、尺寸烘进贴图：裁可见并集 → 重烘 **62×80**（= 308×401 × 0.2），
+`_lscale = 1`、`_contentSize = 62×80`、`_lpos.y = 1.8`（补回内容中心原本比节点原点高 9 画布 px × 0.2 = 1.8 屏上 px 的偏移）。
+9 帧 PNG 1003 KB → 82 KB，纹理像素 2.04 M → 0.045 M（−98%），PAC 单页装得下。
+
 ### 32.5 用例
 
 `tests/zcds-thunder-hit-fx-scale.test.ts` **4 条**：
 68016/68022 的倍率 0.5 × 烘焙 0.7 = 屏上 0.35（目录与 facade 两个入口都查）/
 两份 `pvpSkill` 的 30231 命中都指向该路径且 `pvpCard` 里只有 68016 / 68022 用 30231 /
-杰克藕 0.5 × 烘焙 0.4 = 屏上 0.2 且两份美术烘焙值必然不同 /
+杰克藕那份两层倍率都归 1、贴图 62×80 即屏上尺寸（不再乘 0.5 × 0.4）且两份美术烘焙值必然不同 /
 30717 只挂在杰克藕（68008）上且两份产物都指向 `磁电菇_子弹命中`。
 
 改过口径的三条既有断言：`zcds-magician-skills`（原来拿 `雷弹命中` 当「未登记=1」的例子）、
@@ -8705,10 +8817,14 @@ zcCombatEffectGrowFactor(growSeconds, ageSeconds, growFrom)
 4. **角度按序号均分、只用随机量做抖动**：6 只若都听同一颗随机数，某些种子下会
    **叠在同一个点**上（看起来只召出 1 只）。半径仍按 `sqrt(random)` 铺满圆面。
 
-特效资源：美术只丢了 26 张散帧（1185×1185 画布，裁剪框从 171 长到 912），
+特效资源：美术交付的 26 张散帧已齐全（`01_06` 于 2026-11-26 补回；原始画布 1185×1185，
+裁剪框从 171 长到 912）。2026-11-26 按屏上尺寸重烘为 **156×156**：最大那帧屏上
+120×116 px，prefab `_lscale` = 1、`UITransform` = 156×156，目录里没有 `nodeScale`
+—— 尺寸全在贴图里，不再靠缩放凑。
 prefab / anim 由 `tools/build_fission_spawn_fx.py` 生成，三条硬要求：
 `_sizeMode=0`（CUSTOM，序列帧尺寸不跟着 frame 变）、`_isTrimmedMode=false`
 （每帧按整张画布画进同一个 contentSize，帧间不抽动）、`wrapMode=1`（一次性，不循环）。
+clip 的 `_duration` 按 26 拍排（1.0833 = 26/24），26 帧每拍一格。
 路径登记在 `ZC_EFFECT_PATHS.fissionSpawn` + 行为键 `summon_unit`（**不标 `warmup`**：
 没有分裂菇的对局不该下这 26 张散图）。
 
@@ -8781,8 +8897,14 @@ this.applySummonAlpha(unit.summonMasterId === undefined ? undefined : unit.summo
 
 | 量 | 表值 / 来源 | 屏上 |
 | :--- | :--- | :--- |
-| 画布宽 | `256 × 0.58 × 2.0716` | 307.5 |
-| **可见环** | 153×60 canvas px × 1.2014 | **183.8 × 72.1**（半轴 91.9 × 36.0） |
+> 📌 2026-11-26：这张贴图已**裁掉空边并按屏上尺寸重烘**成 `215×90`，prefab 两级 `_lscale`
+> 与目录 `nodeScale` 全部归一为 1（原 `offset 0.58` + `2.0716` 两级硬编码已删除）。
+> 下表「表值」一列因此改成贴图像素 —— 缩放链已经不存在。
+
+| 量 | 表值 / 来源 | 屏上 |
+| :--- | :--- | :--- |
+| 画布 | `215 × 90` texel px（缩放 1） | 215 × 90 |
+| **可见环** | 184×72 texel px（缩放 1） | **183.8 × 72.1**（半轴 91.9 × 36.0） |
 | 判定半径 | `summonAuraRadius` 200 | 153.75 |
 | 阵位半径 | `summonSlotRadius` 120 | 92.25 |
 | 舞伴**屏幕**站位（斜角位 × 投影 2.5625 / 2.1429） | 世界 36 px | **(±65.2, ±54.6)** |
@@ -8795,14 +8917,14 @@ this.applySummonAlpha(unit.summonMasterId === undefined ? undefined : unit.summo
 （= 71.6 ÷ 36.0），把环放到 **365.7 × 143.4 屏上 px**，4 个舞伴 + 本体全进圈；
 代价是纹理放大 2.5× 略软、横向多出一倍（用户 2026-11-20 拍的板）。
 
-🔴 **不要为了「放大光环」去改公用 `nodeScale`**：`68021`(102104) / `68024`(102403) 的
+🔴 **不要为了「放大光环」去改公用的贴图 / prefab 尺寸**：`68021`(102104) / `68024`(102403) 的
 `self_aura` 也在用这份 prefab，它们的 `auraRadius 120`（判定 184.5）与 184 这一档正好匹配，
-改公用值会把这俩一起放大。要改大小就走 `effectScale`。
+改公用尺寸会把这俩一起放大。要改大小就走 `effectScale`。
 `effectScale` 已进快照（`ZCSnapshotCodec` 校验 `> 0`）⇒ 读档不会缩回去。
 
 🔴 **`area` 类区域的视觉尺寸不按 `event.radius` 缩放**，只认 `effectScale`
 （`ZCCombatEffectView` 里 `uniformScale = nodeScale × growFactor × sizeScale × eventScale`）。
-`ZC_EFFECT_PATHS` 里那条 `nodeScale` 注释已改成「画布 307.5 / 可见环仅 184（环占 153/256）」，
+2026-11-26 起这条目录条目**不再登记 `nodeScale`**（贴图即屏上尺寸：画布 215×90、环 184×72），
 **改大小之前先量 alpha>60 的实际环宽**，别按画布宽反推。
 
 资源登记：`summon_unit` 行为组要**单独再收一次** `sustainedAura`。
@@ -9052,8 +9174,8 @@ if (anchor === 'target') return { x: span.toX, y: span.toY };
 
 - 目录条目：`ZC_EFFECT_SPECS` 里 `quakeStrike` 登记 `anchor: 'target'` + `layer: 'top'`。
   `top` 必须显式写 —— 它是「打在空中的一下」，而 `area` 事件类型默认会被压回地面层。
-- **不写 `nodeScale`**：尺寸已经烘进 prefab（`offset` 子节点 `_lscale 0.56`、`_lpos.y 116.27`），
-  目录再写一次就是两个真源。
+- **不写 `nodeScale`、prefab 也不留缩放**：尺寸已经烘进画布（144×321，`_lscale` 全是 1），
+  `offset._lpos.y 116.92` 只负责把画布里的裂纹环对到脚下；目录再写一次倍率就是两个真源。
 - 仙桃行者自己那条链**不走锚点**：`pushQuakeStrikeVisualEvent` 直接推一条 `from == to == 落点`
   的纯表现事件（`radius` / `damage` 都是 0），不依赖事件类型；两条路都指向同一个坐标。
 
@@ -9076,12 +9198,12 @@ export const ZC_EMPOWERED_FX_OVERRIDES: Readonly<Record<number, string>> = {
 ### 37.5 美术 ↔ 判定圆必须同一份数
 
 散图 32 张 1065×2372（41/42/43 全透明）取 29 帧，1.2083s 一次性演出。
-`245_03` 帧的地面裂纹环最宽 616 源 px、质心 y ≈ 2050/2372 ⇒ 烘焙 `0.56`、`_lpos.y 116.27`。
-落下结果是：**画面裂纹环直径 ≈ 83 屏上 px ↔ 判定圆 54×0.3×2.5625×2 ≈ 83**。
+`245_03` 帧的地面裂纹环最宽 616 源 px、质心 y ≈ 2050/2372 ⇒ 画布缩到 144×321（`_lscale` 1）、
+`_lpos.y 116.92`。落下结果是：**画面裂纹环直径 ≈ 83 屏上 px ↔ 判定圆 54×0.3×2.5625×2 ≈ 83**。
 
 🔴 这是「先定美术、再反推数值」的顺序，与 §34.6（舞伴拴绳拿判定半径 60 去套可见环、
-差 1.79 倍）正好相反。改 prefab 缩放必须同步改 `skillParamJson.quakeRadius`，否则
-「看着没打到却掉血」。
+差 1.79 倍）正好相反。改画布尺寸必须同步改 `skillParamJson.quakeRadius`（以及
+`tools/build_xiantao_quake_fx.py` 的 `CANVAS_W/CANVAS_H`），否则「看着没打到却掉血」。
 
 ### 37.6 用例
 
@@ -9342,6 +9464,16 @@ for (let index = 0; index < count; index += 1) {
 每块只推**一条**长效表现（`holdVisual: true` + `growSeconds: 0.2`）：
 不设就是每秒推一条 `area` 事件，6~10 条火焰叠在同一处，看着像「越来越亮」。
 
+📌 **2026-11-26 图集治理（视觉逐字不变）**：`火焰树妖_灼热地带技能` 的 14 帧从 400×451 裁到
+**226×257**（以画布中心为原点对称裁，内容并集 172×246 相对中心的偏移量原样保留），
+10 簇 `flame_*` 的 `_lpos` / `_lscale`（0.200543~0.32087，设计上的大小差异）与 `offset`、根节点
+**一个数都没动**，只把 10 个 `UITransform._contentSize` 改成 226×257。合成结果经逐像素比对：
+260×260 里只有 5 个像素差值 >8（重采样边界），包围盒仍等于范围圈 92.25×77.14
+（`tests/zcds-hot-zone-effect.test.ts` ③ 用 PNG 自量后逐格校验）。
+
+🔴 这份 prefab **没有**可删的「整体放大倍率」（根与 `offset` 都是 1），所以「去硬编码」在这里等于
+「别再加外层倍率」；取消某一簇的 `_lscale` 会让 10 簇变成同样大，用例 ③ 的「至少 3 种缩放」也会红。
+
 ### 39.5 六个登记点 + 一个计数器（漏一处就静默不跑）
 
 | # | 位置 | 漏了会怎样 |
@@ -9595,9 +9727,9 @@ for (let index = 0; index < count; index += 1) {
 | 位置 | 变化 |
 | :--- | :--- |
 | `IZCDamageStatsSeats` | 新增（`ZCDamageStats.ts`）：`owners` + `profiles`（= `RankSeatProfiles`） |
-| `IZCBattleRuntimeServices.popups.openDamage` / `IZCBattleSettlementServices.popup.openDamage` | `(units, seats?)` |
+| `ZC_BATTLE_EVENTS.POPUP_COMMAND`（`kind: 'openDamage'`） | `(units, seats?)` |
 | `IZCBattleSettlementRequest` | 新增可选 `seats` —— 结算期不再回读模型，头像 / 名字必须随 `units` 一起冻结 |
-| `BATTLE_POPUPS.openDamage` | 透传 `userData: { units, seats }` |
+| `BattlePopupHost.openDamage`（`BattleComposition`） | 透传 `userData: { units, seats }` |
 | `GameRunAwayOptions` | 新增可选 `seats` |
 
 `seats` 缺省时：不建头像栏、敌方列退回「全部敌方合并」的老口径（本地局 / 老调用方不炸）。
@@ -9694,3 +9826,1864 @@ for (let index = 0; index < count; index += 1) {
 
 行内只显示绝对值（`formatDamageStatsValue`），没有百分比文案；要「63%」那种显示得给
 `RunAwayUnitItem` 加一个 Label（prefab 目前只有 `Value` 一个文本位）。
+
+## 44. 治疗类技能表现统一：绿字 + 直线 75px / 0.2s + 通用治疗光环（2026-11-25 第 47 批）
+
+### 44.1 需求与三块边界
+
+> 「释放治疗类技能时，数字 UI 是绿色的前面带 + 号，字体大小和伤害一致，
+>   移动轨迹是直线上移 75px，持续 0.2s，播放【通用治疗特效】，
+>   制作统一格式的预制体，特效大小跟随角色模型大小轻微调整」。
+
+三块各自有真源，别互相借：
+
+| 块 | 真源 | 值 |
+| :--- | :--- | :--- |
+| 颜色 / `+` 前缀 / 字号 | `ZCFloatTextView` 的 `HEAL_COLOR` / `battleText` / `DEFAULT_FONT_SIZE` | `(91,255,49)` / `+N` / 30（与普通伤害同号） |
+| 轨迹与时长 | `ZCFloatTextView.healRiseDistance` + 模型 `FLOAT_TEXT_HEAL_SECONDS` | 75px 直线 / **0.2s** |
+| 特效 | `ZC_EFFECT_PATHS.healAura` + `ZC_EFFECT_TUNING.healAuraSeconds` | Spine `eff_cost_01` 的 `eff_buff_heal`，**1.0s** |
+
+前两项本来就是对的（绿、`+`、字号 30），本批真正改的是**轨迹**与**时长**。
+
+### 44.2 🔴 治疗不许落进伤害那段通用逻辑
+
+`render()` 里伤害那一段对「无标记」的 kind 返回 `damageTravelSign = −1`（**向下坠**），
+再按 `text.id` 散到 5 条横向轨道（`DAMAGE_LANES`）。治疗套进去的症状是
+**「一半治疗数字往地里钻、并且每次位置都偏一点」**，不报错、只是读起来像 bug。
+
+所以 heal 自成一档、**排在伤害段之前 `return`**：
+
+```ts
+if (text.kind === 'heal') {
+    const rise = this.healRiseDistance * progress;   // 匀速走完整条时长
+    this.textLabel.node.setPosition(0, headY + rise, 0);
+    ...
+    return;
+}
+```
+
+- 用 `progress` 不用 `enter`：入场段走完就该正好 75px，用 `enter` 会在入场结束时就停住，
+  后半段变成「原地不动地淡出」。
+- 起点仍是 `headY = damageTargetSize/2 + damageHeadPadding`（角色头顶），与伤害同一基线。
+- `healRiseDistance` 独立成字段，不与 `damageDropDistance`(100) 共用 —— 共用会变成
+  「改伤害下坠距离顺手改掉治疗」。
+
+### 44.3 🔴 时长不能与伤害同源
+
+改前 `presentHeal` 推的是 `this.rules.floatTextDamageSeconds ?? FLOAT_TEXT_DAMAGE_SECONDS`（0.85s）。
+看起来「统一口径」，实际会把 75px 拉成 0.85s 的慢飘 —— 与伤害那声「啪一下弹走」是两种手感。
+
+| 常量 | 值 | 用途 |
+| :--- | :--- | :--- |
+| `FLOAT_TEXT_DAMAGE_SECONDS` | 0.85 | 伤害（三处调用点仍读 `rules.floatTextDamageSeconds`） |
+| `FLOAT_TEXT_HEAL_SECONDS` | **0.2** | 治疗，需求直给 |
+
+### 44.4 通用治疗特效：Spine 一次性播放
+
+素材是 `units/projectiles/通用治疗特效/eff_cost_01.{skel,atlas,png}`，**全项目零引用**，也没有 prefab。
+
+- `eff_cost_01.skel` 是 Spine 3.8 二进制、**浮点大端**、时间轴是**绝对时间**（不是增量）。
+  动画段 `count = 1`，名字紧跟其后 = **`eff_buff_heal`**。
+- 时长 **1.0s**：12 条 slot 颜色时间轴的末帧是 0.5 / 0.6667 / 0.7333 / 0.8 / 0.8333 / **1.0000**，
+  最长为 1.0000 且出现 8 次。改动素材（换 skel）必须重读。
+- 骨架 `width/height = 0`（导出时没设 bounds）⇒ 取景尺寸只能按**中枢光斑**估：
+  `heal_c` 在图集里是 93×83，与兵种画布 98 同量级 ⇒ 目录 `nodeScale: 1` 正好盖住一个角色。
+  **2026-11-25 实机改口径「治疗特效缩小成 50%」⇒ 已改成 `nodeScale: 0.5`**（见 §44.7 的表下注）。
+
+**预制体**（手写，同目录 `通用治疗特效.prefab`，与 `鹿神守护.prefab` 同构）：
+
+| 索引 | 对象 | 要点 |
+| :--- | :--- | :--- |
+| 1 | 根 Node | `_lpos (0,0)`、`_lscale 1`（`render()` 每帧 `setScale` 覆盖它）、UITransform |
+| 2 | 子 Node `spine` | 挂 `sp.UITransform` + `sp.Skeleton` |
+| 5 | `sp.Skeleton` | `_skeletonData` = skel meta uuid、`defaultAnimation: eff_buff_heal`、**`loop: false`** |
+
+🔴 **`__id__` 必须逐个核**：我第一版把根节点的 `_prefab` 写成 11（数组只有 11 项）、
+子节点的 `_prefab` 写成 8（指向 `cc.UITransform`）。两个都被 `tests/zcds-prefab-integrity.test.ts` 与
+`tests/zcds-fx-prefab-existence.test.ts` 当场抓住 —— 这类错引擎 `_deserialize` 直接炸，
+但**手写 prefab 时肉眼很难发现**，所以新增 prefab 后必须跑这两条。
+
+### 44.5 🔴 `spineLoop`：一次性演出不能循环
+
+`ZCCombatEffectView.applySpineAnimation()` 原来硬编码 `setAnimation(0, clip, true)`。
+持续型特效（鹿神守护走 / 待机）本来就要循环，但一次性演出循环了就没有「播完」这回事 ——
+事件寿命到点回池时正好卡在重播帧上，看起来像抽了一下。
+
+- 事件新增 `spineLoop?: boolean`；调用点 `this.applySpineAnimation(event.spineAnimation, event.spineLoop !== false)`
+  —— 缺省 `true`，存量全部逐字不变。
+- 判「要不要重设」必须**连循环位一起比**（`key = loop ? clip+'\u0001loop' : clip`）：
+  同一个 clip 名、两种循环位是两个不同的播放状态。
+
+### 44.6 光环挂在哪：`presentHeal` 是唯一出口
+
+治疗在 `ZCStatusResolutionSystem.healUnit` 汇成一次 `context.presentHeal`，上游却有四条路：
+吸血（普攻每刀）、吃口菠萝、群体治疗、贯穿滋养。挂在任一条技能车道上只覆盖四分之一
+⇒ 只能挂在出口，并配节流。
+
+事件形状（照抄 `pushSummonSpawnFx` 那条「纯表现 area 事件」）：
+
+| 字段 | 值 | 为什么 |
+| :--- | :--- | :--- |
+| `type` | `area` + `from == to` | 原地播，不参与弹道与碰撞 |
+| `damage` / `skillId` | `0` / `0` | 不结算，也不进大招通报（`isActiveSkillCast` 第一道闸就是 `skillId <= 0`） |
+| `durationSeconds` | `zcEffectDurationOf(healAura)` = 1.0 | 短了播一半被摘、长了停末帧，**两个方向都不报错** |
+| `spineAnimation` / `spineLoop` | `eff_buff_heal` / `false` | 一次性 |
+| `visualLiftPx` | `49 × scale` | 🔴 `area` 分支读的是**事件级**抬升；目录里的 `liftY` 只有弹道分支读，写错位置 = 「光环贴在地面上」 |
+| `effectScale` | `healAuraScaleOf(unit)` | `area` 从不按 `radius` 缩放（§43），唯一入口 |
+
+`layer: 'top'` 登记在目录里：光环比角色小一圈，压地面层会被站在圈里的角色挡住。
+
+### 44.7 尺寸「跟随角色模型大小轻微调整」
+
+```ts
+const HEAL_AURA_BODY_FOLLOW = 0.5;      // 半程跟随
+scale = clamp(1 + (bodyScale - 1) * 0.5, 0.75, 2)
+```
+
+| `bodyScale` | 倍率 | 场景 |
+| :--- | :--- | :--- |
+| 1 | 1.0 | 标准 |
+| 2 | 1.5 | 战神附体 / 生命爆发：全跟随会变成「比人还大的一张光斑」 |
+| 0.5 | 0.75 | 缩小：钳下限，否则光环套不住人 |
+| 3 | 2.0 | 巨型：钳上限 |
+
+⚠️ 上表是**跟随倍率**，屏上尺寸 = 目录 `nodeScale` × 它。`nodeScale` 原为 `1`（核心光斑 ≈ 一个角色），
+2026-11-25 用户实机看完口径「治疗特效缩小成 50%」⇒ **改成 `0.5`**，上面四档倍率不变
+（身体大的单位仍然大一点点，不是一刀切死尺寸）。
+
+🔴 **别跟着把 `visualLiftPx` 也乘 0.5**：抬升是屏幕竖直偏移、不是节点本地坐标，
+宿主缩小只是「绕同一点变小」，光环中心仍在身体中线；跟着缩会把它沉到脚下。
+
+### 44.8 节流
+
+`HEAL_AURA_MIN_INTERVAL_SECONDS = 0.35`，`Map<unitId, lastAt>` **per-unit**，
+不进快照（纯表现，丢了顶多早闪一下；写进快照反而要处理「读档后时间轴回退」）。
+不节流的症状是吸血卡「刀刀闪一下」，反而看不出是一次治疗。
+
+### 44.9 首包代价
+
+`heal_aura` 行为组标了 `warmup: true` ⇒ 进 `zcWarmupEffectPaths`。这是**故意**的：
+它是唯一一条收不拢到技能车道的表现（出口统一在 `healUnit`），不进预热就必然漏载
+（表现为「治疗了但没特效」）。代价是一张 174KB 图集常驻，预热清单 30 → 31 条。
+
+### 44.10 判据
+
+| 文件 | 钉住的东西 |
+| :--- | :--- |
+| `tests/zcds-heal-fx-batch47.test.ts` | 11 绿：prefab 两级结构 / 骨架 uuid 与动画名 / `loop=false` / 目录寿命与层级 / 直线 75px 分支位置 / 字号与 `+` / `spineLoop` 缺省 / 事件字段 / 半程跟随 4 档 / 节流 / 全链路 |
+| `tests/zcds-effect-path-parity.test.ts` | 字面量快照 + `heal_aura` 行为组 + 预热 31 条 |
+| `tests/zcds-effect-catalog-parity.test.ts` | 增量路径清单（第 45/46/47 批共 4 条一并补登） |
+| `tests/zcds-prefab-integrity.test.ts` / `zcds-fx-prefab-existence.test.ts` | `__id__` 不越界 + 节点 `_prefab` 必须指到 `cc.PrefabInfo` |
+
+### 44.11 遗留
+
+- 特效的视觉尺寸只按「中枢光斑 ≈ 一个角色宽」估到 `nodeScale 1`（2026-11-25 已按实机缩到 `0.5`）；骨架没导出 bounds，
+  精确值只能在实机上对一眼。要调大小**只改目录那一格**（事件级 `effectScale` 在其上再乘）。
+- 1.0s 的 clip 配 0.2s 的飘字：数字先走完、光环还在播。若嫌光环尾巴长，改
+  `ZC_EFFECT_TUNING.healAuraSeconds` 会同时把事件寿命缩短（两个数同源，别分开改）。
+- 治疗光环没有音效（需求没提）。
+
+## 45. 大招通报：传说卡放主动技（卡面形象 + 技能名，2026-11-25 第 48 批 / 二次口径）
+
+需求原文：「战斗中，玩家方的橙色品质的卡首次释放任意的主动技能时播放通报特效。在特效上
+叠加卡牌的形象图片（目录在 cardhead 中），伴随特效出来的还有技能名字，在形象的下方，
+使用白色粗体字 + 黑色描边 2px，整个特效的比例贴近参考图」。
+
+**二次口径（2026-11-25，用户补的）**：「应该是**任意的主动技能都弹**，两个主动技能时
+**按顺序弹**，每次展示 **2.3s**」。⇒ 三处改动：
+
+- 记账粒度从「卡」落到「**卡 + 主动技**」（`announcedActiveSkills`，键 `cardId:skill:<skillId>`
+  / `cardId:behavior:<behaviorKey>`）：科学家的文明之火播过，精密陷阱照样播；
+- 队列**串行**（`pushSkillAnnounce` 里 `startedAt = max(now, 上一条结束时刻)`）：两条同时触发
+  也不叠在同一个角色头上；
+- 单条时长 `ZC_SKILL_ANNOUNCE_SECONDS = 2.3`（全显段 1.66s + 淡出 28%），
+  `ZCSkillAnnounceStyle.ZC_SKILL_ANNOUNCE_FALLBACK_SECONDS` 同值。
+
+**判据（判「真正施法那一拍」）** —— 与 `ZCBattleAudio.clipOf` 逐条同源，不许另造一套：
+
+1. `event.owner === 'player'`（只听玩家方）；
+2. 卡面品级 `card.rarity === 'gold'`（`RARITY_IDS` 的顶档 = 橙色/传说）；
+3. 按 `cardId:技能键` 记账（`announcedActiveSkills`）：**每条主动技一局各播一次**，且只有
+   真正入队才算「播过」—— 坐标非有限 / 队列满被拒时要留着下次机会；
+4. `isActiveSkillCast`：先挡 `beamHold` / `effectKey === 'hit'`；`empowered`（武将技）直接算；
+   普攻行（`attackSkillId`）不算；其余只认 `activeSkillIds` 且真的结算了伤害
+   （冲锋护盾 / 召唤 / 践踏落点也带 `skillId` 走同一条 `combatEvents`，只看「skillId 不是普攻」
+   会在一批根本没施法的表现上弹通报）。
+
+**技能名**：武将技事件名是 `<普攻名>·强化`，**不是**技能表里的名字 ⇒ 真名从
+`unitDefinition(unitId).empoweredProfile?.name` 取（如「天降神拳」）；取不到才退回事件名并
+`stripSkillVariantSuffix`（只剥 `·强化` / `·投枪`）。
+
+**样式（`ZCSkillAnnounceStyle`，零 `cc`）**：形象高 165（≈ 屏高 13%）、抬升 86、名字 30、
+间距 6、描边 2、入场 `0.72 → 1`（占 14%）、尾段淡出占 28%。三层（底光 / 形象 / 名字）共用
+**同一个 `Color` 实例**，不加 `UIOpacity`（那是第二个真源）。描边只能走
+`Label.enableOutline / outlineColor / outlineWidth`（`cc.LabelOutline` 在 3.8 已废弃）。
+
+🔴 三个坑：
+
+- **形象取 `presentationArt.cardArtFrames`**（卡表 `headIcon` → `icons/cardHead/**`），
+  不是 `legendRoleArtFrames`（后者的语义是「阵容页立绘」，目前两表同值但别混用）。
+- **底光必须按骨架画布高反算缩放**：`landscape_tab_anim` 画布 352×352、卡面只有 165，
+  照抄 `setScale(1.35)` 会放大到 475 把形象整个盖住，且不报错。走
+  `getRuntimeData(true).height`（`ZCUnitView.spineCanvasHeight` 同一条路），取不到退回 1。
+- **`ZCSkillAnnounceStyle` 不许 `import` `ZCBattlePresentationQueue` 的常量**：视图单测夹具
+  只按 `zcds/view|ui` 解析相对模块，反向引用会让整组渲染用例报
+  `Missing view fixture module`（实测 render-performance 一组 7 条全红）。同值各写一份 +
+  用例断言相等（`ZC_SKILL_ANNOUNCE_FALLBACK_SECONDS`）。
+
+判据：`tests/zcds-skill-announce.test.ts`（事件路径那部分，见组 ①②③④⑤）。
+
+### 45.1 行为车道技：判据从「战斗事件」补到「车道回调」（2026-11-25 二次修复）
+
+用户现场：「战斗中，新加的橙色卡牌播放立绘动画没有展示」。
+
+**根因不在视图**。上面那 4 条判据全靠战斗事件里的 `skillId` 身份，而新加的橙卡
+（68031~68035 一批）的主动技是**行为车道**（`fire_zone` / `trap_place` / `blink_strike` /
+`dash_chain` / `self_cast` / `random_strike`），这些技能**在基表 `pvpSkill` 里根本没有行**：
+`ZCSkillResolutionSystem` 结算时套的是本卡普攻行（`definition.attackProfile`）⇒ 事件的
+`skillId = attackSkillId`、`skillName = 「科学家普攻」`，第 4 条判据第一小步就当普攻丢掉；
+这批卡的 `empoweredEvery` 又是 0 ⇒ 武将技那条腿也不成立。结果：**一次都不播、零报错**。
+
+**修法**：通报改在**车道回调返回成功**那一拍发起 —— `ZCSkillTriggerSystem` 里
+「`context.castXxx(...)` 返回真 ⇒ 消费 CD」是全工程唯一的「施法成功」信号。
+
+| 车道 | 通报挂在哪 |
+| :--- | :--- |
+| 13 条有 `castXxx` 回调的（`fire_zone` / `trap_place` / `splash_shot` / `ray_beam` / `storm_zone` / `bolt_strike` / `chain_damage` / `self_aura` / `burst_aura` / `spore_burst` / `fan_slow` / `wind_bolt` / `missile_barrage` / `summon_unit`） | 模型里 `castWithAnnounce(key, unit, cast)` 包一层 |
+| `charge_shield`（返回位移格数） | `dashWithAnnounce`，`> 0` 才算 |
+| `blink_strike` / `dash_chain` / `single_strike` / `charge_shield` / `legacy_dash` | 共用 `blinkTo` ⇒ **行为键由调用方透传** |
+| `self_cast`（自己挂增益）/ `random_strike`（走 `strike`） | 没有回调可包 ⇒ 触发系统在「CD 已消费」「`hits > 0`」那一拍回调 `announceCast(unit, key)` |
+
+**技能名**：只能取构筑期冻结的 `pvpSkillPlan.skillName`（`ZCSkillPlanRecord.skillName` →
+`ZCCompiledModifierLoadout.skillPlans` → `ZCMatchConfig.modifiers`），模型建
+`unitId:behaviorKey → 名字` 索引（`zcAnnounceSkillNameIndex`，同名多级行取先出现的）。
+**取不到名字就不播** —— 不许拿「XX普攻」或车道键名冒充。
+
+**为什么现场看不出问题（2026-11-25 二次）**：这条链路**不播时没有任何异常**。所以在
+`ZCSkillCastDiagnostics` 里开了独立一档 `ZCDC_LOG_SKILL_ANNOUNCE`（默认开、前缀 `[大招通报]`）：
+
+- 索引懒建时打一行「本局橙卡 → 可通报的技能名」—— 一眼分清「名字压根不在索引里」
+  （构筑期没带上 / 技能没解锁 / 表没更新）还是「名字在，但触发没走到」；
+- 每个失败门（不是橙卡 / 名字没查到 / 被队列拒收 / 这条已播过）按 `cardId+原因` 各留一行；
+- 入队成功也留一行。排查时按 `[大招通报]` 过滤即可，不在每帧路径上。
+
+🔴 三个坑：
+
+- **`ReadonlyMap` 不许下标取值**：`announceSkillNamesOf()[key]` 恒 `undefined`，编译器不报
+  ⇒ 三道门全过、一条都不播。本批真踩到，必须 `.get()`。
+- **`blinkTo` 的行为键必须由调用方给**：这条回调被 5 条车道共用，写死 `blink_strike` 会让
+  `dash_chain`（仙桃行者「腾云驾雾」）永远查不到名字 —— 与本次 bug 同一种死法。
+- **车道技事件的 `skillId` 记 0**：基表没有行，没有可记的 id；视图也不用它。通报只写
+  「形象 + 技能名」。
+
+判据：`tests/zcds-skill-announce.test.ts`（31 条；⑤ 之前是视图/队列，⑥ 是源码守卫，
+⑦ 是**真模型全链路** —— 真表 → 真卡池 → 真队列，从车道回调一路走到 `presentation`；
+③ 组钉住「串行排队」与 2.3s；⑧ 组钉住美术那份 prefab 的口径）。
+
+### 45.2 美术交付物：`大招技能提示特效` 预制体（2026-11-25 第三次）
+
+用户现场：「因为特效的预制体没做所以看不到，可以参考已有的结构实施」。
+
+**先纠正一个前提**：运行时那条通报**不读 prefab** —— `view/ZCSkillAnnounceFx.createZCSkillAnnounceNode`
+在代码里 `new Node` 组装（播放内容 100% 运行时才定：卡面图按 `pvpCard.headIcon`、技能名按计划行）。
+所以「没有 prefab」本身**不会**导致不播，真因见 §45.1。但美术 / 策划确实需要一份能打开来
+看结构的文件，于是按 `通用治疗特效`（两级 Node + `sp.Skeleton`）与 `建筑死亡特效`
+（单 Node + `cc.Animation`）的既有序列化形态补了一份：
+
+`assets/bundles/battle/units/effects/大招技能提示特效/大招技能提示特效.prefab`
+（uuid `92ad4ea0-9db3-4e1b-b659-ddcfd40398c0`），三层自下而上：
+
+| 节点 | 组件 | 口径 |
+| :--- | :--- | :--- |
+| `Glow` | `sp.Skeleton` + UITransform | 骨架 = 同目录 `landscape_tab_anim.skel`（uuid `4c880eb2-…`）；`defaultAnimation` **留空**（运行时取第一段）；`loop = true`（2.3s > clip）；`premultipliedAlpha = false`（与视图同值，否则描边外压一圈黑边） |
+| `Head` | `cc.Sprite`（CUSTOM、不裁边、`_spriteFrame = null`） | 165×165 = `ZC_SKILL_ANNOUNCE_ART_HEIGHT`，`y = +(34+6)/2 = 20` |
+| `Name` | `cc.Label`（白 30 号粗体 + 黑描边 2px、`overflow = NONE`） | 盒子 320×34，`y = -(165+6)/2 = -85.5` |
+
+root 内容 165×205；四个节点 `_layer` 全是 `33554432`(UI_2D)、`_lscale` 全是 1
+（缩放由 `renderZCSkillAnnounce` 每帧覆盖，烘进 prefab 会被整份抹掉）。
+
+🔴 **prefab 与代码是两份、必须逐项同值**：漂掉的表现是「图看着对、实机歪一截」，
+不报错、也没有别的信号 ⇒ 由 ⑧ 组按样式常量**反算**断言（坐标 / 字号 / 行高 / 描边 /
+骨架 uuid / 三层与 `new Node('Glow'|'Head'|'Name')` 同名 / 与资源计划里的骨架同目录）。
+
+想要视图**真的**读 prefab，还得另做三件事：路径登记进 `ZC_BATTLE_FX_PATHS`、
+`ZCGame` 按 `Prefab` 加载（不能走 `loadBattleSpine`）、`createZCSkillAnnounceNode` 改成
+先 `instantiate` 再按名找 `Glow|Head|Name` 并保留代码兜底 —— **当前没做**，别以为改 prefab 会生效。
+
+### 45.3 第三类「一条都不播」：运行期表 `remoteRef` 落后于转表产物（2026-11-25 第四次）
+
+通报的名字索引取 `pvpSkillPlan.skillName` + `behaviorKey`，**运行期读的是
+`assets/remoteRef/pvpSkillPlan.json`**，而不是 `doc/塔防数据配置/json/client/`。这两份当时差了
+一个时代：
+
+| | remoteRef（运行期） | json/client（转表产物） |
+| :--- | :--- | :--- |
+| 行数 | 2209（11-17 快照，= SVN HEAD） | 2311（11-25） |
+| 科学家 103503 | 「射线集束」/ `skill_params` | 「文明之火」/ `fire_zone` |
+| 全表 `fire_zone` 行 | **0** | 3 |
+
+⇒ 索引里压根没有 `68035:fire_zone` 这个键，四道门全在「名字没查到」那一关掉光，**一条都不播**。
+不是代码问题，是表没同步。同步用 `tools/config/sync_pvp_skill_plan_from_client.py`
+（保留该表现有形态：`[` + 行对象 `,\n` 分隔 + `]`，**不是** `{k,v,c}` 列存），
+它带三个闸：序列化自检（重建 client 原文必须逐字节相同）、行集合、逐格比对。
+
+🔴 同步「一张表」时会连带暴露两件别的东西，都必须一起处理：
+
+- **`pvpCard.headIcon` 指错目录**：remoteRef 那 35 行还是 `icons/head/xxx`（= `HEAD_ART_ROOT`，
+  **玩家头像**），而卡面是 `icons/cardHead`（`CARD_HEAD_ART_ROOT`）。`iconArtTargetOfPath`
+  两个目录都在白名单里 ⇒ 不报错、不退占位图，**只是把玩家头像当卡面**（立绘 / 卡牌阵容 /
+  通报的卡面图全读这一格）。同步脚本 `tools/config/sync_pvp_card_desc.js`（只动
+  `description` + `headIcon` 两列，其余列有线上手动调整的历史，整表覆盖会抹掉）。
+- **数据到位才会踩到的源码 bug**：`ZCGameModel.pushSummonAuraZone` 里
+  `(params as any)?.summonAuraFx ?? …` —— `params` 是 `summonUnits` 的局部变量，本方法里
+  不在作用域内 ⇒ 放技能即 `ReferenceError`。旧表里舞王那条链没有 `summonAuraRadius`，
+  这段一次都没进过；同步后一放就炸，`zcds-king-dance` 从 19 红直接变 1 红。
+  **判据：`tests/zcds-model.test.ts` 的「remoteRef 与转表产物逐格一致」**（同步前 67/68，
+  同步后 68/68）。
+
+剩 27 条 `pvpSkillPlan.desc` 与 `armySkillLevelUp.desc` 不一致（141 → 27，本次同步修掉 114、
+新引入 0）—— 那是设计案两个页面的文案漂移，要改 xlsx 真源，属于另一件事。
+
+
+## 46. 结算胜负 UI 特效与地块翻转同起同落（2026-11-25 第 48 批）
+
+需求原文：「判定出胜负时，地块翻转的结算动画同步播放，胜利播放胜利 UI，失败播放失败 UI
+特效，特效需要匹配屏幕宽度 720px，填充整个宽度，持续的时间和地块翻转结算动画时间一致」。
+
+**「地块翻转的结算动画」= `ZCVictorySweep` 的三段式扫场**（铺场 / 回正 / 脉冲）。它没有
+"时长常量"可抄 —— 总时长 `victorySweepDuration(stepCount)` 随地图行数变，所以：
+
+1. `ZCVictorySweep.durationSeconds` 暴露本段时长，**和 `isPlaying` 共用同一个函数**；
+2. `ZCGameRenderWorld.victorySweepSeconds` 转出来给 `ZCGame.playOutcomeEffect` 用；
+3. 特效的 `timeScale = 扫场时长 / 片段时长` ⇒ 整段动画被拉伸/压缩到正好铺满扫场那一段
+   （不是"播完就停"，也不是循环）；
+4. 销毁时刻 = `outcomeEffectElapsed >= outcomeEffectSeconds`，与 `advanceVictorySweep`
+   在同一处、吃同一个 `dt` 推进 ⇒ 两边同起同落（那条「结算总览还没起」的早退分支两边
+   都不吃这一帧，否则会拉开一帧）。
+
+**胜负判定**：`frame.snapshot.status`（`victory` / `defeat`）→ `zcOutcomeAnimationOf`。
+平局与非胜负态返回空串，不播。
+
+**尺寸**：按画布**宽**折算到 720（`zcUiBannerScale`，骨架画布 744×744、可见横幅 726×257）。
+按高归一只有 ~340 宽，与「填充整个宽度」正好相反。⚠️ 这条与特效尺寸那条（`area` 地面特效
+按 alpha 紧致 bbox）**不是同一套口径**：这里是 UI 横幅、按画布宽铺满屏幕。
+
+**接口拆分**（2026-11-25 与 §48 一起抽的）：节点组装在 `view/ZCUISpineBannerFx`
+（`createZCUISpineBannerNode` / `destroyZCUISpineBanner` / `isZCUISpineBannerAlive`），
+数值口径在 `model/ZCUISpineBannerStyle`（`zcUiBannerScale` / `zcUiBannerTimeScale` /
+`zcUiBannerCenterOf` / `zcUiBannerCanvasWidthOf` / `zcUiBannerClipSecondsOf`）。
+结算与开局**共用这两份**，各自只留「播哪一段、播多久」在 `ZCSettlementOutcomeStyle` /
+`ZCBattleStartStyle` 里。原来的 `view/ZCOutcomeEffectFx.ts` 已删。
+
+**层级**：挂 `hudView.node`（HUD 根节点，720×1280 设计坐标）并置顶，**不能**挂
+`mapLayer` —— 那条在 ScrollView 里会跟着镜头缩放，宽度就不受控了。居中按父级
+`(0.5 − anchor) × size` 反算，不硬写 `(0,0)`。
+
+**资源**：`ZC_BATTLE_FX_PATHS.settlementOutcomeSkeleton`
+（`胜利失败UI特效/ddz_sgfc_sl_ani`），`ZCGame` 按 `sp.SkeletonData` 加载、**不进**
+`ZC_BATTLE_COMMON_PREFABS`。动画名来自骨架本身：`ddz_sgfc_sl_ani` = 胜利、`ddz_sgfc_sb_ani`
+= 失败（atlas 的 `sl` / `sb` 两个 slot；`.skel` 里只有这两段，用例会扫二进制钉死，
+美术换骨架后名字对不上会立刻红）。
+
+🔴 两个坑：
+
+- **`shutdown()` 仍要显式收一次**：节点在 `hudView` 子树里、会随 HUD 一起销毁，但组件销毁
+  是**下一帧**生效 —— 不先收的话收尾那一帧骨架还在吃 `update`（同 killBanner / 通报口径）。
+- **给 `ZCGame.ts` 加 import = 改 N 个用例的沙箱白名单**：`grep ZCDCLogSwitch tests/` 那批
+  （含 `loadGameModule()` 这种 `return {}` 的宽松桩）会静默拿到空模块 ⇒ 结算分支抛
+  `zcOutcomeAnimationOf is not a function`。宽松桩要给**真模块**，强白名单
+  （`assert.ok(name in dependencies)`）要补最小桩。
+
+判据：`tests/zcds-outcome-effect.test.ts`（11 条）。
+
+## 47. 冲锋三卡统一换【战士通用剑气】（2026-11-25 第 49 批）
+
+需求原文：「现有卡牌的角色技能效果中使用了轻骑兵冲锋的统一换成【战士通用剑气】特效，
+并制作格式一致的预制，飞行中的定格帧选择 skill_1_24，子弹的朝向目标的方向参考示例图」。
+
+### 47.1 涉及的三条技能（都是冲锋车道）
+
+| 技能 | 卡 | 车道 | 行程 |
+| :--- | :--- | :--- | :--- |
+| 菌盾冲锋 101204 | 菇八戒 68012 | `charge_shield` | 朝目标方向定长 1 格 |
+| 冲锋 102303 | 南瓜战神 68023 | `legacy_dash` | 朝最近敌人 3 格（不超过目标） |
+| 尖刺冲锋 102703 | 爆锤莲王 68027 | `legacy_dash` | 朝面朝方向 2 格 |
+
+改前三条共播 `units/projectiles/轻骑兵_冲锋/轻骑兵_冲锋`（木马骑兵冲锋残影）。
+出口只有一个：`ZCDashFx.ZC_DASH_EFFECT_PREFAB_PATH` → `ZCSkillTriggerSystem.pushDashCastEvent`。
+
+### 47.2 素材与「飞行定格帧」
+
+源素材是 `070-1-Skill_1_23 … _37` 共 15 帧（1646×673 大画布，内容只占右下 382×437）。
+用户口径是「**飞行中的定格帧**选 skill_1_24」⇒ 弹体飞行途中**定格**在这一帧，不逐帧播：
+
+- 只把 `_24` 打进图集（内容框 `(1215,124)-(1597,561)` 裁掉 88% 空白后等比缩到 **123×141**，即屏上尺寸）；
+- 其余 14 帧搬去 `tmp/projectile_src/战士通用剑气/`（`CACHE_UNUSED_FRAMES`）——
+  留在 bundle 里就是 14 张没用上的大图，`removeImageInBundle` 管不到散图；
+- `anim` 仍是单帧 clip（**循环**：单帧不循环在某些机型会闪一下），时长 1/24 只是占位；
+- 事件寿命由模型给（`ZCEffectTuning.dashSeconds = 0.3`），**不由 clip 推**。
+
+### 47.3 格式一致的预制体
+
+由 `tools/build_warrior_qi_fx.py` 生成（与第 45/46 批同一套 `build_dart_attack_fx` 底座），
+产出三件套 + prefab：
+
+```
+战士通用剑气/atlas/070-1-Skill_1_24.png + 战士通用剑气.pac
+战士通用剑气/anim/战士通用剑气-loop.anim
+战士通用剑气/战士通用剑气.prefab
+```
+
+结构与全工程 40+ 个投射物 prefab 同构：根 Node（只分组、无组件、`_lscale 1`）+ 子节点
+`offset`（UITransform / Sprite / Animation，**`_lscale = 1`**；尺寸真源是 `_contentSize 123×141`，
+2026-11-26 去掉了原来的 0.55 倍率，贴图即屏上尺寸）。
+
+🔴 素材目录原名 `战士通用剑气特效`，本批按「`<效果名>/<效果名>.prefab`」的既有口径
+改名为 `战士通用剑气`（目录 meta uuid 保留，无引用受影响）。
+
+### 47.4 🔴 朝向偏移 = 180°（这条最容易漏且不报错）
+
+把 `skill_1_24` 的 alpha 掩码打成字符画就能读出来：**中段的右边界从 57 列缩到 34 列**，
+上下两端的边界仍在 57 列 ⇒ 凹口朝 **右**、凸面（刃口）朝 **左**。用户示例图同样是
+「凸面朝左 + 红箭头朝左」——箭头 = 飞行方向。
+
+所以美术的正前方是 **−X**，而视图的算式是 `转角 = atan2(Δy, Δx) + facingOffsetDegrees`，
+⇒ `facingOffsetDegrees = 180`。漏了它就是「剑气横着飞」，一帧都不报错。
+
+### 47.5 🔴 登记 `flight`，不是 `facingDegrees`
+
+两条路都能把角度转对，但只有 `flight` 会让它**动**：
+
+- `facingDegrees`：位置仍走锚点（第 15 批的 `midpoint`），表现为「剑气凭空贴在半路播一次」；
+- `flight`：位置按 `from → to` 逐帧插值、转角走飞行分支，且 `anchor` 对它**不生效**
+  （飞行分支在锚点逻辑之前就 `return`）⇒ 目录里 `anchor` 保持默认 `caster`，
+  别再抄回 `midpoint`（会让人以为它还在贴中点）。
+
+本批登记：`flight = { speed 420, minSeconds 0.14, maxSeconds 0.6, facingOffsetDegrees 180 }`，
+`layer: 'top'`（剑气从角色身前掠过，压地面层会被挡住）。
+
+### 47.6 抬升：必须走事件级 `visualLiftPx`
+
+旧残影画布 120×56，压着冲锋线放只低 28px，看不出问题；剑气是 **123×141**（≈1.4 个兵种高），
+居中对齐就等于**一半插进地面**。所以补了 `ZCDashFx.ZC_DASH_EFFECT_LIFT_PX = 40`
+（≈兵种视觉腰线），由 `pushDashCastEvent` 写进事件、`ZCCombatEffectView` 的**飞行分支**读它。
+
+🔴 三条不许动的边界：
+
+1. **不能写进 prefab 的 `_lpos`**：宿主节点按弹道转角（剑气朝右时整体转 180°），本地 +Y 会被
+   一起转成「侧移 / 下沉」，四个方向的相对高度各不相同，且一帧都不报错。
+2. **加在 `mapToViewY` 之后**：位置是父空间坐标，屏幕竖直方向，与转角无关。
+3. **飞行分支原来没有这一格**（只有弹道分支读 `zcCombatEffectLiftY`）：本批补上
+   `+ (event.visualLiftPx ?? 0)`，缺省 0 ⇒ 存量唯一登记了飞行段的近战特效
+   （斧盾兵反击气刃 30271）一个像素都不动。
+
+### 47.7 尺寸：只认 prefab 子节点那一格
+
+被替换的残影是 300×140 画布 × `nodeScale 0.4` = 屏上 120×56。剑气是竖长条（382:437），
+按**横向**对齐同一量级：`PREFAB_SCALE = 0.55` ⇒ 屏上 **123×141**。
+
+🔴 目录里**不写** `nodeScale`。`ZCCombatEffectView.render` 每个渲染帧都会 `setScale`
+在宿主节点上，而尺寸烘焙在子节点 `_lscale` 里，两处都写就是 0.55 × nodeScale 双重缩放，
+改一次大小要动两个地方。要调大小只改脚本的 `PREFAB_SCALE` 重跑。
+
+### 47.8 旧残影为什么还留着
+
+`chargeDash`（轻骑兵_冲锋）已经不在任何行为组里，但**不能删**：配表 `pvpSkill 30191`
+「轻骑兵普攻」的 `effectPrefabPath` 就是这条字面量，它不查目录、也不进预热。
+目录里那条 spec（`nodeScale 0.4` / `anchor midpoint`）只为它保口径。
+
+### 47.9 判据
+
+| 文件 | 钉住的东西 |
+| :--- | :--- |
+| `tests/zcds-warrior-qi-batch49.test.ts` | 10 绿：两级结构 + `_lscale 0.55` / 定格帧 = skill_1_24 / 单帧 clip 循环 / 图集 224×256 且已裁空白 / 两条车道改播剑气 / `flight` + 180° + `layer top` + 不叠 nodeScale / 旧残影口径保留 / **全链路 tick 推的是剑气事件 + 带抬升** / prefab 不许带纵向摆位 / 生成脚本仍是唯一入口 |
+| `tests/zcds-charge-dash-batch15.test.ts` | 「表现」那条从「中点锚点」改成「飞行 + 180°」（第 15 批的旧口径作废，行为用例一条没动） |
+| `tests/zcds-combat-effect-flight.test.ts` | 6 绿：给飞行分支补抬升后，`facingOffsetDegrees` 与位置口径未变（缺省 0 走原路） |
+| `tests/zcds-effect-path-parity.test.ts` | 字面量快照加 `warriorQi`；两条车道路径组改 `[warriorQi, dashGuard]`；预热清单换名 |
+| `tests/zcds-effect-catalog-parity.test.ts` | 增量路径清单加 1 条 |
+
+### 47.10 遗留 / 观察项
+
+- **抬升 40 是估的**（兵种视觉画布 98 的腰线）。实机上如果觉得刀锋压着头顶或还在地面，
+  只改 `ZCDashFx.ZC_DASH_EFFECT_LIFT_PX` 一个数（事件级，三条冲锋卡同时生效）。
+- **行程远小于尺寸**：冲锋只走 1~3 格 = 屏上 27~81 px，而剑气本身 123 px 宽 ⇒ 位移幅度
+  读起来不明显，主要靠**转角**表现朝向。若实机觉得「只是转了个方向没飞出去」，
+  要么把 `PREFAB_SCALE` 调小（0.4 → 98 px），要么按行程拉长 `dashSeconds`。
+- 素材丢了 14 帧，只留飞行帧。以后要做命中帧 / 拖尾帧，从
+  `tmp/projectile_src/战士通用剑气/` 取回，把 `FLIGHT_FRAME` 扩成 `base.FRAMES` 列表重跑。
+- 无音效（需求没提）。
+
+## 48. 对局开始「开局对战」横幅：全景停留那一拍播一次（2026-11-25 第 50 批）
+
+需求原文：「对局开始进入到地图时，镜头最高还没开始推镜头时，播放一次对局开始特效，
+对局开始特效要填充满 720 宽的屏幕横度」。
+
+### 48.1 「镜头最高、还没推」对应哪一段代码
+
+`ZCGameHUDView.playMapIntro` 把镜头摆到全景（`mapLayer.setScale(overviewScale)`）之后，有一条
+`tween.delay(MAP_OVERVIEW_HOLD_SECONDS = 0.45)` 的停留，再 `.to(MAP_ZOOM_DURATION_SECONDS = 0.9)`
+推镜头到 `mapSettleScale`。**那 0.45s 就是唯一可播窗口**，落地成 `mapIntroHolding` 这个旗标：
+
+```
+mapIntroHolding = true      // 全景摆好、起 tween 之前
+  → playBattleStartEffect() // 同帧就播（不等第一帧 update）
+  → tween.delay(0.45).call(() => { mapIntroHolding = false })  // 推镜头开始 = 关窗
+  → tween.to(0.9, …)
+```
+
+🔴 **关窗必须挂在 tween 上**，不能写在 `mapIntroPlaying = false` 那里：`mapIntroPlaying` 覆盖的是
+「入场全程 1.35s」，而需求要的是「最高点那一拍」。挂在 tween 的 `.delay()` 与 `.to()` 之间，
+时间就自动跟着 `MAP_OVERVIEW_HOLD_SECONDS` 走。
+
+另外三条会**掐断**入场的路径也必须关窗（否则窗口一直开着，异步补播会在推镜头之后触发）：
+`showSpawnSelectionMap()`（选点）、`setSpawnSelectionMode(true)`、`resetMapPosition()`（一键复位）。
+三处都在 `mapIntroPlaying = false` 旁边加了 `mapIntroHolding = false`。
+
+### 48.2 一局只播一次 + 骨架异步到货才播
+
+- `battleStartPlayed` 挡重复（`playBattleStartEffect` 每帧 / 每次注入都会调，靠它幂等）；
+  **置位在建节点之前** —— 中间抛错也不会下一帧再建一条。
+- 骨架必然晚于 `playMapIntro`（那条是 `initialize` 里同步跑的，`assets.load` 是异步的）⇒
+  `ZCGame.loadBattleStartBanner` 到货后调 `hudView.setBattleStartEffect(data)`，由 HUD 自己判
+  「窗口还开着就补播，已经关了就不播」。
+- 🔴 **发起时机必须在 `createGame` 之前**：`createGame` 里 `hudView.initialize()` 会**同帧**跑
+  `playMapIntro`，晚一步就一定错过那 0.45s。
+- `playMapIntro` 重开会先 `clearBattleStartBanner()` 再清 `battleStartPlayed`：否则重开一局会先看到
+  上一局的「对战开始」闪一下（节点挂在 HUD 根上，不随 `mapLayer` 重建）。
+- 播完按时长收：`clip + 0.1` 秒后 `scheduleOnce`（`+0.1` 让尾帧播完）；`clip` 读不出来才退
+  `ZC_BATTLE_START_FALLBACK_SECONDS = 3`。**永远不留永久驻留**。
+- `onDestroy` 显式 `clearBattleStartBanner()` + `battleStartSkeleton = null`（引擎的 `destroy`
+  下一帧生效，且骨架引用不放会跟着 HUD 泄漏一局）。
+
+### 48.3 动画名不是猜的
+
+`score_anim.skel` 里只有两段：`dzks_xinxi`（入场，就是这条）与 `dzks_xinxi_jingtai`（静态版，
+留给后续「常驻展示」）。atlas 的图块也印证 —— `kaishi` / `kaishi_1`（开始）、
+`blue_line` / `red_line`（红蓝阵营线）、`touxiang`（头像框）。
+用例扫 `.skel` 二进制钉死这两段名（spine 找不到动画只打日志、不抛，配错名字实机是静默不播）。
+
+### 48.4 铺满 720：与结算那条共用一份口径
+
+骨架画布 560×560、可见横幅 558×109（atlas 里 `blue_line` 是 546×106）⇒
+`scale = 720 / 560 ≈ 1.2857`，屏上可见宽 ≈ 717。**按画布宽、不按可见高**。
+
+开局这条**不传 `durationSeconds`**：需求只说「播放一次」，传了就会被 `timeScale` 拉伸成
+「铺满某个时长」——那是结算那条的口径（§46）。
+
+节点组装与数值口径都在 `view/ZCUISpineBannerFx` / `model/ZCUISpineBannerStyle`（见 §46），
+`ZCBattleStartStyle` 只留三个数：动画名、`CENTER_OFFSET_Y`、兜底秒数。
+
+### 48.5 🔴 又踩了一遍「给 ZCGame 加 import = 改 N 个用例的沙箱白名单」
+
+`initialize` 里新增一次同步发起的加载，直接打穿两处桩：
+
+| 用例 | 桩型 | 症状 | 修法 |
+| :--- | :--- | :--- | :--- |
+| `zcds-game-resources` | 宽松 `return {}` | `ZC_BATTLE_FX_PATHS` 变 undefined，读 `.battleStartBanner` 抛 TypeError，3 条全红 | 补 `ZCGameResourcePlan` 桩，三条路径给**空串**（命中 `loadBattleSpine` 的 `if (!path) return`） |
+| `zcds-spawn-base-confirm` | 强白名单 `assert.ok(name in dependencies)` | `'./view/ZCUISpineBannerFx'` 缺桩 ⇒ 4 条借用/归还整个不跑 | 补 `ZCUISpineBannerFx` / `ZCUISpineBannerStyle` 最小桩 |
+| `zcds-hud` | 自建 `cc` 桩 | `sp` 不在 `cc` 里 ⇒ require 期就炸 | `cc` 桩加 `sp: { Skeleton, SkeletonData }`，再补两条 banner 桩 |
+
+顺带修了一处产品侧隐患：`loadBattleSpine` 加 `if (!path) return`。三条骨架是**可选增强**，
+路径没配时不能因为一行 `undefined` 把 `initialize` 的 `catch { shutdown(); throw }` 触成
+「整局开不起来」。
+
+### 48.6 判据
+
+`tests/zcds-battle-start.test.ts`（14 条，全绿）：
+
+| 分组 | 钉住的东西 |
+| :--- | :--- |
+| ① 播哪一段 | 两个动画名在 `.skel` 里真的存在且只有这两段 / 静态版不许当开局动画用 / 竖直偏移只走 `ZC_BATTLE_START_CENTER_OFFSET_Y`，通用件里不许出现开局常量 |
+| ② 什么时候播 | 窗口在全景摆好之后、起 tween 之前开 / `.delay()` → 关窗 → `.to()` 的先后顺序 / 三条掐断路径也要关窗 / 起播入口自己再判一次窗口 + 幂等 |
+| ③ 只播一次、播完收 | 置位在建节点之前 / `playMapIntro` 重开先收残的 / `clip + 0.1` 与兜底秒数 / `only` 语义（不收下一局的） / 异步到货补播 + `hudView` 没了就不碰 / `onDestroy` 显式收 |
+| ④ 铺满 720 | `zcUiBannerScale(560) = 720/560`，屏上可见宽 ≥ 714 / 开局这条不传 `durationSeconds` / 画布宽取不到退回 1 不是 0 |
+| ⑤ 资源与接线 | 路径只在 `ZC_BATTLE_FX_PATHS` 声明一次、不进 Prefab 预热清单 / 发起时机在 `createGame` 之前 |
+
+## 49. 野怪集火按钮贴到血条上方 3px + 未解锁不出文案（2026-11-25 第 51 批）
+
+> 用户原话（配图圈住野怪格顶上那枚集火按钮）：
+> 「特效按钮移动到血条位置上方 3px 的位置，隐藏未解锁的文字提示」
+
+### 49.1 按钮位置：`+4` → `+3`，并抽成常量
+
+`ZCHexView.positionMonsterHeader` 是野怪头顶那组「血条 + 集火按钮」的**唯一写入口**
+（每帧算，因为模型头高随 `prefabSize` / 骨架 bounds 变，穷举不了）：
+
+```ts
+bar.setPosition(x, barY, …);
+focus.setPosition(x, barY + halfBar + ZC_MONSTER_FOCUS_GAP_ABOVE_BAR + halfButton, …);
+```
+
+🔴 `barY` 是血条**中心**，所以「按钮底边 ↔ 血条顶边 N px」要 **`+ halfBar + N + halfButton`**
+（两个半高各加一次）。只加一个就是中心距，看着比需求高 / 低一整个半高。
+`ZC_MONSTER_FOCUS_GAP_ABOVE_BAR = 3` 由 `ZCHexView` 导出，原值写死的 `4` 已删。
+
+别和 `ZC_MONSTER_HEALTH_BAR_GAP = 6`（`ZCUnitView`，管「模型头顶 → 血条底边」）混：
+两个间距夹的是不同的两条缝，改一个不动另一个。
+
+### 49.2 prefab 的 `_lpos` 也要跟着走（编辑器 / 归位点）
+
+`ZCGameHex.prefab` 的 `MonsterFocus`：`_lpos.y` **120 → −6.739**。
+
+- 实战坐标每帧被 `positionMonsterHeader` 覆盖，改 prefab **不影响实战**；
+- 但它是编辑器里的基准位、也是 `restoreMonsterHeader` 的归位点（`monsterFocusBase` 从它捕获），
+  和代码不同口径会让「拖 prefab 一点反应都没有」，事后还得反算；
+- 算法：血条 `_lpos.y −40.239` + 半高 9.5 = 顶边 `−30.739`，+3 得按钮底边 `−27.739`，
+  + 按钮半高 21 = 中心 `−6.739`。
+
+🔴 **Cocos 的 y 向上**：`_lpos.y + 半高` 是**顶**边，`− 半高` 才是**底**边。本批第一版按
+`−30.74 − 3 − 21 = −54.74` 写的（把「向上」当成了「向下」），按钮直接沉进血条底下，
+`zcds-resource-unit-preview` 的 prefab 那条断言把它挡住了。
+
+`FocusSpine` 是 128×128、挂在 150×42 的点击区里，**本来就上下各溢出 43px** —— 这是光效
+（大于点击区才有"浮在按钮外面"的观感），不要按点击区尺寸去裁它。
+
+### 49.3 未解锁：整段文字收起
+
+`renderMonsterFocus` 里新增一行 `this.monsterFocusLabel.node.active = unlocked;`，
+同时未解锁时 `string` 也写空串：
+
+```ts
+this.monsterFocusLabel.node.active = unlocked;
+this.monsterFocusLabel.string = unlocked
+    ? (remaining > 0 ? `${style.text} ${remaining.toFixed(1)}s` : style.text)
+    : '';
+```
+
+| 为什么两件事都做 | |
+| :--- | :--- |
+| `node.active` | 硬保证：那一态只有「定格帧 + 压灰」的底特效，读起来就是"点不动" |
+| `string = ''` | 顺手把冷却秒数一起挡住 —— 未解锁时 `remaining` 可能非 0，压上去会被读成假倒计时 |
+
+`MONSTER_FOCUS_STYLE.locked.text` 改成 `''`（**这一支不能删**：`styleKey` 还要靠它取
+`color 130,140,150`，`renderMonsterFocus` 也仍然只走一个分支）。
+`applyMonsterFocusSpine(!unlocked)` 的定格 / 压灰口径不变（见 §…「倒数第 2 帧」那条）。
+
+> 与策划 spec 的差异：`docs/spec/中立野怪规则.md` 仍写「按钮显示未解锁、集火野怪、取消集火和
+> 冷却剩余秒数」。2026-11-25 起**未解锁不出文案**，以本条为准（spec 是需求源，未回改）。
+
+### 49.4 判据
+
+`tests/zcds-resource-unit-preview.test.ts` **21/21**：
+
+| 用例 | 钉住的东西 |
+| :--- | :--- |
+| 野怪按钮显示… | 未解锁 `label.node.active === false` 且 `string === ''`；解锁后文字回来（池化复用不能一直藏着）；颜色仍随 `styleKey` |
+| 野怪通过模型表现沉睡与攻击… | `focus.y − 42/2 === bar.y + 19/2 + 3`（写死 3，量的是底边↔顶边） |
+| 集火按钮在 prefab 上… | `MonsterFocus._lpos.y − 21 === HealthBar._lpos.y + 高/2 + 3`（编辑器基准位同口径） |
+
+改动只落在 `ZCHexView.ts` + `ZCGameHex.prefab` + 该用例文件；`zcds-hex-activation` 等 26 个
+涉及地块视图的用例逐条对过基线（`applyPulseRipple` null、`positionResourceUnit` 带 origin
+这类既存红），**零新增**。
+
+
+## 50. 冰法师通用子弹：急冻瓜两条技能共用一颗弹体（2026-11-25 第 51 批）
+
+需求原文：「急冻瓜的【冰山陨落】【急冻光线】都使用新的冰法师通用子弹特效，制作格式一致的
+预制体，飞行中是循环的序列帧，普通子弹飞行时箭头的方向朝向目标，特殊技能垂直下落的子弹时
+是箭头方向直线下落，急冻光线使用特效不用拉长，直接当场急冻子弹使用，不用改技能名称」。
+
+### 50.1 一个 Set 两套产物
+
+素材在 `units/projectiles/` 下**平铺散图**（不是 spine），用
+`tools/build_ice_mage_bullet_fx.py` 生成两套同构产物（底座是 `build_dart_attack_fx.py`，
+与 `战士通用剑气` / `玉米射手_普攻` 完全一致）：
+
+| Set | 用在哪 | 帧 | 采样 | 屏上 |
+| :-- | :-- | :-- | :-- | :-- |
+| `冰法师通用子弹` | 急冻光线弹体 / 冰山陨落落地一击 | `fashe1_0..6`（7） | 24（0.292s 循环） | 38×77 |
+| `冰法师通用子弹命中` | 上面两条的命中爆炸 | `fashe2_00..12`（13） | 12（1.083s 一次性） | 88×128 |
+
+结构 = 两级节点（根 `_lscale 1` 只分组 + 子 `offset._lscale` 是尺寸唯一出口）
++ `Sprite(_sizeMode=0, _isTrimmedMode=false)` + `Animation(playOnLoad=false, wrapMode=2 循环)`。
+`xuli_*`（蓄力 7 帧）本轮不用，脚本按 `CACHE_UNUSED_FRAMES` 搬去 `tmp/projectile_src/`。
+
+### 50.2 🔴 素材正前方是 +Y，不是 +X
+
+逐帧量 alpha>8 的框：第 0 帧是 200×200 的冰爆贴上方（y=46），之后内容**只往下长**（到 y=581）、
+宽度 200→280 ⇒ **冰爆头在上、尾迹在下**。用户示例图（红箭头自下往上穿过冰爆）是同一个结论。
+
+于是两条路的角度必须分开给，且**都要自洽**：
+
+| 场景 | 走哪条 | 值 | 结果 |
+| :-- | :-- | :-- | :-- |
+| 急冻光线（水平飞） | 弹道分支：`转角 = 弹道方向 + facingOffsetDegrees` | `-90` | 弹道朝右 ⇒ 转 −90 ⇒ 冰爆头指向右 = 目标 |
+| 冰山陨落（垂直落） | 事件级 `angleDegrees`（不查表） | `180` | 素材「上」转到「下」= 箭头直线下落 |
+
+🔴 **两者不能混用**：弹道朝下时 `−90 + (−90) = −180 ≡ 180`，与落地那条完全相等 ——
+用例把这两个数钉成「同为 180°」，改任何一个都会红。
+
+⚠️ 旧值 `−90` 是给**旧冰锥**（正前方 +X，水平朝右）用的。换素材时只改路径不改角度 =
+冰爆头朝右躺着砸下来（箭头指侧面），且**不报错**。
+
+### 50.3 🔴 弹道分支原来不吃朝向偏移（本批补的）
+
+`ZCCombatEffectView` 的 projectile 分支原来只有一句纯弹道角度：
+
+```ts
+const angle = Math.atan2(mapToViewY(toY - fromY), mapToViewX(toX - fromX)) * 180 / Math.PI;
+```
+
+melee 的飞行分支却是 `zcCombatEffectFacingDegrees(angle, flight)`（弹道 + 偏移）。
+后果：**任何「正前方不是 +X」的弹体横着飞**，而既有所有 projectile 特效的正前方正好都是 +X，
+所以一直没暴露。第 51 批改成两处同一套算式：
+
+```ts
+const angle = zcCombatEffectFacingDegrees(atan2(...) * 180 / Math.PI, zcCombatEffectFlightOf(path));
+```
+
+存量零变化的前提：**登记过朝向的路径都不走弹道**。目前是四条（斧盾兵反击气刃 30271 /
+消灭学霸普攻 30713+30852 / 机甲菇扇形 / 战士通用剑气），全是 melee 或 area；
+未登记的路径 `flight` 为 null ⇒ 偏移 0。用例 ⑤ 把这条钉住 —— 谁把其中一条改成 projectile，
+它就会红，那正是要重新确认朝向的时候。
+
+### 50.4 急冻光线：从「原地闪一下」改成真的飞
+
+`applyRandomStrike` 拿不到 missile spec 时走 else 分支：**目标身上原地播一次 `area` + 立刻结算**。
+所以急冻光线以前没有飞行过程，也就没有"朝向目标"可言。本批登记：
+
+```ts
+'68024': { missilePrefabPath: iceMageBullet, impactPrefabPath: iceMageBulletImpact, arcOffset: 0, warmup: false }
+```
+
+三条配表口径，各有原因：
+
+- `arcOffset: 0` —— 直线飞。弧线（`sin(π·progress)` 横向偏移）是镭射飞龙 68010 的口径。
+- **不配 `count`** —— `strikeCount = 3` 要「三个目标各一发」；配了 count 会从候选里重复取，
+  3 发砸在同几个人身上（`ZCSkillResolutionSystem` 的 `volley` 切片）。
+- 不配 `speed` —— 复用 `attackProfile.projectileSpeed`，与普攻弹速一致。
+
+副作用要知情：伤害结算从「当帧」变成「弹道到达」，麻痹 3 秒同样延后到命中
+（走 `onHitStatusId`）。这正是「有飞行才有朝向」的必然代价。
+
+### 50.5 🔴 落地一击的路径以前根本没被资源计划收集
+
+`SELF_AURA_LANDING_FX_BY_UNIT` 是**另一张表**，不在 behavior 组的 `unitPrefabPaths` 里，
+`ZCVisualResourcePlan` 也没单独收它。旧 `iceCone` 之所以能显示，是因为它同时是**冰法师普攻**
+（pvpSkill 30201）的 `effectPrefabPath` —— 只有本局有冰法师时才被顺带收进去。
+
+第 51 批换路径后这条就断了（本局只有急冻瓜 ⇒ 新子弹不加载 ⇒ 区域照常结算、天上什么都没砸下来、
+**且不报错**）。修法：在 `ZCVisualResourcePlan` 的 behavior 循环里补一行
+`paths.push(zcSelfAuraLandingPath(key, unit.unitId))`。
+
+### 50.6 「不用拉长」与「不进首包」
+
+- **不拉长**：尺寸只由 prefab 的 `offset._lscale` 定（弹体 0.3、命中 0.5），目录**不登记
+  `nodeScale`**，也没有任何按弹道距离 / 判定半径算尺寸的代码。屏上 38×77 ≈ 0.3 格宽、
+  0.86 格长（格面 123×90）—— 是「一颗弹体」而不是「一条射线」。用例 ④ 用这个区间兜底。
+- **不进首包**：`zcWarmupEffectPaths` 原来把 `zcEffectMissilePaths()` **全部**塞进开战预热。
+  两颗 prefab 合计 ~8MB（13 帧命中帧每张 300~600KB）只服务一张卡 ⇒ 给
+  `IZCEffectMissileSpec` 加可选 `warmup?: boolean`（缺省 true，镭射飞龙零变化），
+  68024 标 `false`，改由 `ZCVisualResourcePlan` 按本局阵容收。
+
+### 50.7 判据
+
+`tests/zcds-ice-mage-bullet-batch51.test.ts`（9 条，全绿）：
+
+| 分组 | 钉住的东西 |
+| :--- | :--- |
+| ① 格式 | 两级节点 / `offset._lscale` 是尺寸唯一出口 / 根 `_lpos.y = 0` / UITransform = 并集框裁后画布 / `_sizeMode=0` + `_isTrimmedMode=false` / `wrapMode=2` 循环 / 帧数与采样 / `playOnLoad=false` / 自动图集开 `removeImageInBundle` |
+| ② 朝向 | 弹道偏移 −90 / 弹道朝右 ⇒ −90、朝上 ⇒ 0、朝左下 ⇒ −225 / 落地 180 / **两条路算出的「朝下」必须同为 180°** / 落地路径只给 68024，其他 self_aura 单位仍是 null |
+| ③ 接线 | 登记成 missile（arcOffset 0、无 count、无 speed）/ 既有镭射飞龙 36 与 3 不变 / 落地路径与命中路径都在本局清单里 / 别的卡不在本局时一条都不下 |
+| ④ 尺寸与首包 | 目录不登记 nodeScale / 层 `top` / 命中没有 flight / 屏上 20~100 宽、40~140 长 / `warmup: false` 且不在 `zcWarmupEffectPaths()` / 镭射飞龙两条仍在预热 |
+| ⑤ 弹道分支 | projectile 与 melee 用同一套「弹道 + 偏移」算式 / `zcCombatEffectFacingDegrees(` 全文只出现 2 次 / 登记过朝向的四条都不是 −90 / 未登记路径仍返回纯弹道角度 |
+
+配套更新：`zcds-effect-path-parity`（`PATH_LITERALS` 加两条，9/9）、
+`zcds-effect-catalog-parity`（`POST_MIGRATION_PATHS` + 新增 `POST_MIGRATION_MISSILES` 增量表，6/6）。
+
+---
+
+## 51. 区域洒弹：子弹从区域上方垂直下落（2026-11-25 第 52 批）
+
+需求原文：「篮球天才，急冻瓜，杰克藕这种在指定区域内发射子弹的都需要，让子弹呈弧线飞行到区域的
+任意坐标内，在区域内触碰到任意敌方目标造成伤害，没有触碰到就没伤害，**或者选择方案 2 在区域的上方
+垂直往下掉，哪个方案实行快就用哪个**」。
+
+### 51.1 为什么是方案 2（这个决定写进了模块注释）
+
+| 方案 | 要动的地方 | 代价 |
+| :--- | :--- | :--- |
+| 1 弧线飞入 + 触碰判定 | 弹体飞行 + 碰撞检测 + 把「区域 tick / 锁定目标」改成「命中判定」 | **改战斗结算**：三张卡的数值模型全变（区域 3s × 每 0.5s tick → 单发命中），配表、平衡、既有用例一并翻 |
+| 2 上方垂直下落 | 表现事件多一个竖直起始偏移，视图按进度递减 | **纯表现**，结算与数值一个字节不动 |
+
+选 2。所以本批只改「子弹怎么落到那一点」，**不改「落到之后伤谁、伤多少」**。
+真要「没碰到就没伤害」，那是另一批的战斗结算改造，别在这一层硬塞。
+
+### 51.2 一个可选字段 + 两个纯函数
+
+- `ZCGameTypes` 的表现事件加 `dropFromPx?: number`（**屏幕 px**）。缺省不给 ⇒ 视图拿 0 ⇒
+  `+ 0` ⇒ 存量特效位置逐字不变。字段级注释里写清了「这是竖直起始高度，不是坐标」。
+- `view/ZCCombatEffectView` 只在**非飞行 area** 那条定位上叠加：
+
+  ```ts
+  const dropPx = zcBulletDropOffsetPx(event.dropFromPx ?? 0, progress);
+  this.node.setPosition(mapToViewX(event.toX),
+      mapToViewY(event.toY) + (event.visualLiftPx ?? 0) + dropPx, 0);
+  ```
+
+  🔴 **x 仍取 `event.toX`**，只有 y 加 `dropPx`。和 `visualLiftPx` 同一个竖直轴、同一口径
+  （`mapToViewY` 之后是屏幕 y；写进 prefab 的 `_lpos` 会被棋盘转角转成侧移）。
+- `model/ZCProjectileDropStyle`（**零 `cc`**）：`ZC_BULLET_DROP_HEIGHT_PX = 84`（≈0.93 个格面高，
+  `HEX_GRID_FACE_HEIGHT = 90`），`zcBulletDropOffsetPx = height × (1 − progress)`：
+  起播那一帧在最上方，**落地那一刻归 0**（所以 `to` 就是判定点，观感与判定重合）。
+
+`progress` 越界夹到 `[0,1]`、`NaN` 直接返回 0 —— 🔴 `NaN` 泄进 `setPosition` 会让整层矩阵变 `NaN`，
+**整片特效消失且不报错**。高度非正 / 非有限值也一律返回 0。
+
+### 51.3 三条车道，各在自己的推送点带一次
+
+| 单位 | 技能 | 车道 | 推送点 |
+| :--- | :--- | :--- | :--- |
+| `68024` 急冻瓜 | 冰山陨落 | `self_aura` 的**落地那一击** | `ZCSkillResolutionSystem`，紧跟在 `ZC_SELF_AURA_LANDING_ANGLE_DEGREES` 之后 |
+| `68008` 杰克藕 | 戈壁箭雨 | `random_strike` 的 **else 分支**（每波 5 支箭各自落到目标头上） | 循环**外**算一次 `const dropHeight = …`，事件里 `angleDegrees: dropHeight > 0 ? 180 : undefined` |
+| `68030` 篮球天才 | 篮球火 | `mode: area` 的**地面区域**每波 | `ZCGroundZoneSystem.resolveWave`，经 `context.unitById?.(zone.sourceUnitId)?.unitId` 换回定义 id（⚠️ 第 53 批起改走飞入段，见 §52） |
+
+三条各有坑：
+
+- 🔴 **戈壁箭雨必须补 `angleDegrees: 180`**：素材固有朝 +Y，prefab 的 `arc` / `offset` 子节点已预转
+  −90（合成 +X）⇒ 根节点再转 180 才是「头朝下」。不给就是斜着飘下来。名单外**保留 `undefined`**
+  （= 走目录登记的朝向），不许写成 `180` 兜底。
+- 🔴 **区域只有实例 id**：`zone.sourceUnitId` 是**运行时实例**，直接拿去查名单永远查不到
+  ⇒ 必须 `unitById` 换回 `unitId`。漏了不报错，只是「篮球火不掉」。
+- 全项目 `dropFromPx: ` 只许出现 **3 次**（用例 ② 数着）。多一处就是有人又给别的技能加了「从天而降」。
+
+### 51.4 名单与范围圈同值，但两张表故意分开
+
+本节写于第 52 批，当时 `ZC_BULLET_DROP_UNITS` 与 `ZCSkillRangeRingFx.ZC_SKILL_RANGE_RING_UNITS`
+**同值**（就是这三张卡），但语义不同：范围圈是「这个技能有区域判定」，落下是「这个技能的子弹从天上掉」。
+
+> ⚠️ **第 53 批已改**：`68030` 篮球火改走「从施法者飞入」（见 §52），下落名单只剩 `68008 / 68024`。
+> 于是两者从「同值」变成**严格包含**：掉的卡一定也画圈，画圈的卡不一定掉。
+> 用例 ① 现在断言的是这个包含关系 + 「68030 仍在圈名单里」。
+
+### 51.5 判据
+
+`tests/zcds-bullet-drop-batch52.test.ts`（5 条，全绿）：
+
+| 分组 | 钉住的东西 |
+| :--- | :--- |
+| ① 名单 | 恰好 `68008 / 68024 / 68030` / 高度 84 / 名单外一律 0（含 `'68030 '` 带空格、`'680301'`、`''`、`null`）/ 与范围圈名单同值 |
+| ① 曲线 | 起播全高 / 一半半高 / 落地归零 / 越界夹住 / `NaN` 不产出 / 高度非法时零位移 |
+| ② 字段 | `dropFromPx?: number` 带注释 / 视图 `?? 0` 兜底 / 叠加在 `mapToViewY + visualLiftPx` 同一轴 / **x 仍取 `to`** |
+| ② 接线 | 三条车道的锚点各一条正则 / `dropFromPx: ` 全文恰好 3 处 |
+| ③ 结算不动 | `hexIdAt(zone.x, zone.y)` 判定圆心不变 / `for (const { unit: victim } of victims)` 不变 / 自 aura 时长口径不被本批改动 |
+
+顺带修一处守卫：`zcds-combat-effect-placement` ⑦ 原来用**固定字符串**
+`indexOf('this.node.setPosition(mapToViewX(event.toX)')` 取分支边界，本批把 `setPosition` 拆成多行就取到 `-1`、
+断言直接红（跟语义无关）。改成 `/this\.node\.setPosition\(\s*mapToViewX\(event\.toX\)/`
+—— 这条守卫钉的是「竖直抬升必须加在 `mapToViewY` 之后」，不该被换行打红。
+
+---
+
+## 52. 篮球火：命中区域钉在敌方单位坐标 + 子弹从本体飞过去 + 无目标不释放（2026-11-25 第 53 批）
+
+需求原文：「篮球少年的【篮球火】技能是以敌方为目标，**在目标坐标释放命中区域**
+**子弹从本地移动到命中区域去，没有目标就不释放**，现在命中区域会出现在自己本体坐标」。
+
+拆成三条判据，三条各自的真源不同，别混：
+
+| # | 判据 | 真源 | 本批动作 |
+| :-- | :--- | :--- | :--- |
+| ① | 圆心 = 敌方单位坐标 | `createAttackGroundZones` 的 `zoneX/zoneY` | 只补注释与用例（代码本来就对，见 52.1） |
+| ② | 子弹从施法者飞到圆心 | `ZCProjectileDropStyle` 飞入段 + 视图插值 | 新做（把 68030 从「垂直下落」名单里摘出来） |
+| ③ | 没有实体敌方目标就不释放 | `createAttackGroundZones` 开头那道闸门 | 新做 |
+
+### 52.1 先证伪：「圆心在自己脚下」不是代码算错了
+
+用真实 `ZCGameModel` 跑（施法者 `-80`，敌方单位 `60`，`combatDistanceScale = 1`）：
+
+```
+t=15.05 area 技能范围_白环  from=[60,0] to=[60,0] src=1@-80     ← 我方那发，圆心在敌人身上
+t=15.05 area 技能范围_白环  from=[-80,0] to=[-80,0] src=2@60    ← 敌方那发，圆心在我方身上
+t=15.10 area 篮球少年_普攻   from=[60,0] to=[60,0] src=1@-80
+zones [ [60,0], [-80,0] ]
+```
+
+- 区域圆心与白圈圆心**恒等于 `target.x/y`**（`zoneCount === 1` 时 `offset` 恒 0）；
+- `pvpSkillPlan` 全表只有 68006 / 68031 / 68032 带 `zoneSelfCentered`，**30848 一条都没有**；
+  36 级参数袋实测 `{"mix.critRate":10,"damageRate":1.4}`。链路（30702 → `empoweredSkillId` 30848 →
+  `mode: area` → `createAttackGroundZones`）逐环核对过。
+
+所以「看着在自己脚下」的两种**合法**来源只剩：
+
+1. `zoneSelfCentered = 1`（配表开关，篮球火没有）；
+2. 目标本来就贴在同一格 —— 而 `110` 表值半径 ⇒ 屏上横向半径 `110 × 0.76875 ≈ 84.6px`，
+   **一颗圈横跨两格**，圆心在贴身的敌人身上时，圈必然压住自己那一格。
+
+第 2 种在画面上就是「圈在自己脚下」，这也正是用户后面两条要求（要看见球飞过去、没目标别放）的由来。
+👉 以后遇到同类反馈，先按这个算式判「是不是圈太大 + 目标贴脸」，别急着改落点公式。
+
+🔴 用例侧踩过的坑：AI 那只 68030 也会放篮球火，`filter(e => e.skillId === 30848)` 会把两边混在一起，
+于是「圆心在 -80」其实是**敌方那发**打在我方身上的正常落点。必须再按 `sourceUnitId` 收一条。
+
+### 52.2 子弹从本体飞过去：与「垂直下落」并列的第二条纯表现通道
+
+`ZCProjectileDropStyle` 现在有两个**互斥**名单：
+
+| 名单 | 起点 | 观感 | 谁在用 |
+| :--- | :--- | :--- | :--- |
+| `ZC_BULLET_DROP_UNITS` | 圆心正上方 `84` 屏 px | 天上砸下来 | `68008` 戈壁箭雨 / `68024` 冰山陨落 |
+| `ZC_BULLET_FLY_UNITS` | **施法者当时的坐标** | 手里扔出去 | `68030` 篮球火 |
+
+事件侧四个可选字段（`ZCGameTypes`）：`flyFromX` / `flyFromY` / `flyInSeconds` / `flyArcPx`。
+
+- 时长 = `距离 ÷ 600`（`ZC_BULLET_FLY_SPEED`），夹在 `[0.15, 0.55]` 秒 ——
+  下限让贴脸也别一帧到位，上限别让飞行吃掉三分之一的区域寿命。
+- 弧线 = `arc × 4p(1−p)`（起飞 0 / 正中最高 / 落地 0），峰高 `ZC_BULLET_FLY_ARC_PX = 92`，
+  与投掷陷阱那一格同值。加在 `mapToViewY` 之后 ⇒ 屏幕竖直方向，不跟转角走。
+- 🔴 视图插值用的是**自己的飞行时长**（`zcBulletFlyProgress(now - startedAt, flySeconds)`），
+  **不是事件进度** `progress`：事件要活满区域寿命 3 秒，飞只占开头 0.2~0.4 秒，
+  用 `progress` 会让球花 3 秒慢慢挪过去。飞满后退回「钉在 `to` 上原地播」。
+- 🔴 事件寿命要 `Math.max(waveInterval, 目录寿命, flySeconds)`：飞 0.55s 却只活 0.3s = 半路消失。
+- 🔴 起点必须是**施法者坐标**（`resolveWave` 里 `context.unitPosition(source)`），
+  **不能**用区域事件的 `from` —— 那条的 `from` 与 `to` 恒同坐标（`fromX: zone.x`），拿它当起点等于飞 0 距离。
+
+### 52.3 没有实体敌方目标就不释放
+
+`context.currentTarget` 在敌方单位全死光时**不返回 `null`**，而是退化成打城墙 / 打建筑
+（`ZCUnitTargeting.current` 的 `kind: 'wall' | 'building'` 两支）。区域照建就会落在城墙坐标上 ——
+而地面区域只结算单位（`resolveWave` 只遍历 `unitsInRadius`），砸在墙上一个单位也伤不到，
+纯属白放一次 + 白占 14 秒 CD。
+
+```ts
+const zoneSelfCenteredEarly = skillParams ? (skillParams.zoneSelfCentered ?? 0) > 0 : false;
+const zoneMovingEarly = empowered && skillParams ? (skillParams.zoneMoveSpeed ?? 0) > 0 : false;
+if (!zoneMovingEarly && !zoneSelfCenteredEarly && target.kind !== 'unit') return;
+```
+
+闸门**只盖「原地 · 以目标为圆心」这一档**：
+
+- `selfCentered`（斗气爆发 / 迪斯科旋风 / 死亡摇滚）本来就落在自己脚下，不需要靶子；
+- `moving`（暴风 / 鹿神守护小鹿）从施法者出发沿中轴飞，拆墙时也有意义，不动。
+
+真实模型复算（只放一只 68030、不放敌人）：`structureLocked = true`（最终锁到 `targetBuildingHexId = 24`）、
+`completedAttackCount > 0`、**`skillId === 30848` 的区域 0 个、表现事件 0 条**。
+同一局里那些 `area:30702`（`path: null`、`radius: 4`、落点 `-18,305`）是**打建筑的出手事件**，
+不是区域，别拿它当「还在放篮球火」。
+
+### 52.4 判据
+
+`tests/zcds-basketball-fly-batch53.test.ts`（7 条，全绿）：
+
+| 分组 | 钉住的东西 |
+| :--- | :--- |
+| ① 名单 | `ZC_BULLET_FLY_UNITS === ['68030']` / 68030 已退出下落名单 / `zcBulletDropHeightOf('68030') === 0` / 两表无交集 |
+| ① 时长 | 贴脸 = 下限 0.15 / 极远 = 上限 0.55 / 中距离按距离插值 / 名单外与 `null` 返回 0 / `NaN` 距离退回下限 |
+| ① 曲线 | 起飞 0、正中 = 峰高、落地 0 / 进度越界夹住 / `NaN` 峰高返回 0 |
+| ② 真模型 | 白圈圆心 = `60`（敌方单位）且 `≠ caster.x` / 区域圆心 = `60` / 飞入起点 = `caster.x, caster.y` / 飞入终点 = `60` / 时长在区间内 / `dropFromPx` 为 0 / 寿命 ≥ 飞行 |
+| ③ 真模型 | 无敌人时 30848 事件 0 条、区域 0 个；**前提**：确实锁到城墙/建筑、确实出手过 |
+| ③ 闸门 | 条件排除 `moving` 与 `selfCentered` / 两个 `Early` 变量取值口径 / 圆心仍只认 `target.x/y` |
+| ② 视图 | 用自己的时长插值 / x 从起点到 `to` / 抛物抬升 / 缺字段退回原地播 / 起点取 `unitPosition(source)` / 寿命取 max |
+
+配套更新：`zcds-bullet-drop-batch52.test.ts` 的 ① 与 ②（68030 退出下落名单 ⇒ 期望值从三张卡变两张；
+「与范围圈同值」改成**严格包含**，并额外断言 68030 仍要画圈）。
+
+### 52.5 一处口径提醒
+
+本批**没有**改成「让区域真的飞过去」（区域自带 `flightSeconds` 那套，投掷陷阱 101704 在用）。
+原因：篮球火是 `waves: 1`、波次间隔就是 3 秒 —— 区域一旦真的位移，第一波伤害要么落在施法者脚下结算、
+要么得把 `nextWaveAt` 往后推，两种都是**改战斗节奏**。用户要的是「命中区域在目标坐标」，
+判定就该从第一拍起钉在那儿，只有球是飞过去的。
+
+---
+
+## 53. 野怪：集火特效贴血条 3px + 身体三态染色 + 被玩家方打下补出生特效（2026-11-26 第 54 批）
+
+需求原文：「1. 野怪按钮特效的位置应该在血条的上方 3px；2. 野怪未激活整体叠加一层灰色不透明度为 35%；
+3. 野怪激活后去掉灰色，改成叠加暗色（类似敌方卡牌）；4. 野怪被玩家方击败，播放卡牌单位生成特效，
+把颜色改回正常颜色，去掉叠加的暗红色」。
+
+数字真源集中在 **`model/ZCMonsterPresentation.ts`**（零 `cc`，用例直接断言数值）：
+布局两条算式、三态枚举、灰/暗红/不透明度四个常量、待机倍速。
+
+### 53.1 🔴 特效的锚点是「可见特效的底边」，不是按钮中心
+
+`FocusSpine` 是集火按钮的子节点，它的美术**从节点原点往上长** ⇒ **原点就是可见特效的底边**。
+此前原点 = 按钮中心 = 血条上方 `3 + halfButton(21) = 24px`，所以图上看是「飘在血条上方一大截」——
+用户截图圈的就是那段空档（他圈的第二处是空位，即「应该放这儿」）。
+
+现在：
+
+```ts
+barTopY = barY + halfBar
+buttonY = zcMonsterFocusButtonY(barTopY, halfButton)        // 底边 = barTop + 3
+focus.setPosition(x, buttonY, …)
+spine.setPosition(spine.position.x, zcMonsterFocusSpineY(barTopY) - buttonY, …)  // = −halfButton
+```
+
+即**特效原点压到点击区底边那条线** = 血条顶边 + 3px。改法是**运行时**（在 `positionMonsterHeader`
+这个唯一写入口里）而不是改 prefab 的 `_lpos`：按钮高度若在 prefab 上调，两条线自动跟着走。
+`restoreMonsterHeader` 补了 `monsterSpineBase` 的还原（池化复用，否则下一个非野怪格的特效停在压过的位置）。
+
+### 53.2 三态染色
+
+| 态 | 判据（`zcMonsterTintStateOf`） | 颜色 | 待机倍速 |
+| :--- | :--- | :--- | :--- |
+| `sleep` 未激活 | 中立 + 没被集火 | `(0xB4,0xB4,0xB4, 255)` = 灰 × 0.70，**不压透** | 0.35 |
+| `awake` 激活可打 | 中立 + `awake` + `hp > 0` | `(0x96,0x54,0x54, 255)` = 暗红 | 1 |
+| `captured` 被玩家方打下 | **`owner !== 'neutral'`** | `Color.WHITE`（不染） | 1 |
+| `null` 不是野怪 | `monster === false` | 不动 | 1 |
+
+四条口径：
+
+- 🔴 **归属优先于 `awake`**：野怪被玩家方打下来后 `neutralResourceId` 是**故意留着**的
+  （`ZCDevelopmentSystem`：「出生格的生命值仍由中立野怪战斗结算持有」）⇒ 这一格还会画那只野怪，
+  这时必须回正常色，而不是继续挂暗红。只看 `awake` 永远等不到「打下去了」那一态。
+- 🔴 **血空不算能打**：`awake` 置真后不会自己复位，判据必须自己看 `hp`（否则尸体一直挂暗红）。
+- 🔴 **「叠加一层带透明度的颜色」≠「整体变透明」**（2026-11-26 用户澄清）：
+  曾经 `ZC_MONSTER_SLEEP_ALPHA = 0x59`（35%）⇒ 整只怪半透明、地皮网格透过身体，读成幽灵。
+  现在 alpha 钉 255，未激活只走**压亮**（灰 0xB4 ≈ ×0.70）。
+  - 真正的「35% 灰罩」= `mix(原色, 灰, 0.35)`，**顶点色乘法做不到**（乘法只等比压暗，不改饱和度），
+    必须加一个自定义片元材质（样板：`assets/resources/shaders/unit-outline-copy.effect` +
+    `new Material().initialize({ effectAsset })`，项目已在巡逻怪描边上用同一套）。
+  - 「去色变灰」同样要片元（亮度 `dot(rgb, 0.299/0.587/0.114)`），**不比灰罩省事** ——
+    两者是同一个 shader 换一行公式，可做成 `u_veilColor` + `u_veilAmount` 两个参数。
+  - 现状是「先压暗上机看观感」的过渡态：要更暗只调 `ZC_MONSTER_SLEEP_GRAY`（往下 = 更暗）。
+- 旧的 `MONSTER_SLEEP_TINT = (130,150,180)` 蓝灰已删干净（用例守 `doesNotMatch`）。
+
+### 53.3 「被玩家方击败」那一拍：置标志 → 渲染层取走
+
+出生特效在 `ZCEffectPool`（渲染层持有），视图拿不到；而「刚改归属」只有视图每帧看得到
+（`renderContent` 里已经有 `state.owner`）。所以走一条单向通道：
+
+```
+ZCHexView.renderContent → noteMonsterCapture() → monsterCapturedFxPending = true
+ZCGameRenderWorld.renderNeutralFeatures → consumeMonsterCapturedFx()（取走即空）
+        → effectPool.playSpawnFx(monsterView.monsterFxHost, now)   // 与卡牌单位出生同一份 prefab
+```
+
+- 🔴 只认 `ZCOwner.Player`：敌方打下别人的野怪该回正常色，但**不该播我方出生特效**。
+- 🔴 只认「上一帧中立 → 这一帧非中立」这一拍；`initialize` 必须复位
+  （池化复用会把上一局的 `true` 带回来，新局第一帧就在空地上播一次）。
+- `monsterFxHost` = `resourceUnitNodes[0]`；资源单位被隐藏时返回 `null`（跳过，不报错）。
+
+### 53.4 判据
+
+`tests/zcds-monster-status-batch53.test.ts`（5 条，全绿）：
+
+| 分组 | 钉住的东西 |
+| :--- | :--- |
+| ① 判据 | 非野怪（三种 owner）恒 `null` / 未激活 / 激活 / **血空退回 sleep** / **归属优先 captured**（含敌方打下）/ 归属改了即使满血也是 captured |
+| ② 数值 | 灰三通道同值且不是全黑 / **alpha 恒 255（不压透）** / 暗红 = 红高于绿、绿蓝同值、整体压暗 / 激活不透明 / captured 全白 / 倍速只 sleep 是 0.35 |
+| ③ 布局 | 按钮底边 = 血条顶 + 3 / 特效原点 = 按钮底边 / 间隙可覆写时两条线一起走 |
+| ④ 视图 | 旧蓝灰常量与旧两态变量 `doesNotMatch` / 三态走纯函数 / 特效单独落位（局部 y = 目标线 − 按钮中心）/ `restoreMonsterHeader` 还原 + 进态前存基准 / 一次性标志的两个守卫 / `consume` 取走即空 |
+| ④ 渲染层 | `consumeMonsterCapturedFx()` 全工程恰好 1 处 / 取到就 `playSpawnFx(host, now)` / 它与 `renderMonsterFocus` 在同一分支 |
+
+配套更新：`tests/zcds-resource-unit-preview.test.ts` 的野怪用例 —— ① 桩状态补 `hp/maxHp`
+（真实血量来自 `definition.maxHp`，本批起「能打」要看 `hp > 0`）；② 激活断言从「原色」改成**暗红**；
+③ 末尾补「归属改成 player ⇒ 回白 + `consume` 首次 true、再次 false」。
+
+## 54. 角色前后关系：层次 + 屏幕 y（2026-11-26 第 55 批）
+
+用户讨论后拍板的四条：
+
+> 「1. 血条不独立于单位 2. 地面一层按 y 排、飞行/中立资源的野怪整体压在地面之上
+> 3. 分身（召出来的）现在被强制排在所有普通单位之下 4. 与墙砖同口径（y 大的先画）」
+
+起因是原始反馈：「当角色重叠在一起时，更底下的角色模型在上层，包括他的描边层和血条」。
+病根很简单：**单位根本没有按深度排过序** —— `attachToMapLayer` 把新单位 append 到 `mapLayer` 末尾，
+顺序 = **出生先后**，与屏幕位置毫无关系；唯一的例外是分身，靠 `applyUnitDrawOrder` 出生时插队。
+
+### 54.1 三个层次与「y 大的先画」
+
+判据与比较器都在 **`model/ZCCharacterDrawOrder.ts`**（零 `cc`，用例直接断言）：
+
+| tier | 谁 | 为什么 |
+| :--- | :--- | :--- |
+| `0` 分身 | `summonMasterId !== undefined` | 半透明复制品必须垫在本体之下，否则「本体也跟着变透了」（§34） |
+| `1` 地面 | 其余单位 | 同层内按 y 排 |
+| `2` 空中 | 卡表 `pvpCard.flying` / **中立资源野怪** | 用户口径 2：整体压在地面之上 |
+
+```ts
+if (a.tier !== b.tier) return a.tier - b.tier;   // 小的先画 = 更靠后
+if (ay !== by) return by - ay;                  // 🔴 y 大的先画
+return a.id - b.id;                             // 同 y 稳定兜底
+```
+
+- 🔴 **「y 大的先画」不是随便定的**：`+y` 在屏幕上是「更靠上 / 更远」，远者先画、近者压上来，
+  才有「站在前面的人挡住后面的人」。**城墙砖就是这么排的**（`ZCWallRenderer`：`b.segment.y - a.segment.y`），
+  单位沿用同一条式子，别再各写一份（用例双边守）。
+- 🔴 **`id` 那一档不是装饰**：同层同 y（两兵叠在同一格、插值中间刚好重合）没有稳定兜底就会
+  「每帧顺序抖一下」—— 描边和血条跟着闪。id 一局内唯一且不变。
+- `y` 可能是 `NaN`（首帧插值还没跑过）⇒ 当 `0`，绝不能让比较器返回 `NaN` 把 `sort` 搅乱。
+- 分身优先于飞行：一只**会飞的**分身照样垫底（用户要的是「分身整体在普通单位之下」）。
+
+### 54.2 角色层：`mapLayer/CharacterLayer`
+
+跨父节点比不了兄弟序，所以单位与野怪必须住进同一个容器：
+
+- `ZCGameRenderWorld.characterLayer`：`initialize` 里建一次，**贴在棋盘之后第一位**
+  （`board.getSiblingIndex() + 1`）。
+  🔴 为什么是这个位置：地面特效走 `zcCombatEffectSiblingIndex('ground')` = `boardIndex + 1`，
+  插进来会把角色层顶到 `+2` ⇒ 地上的火圈 / 光斑仍然画在角色**脚底**（§「火焰树妖灼热地带」那条不能被这批改坏）。
+- 单位：`attachToCharacterLayer`（池里取出来 → 挂角色层末位 → 同步 layer）。
+  没建出角色层（单测桩没走 `initialize`）⇒ 退回 `mapLayer`，**不排序**，宁可不排也不按猜的父节点乱挂。
+- 野怪：身体从 `ResourceLayer`、血条与集火按钮从 `CooldownOverlay` 一起搬进来（见 54.3）。
+- **血条 / 描边不单独排**（用户口径 1）：单位的血条与描边本来就是单位节点的子节点
+  （`ZCGameUnit.prefab` 子序 `[VisualRoot, …, HealthBar, FootPoint]`；描边是 `VisualRoot` 内的
+  `[OutlineCopy, Visual]` 副本），跟着自己单位一起被挡，天然满足口径 1。
+
+### 54.3 🔴 野怪是「一整组」，不是三个独立角色
+
+组内层序恒为 **身体 → 血条 → 集火按钮**（`extras`），**不按各自的 y 单独排**。
+
+理由：血条画在头顶、y 比身体大，若让它自己参与排序，会被判成「更远先画」⇒ 反过来被自己的身体盖住。
+这既是用户口径 1 的直接推论，也是老代码里那句「举锤或展翼时，模型仍画在血条和可点击的集火按钮下方」
+要保住的东西。
+
+搬层的时机是个坑：
+
+- 🔴 **只能在开打后的帧里搬**（`renderMonsterFocus` 每帧触发 `syncMonsterTrailingNodes`），
+  不能在 `layoutResourceUnits` 里顺手搬 —— `initialize` 里 `injectResourceUnits`（建骨骼）跑在
+  `attachCooldownOverlay`（把血条抬到 `CooldownOverlay`）**之前**，搬早了会被随后的抬高逻辑
+  按错误的坐标系重新落位（血条飘到棋盘原点）。
+- 搬层**不需要改任何坐标**：`positionResourceUnit` / `positionMonsterHeader` 的 `origin` 判据是
+  「父节点是不是格节点」，角色层与 `CooldownOverlay` 同在最原点 ⇒ 同一套算式照用。
+- 退出野怪态（`hideResourceUnits` / `rebuildResourceUnits` / 换局）走 `restoreMonsterHeader`：
+  位置还原 + **父节点还原**（`monsterBarHome` / `monsterFocusHome`）。
+  🔴 这一根血条城墙和建筑也在用，留在角色层会被当成野怪的一部分去排。
+- 集火按钮不再往 `MonsterFocusLayer` 抬（那个层已删）：它属于野怪那一组，跟身体同进同出。
+
+### 54.4 每帧重排，但「没变就一个下标都不写」
+
+`renderCharacterOrder` 挂在 `renderDynamic` 的**最后一步**（单位与野怪这一帧的位置都写完了才排，
+否则读到的是上一帧的 y）：
+
+1. 收集 → 单位槽（`unit.id` / tier / `node.position.y`）+ 野怪槽（`id = -(hexId+1)` / tier 2 / 身体 y）；
+2. `sort(zcCharacterDrawOrder)`；
+3. **与上一帧的「id 序列 + 每组节点数」逐项比对**，一致就 `return`；
+4. 不一致才升序落位（`if (node.getSiblingIndex() !== index) node.setSiblingIndex(index)`）。
+
+- 🔴 第 3 步是性能闸：`setSiblingIndex` 会让 cc 重建这份渲染数据，46 个单位每帧全量写 = 白扔一半帧。
+- 🔴 槽位对象**复用**（`characterOrderSlots`），不每帧新建 —— update 路径不许分配临时对象。
+- 野怪 id 取负数：同 y 时垫在单位之下，且与 `unit.id`（正数）不会撞。
+
+### 54.5 判据
+
+`tests/zcds-character-draw-order-batch55.test.ts`（6 条，全绿）：
+
+| 分组 | 钉住的东西 |
+| :--- | :--- |
+| ① 层次 | 三层次序 / 普通地面 / `flying` / `monster` / 分身 / **分身优先于飞行** / 缺字段一律地面 |
+| ② 比较器 | 层压过 y / y 大的先画（排序结果降序）/ 同 y 用 id 且输入顺序不影响结果 / `NaN` 当 0 且不返回 `NaN` / **与墙砖同一条式子**（双边源码守） |
+| ③ 角色层 | 位置 = 棋盘之后第一位 / 地面特效仍在角色之下 / 单位挂角色层 / 没层时退回 `mapLayer` |
+| ③ 重排 | 分身垫底 → 地面 y 降序 → 空中层按 y（野怪整组跟在身体后）/ 同一帧重排零写入 / y 变了必须重排 / 野怪不跟地面混排 |
+| ④ 野怪成组 | 身体 / 血条 / 按钮同进角色层且组内有序 / `extras` 不含身体 / 幂等 / 退出时父节点还原 / 没注入层不搬 |
+| ④ 源码守卫 | `applyUnitDrawOrder` / `summonEntityIds` / `MonsterFocusLayer` 全部消失 / 排序在 `renderNeutralFeatures` 之后 / 搬运在「不可见就早退」之前 |
+
+配套更新：`tests/zcds-resource-unit-preview.test.ts` 的集火按钮用例 —— 从「按钮被抬到
+`MonsterFocusLayer` 压住后生成的单位」改成「不再单独抬顶、留原层；层级交给角色层统一排」。
+
+## 55. 弹道雨：三张卡从自身抛出一批子弹、贝塞尔落到区域内任意点（2026-11-26 第 55 批·表现层）
+
+用户原话：
+
+> 「杰克藕的戈壁箭雨、急冻瓜的冰山陨落、篮球天才的篮球火，三个卡牌的技能都是
+>  **从自身发射多个技能子弹到区域的任意落点，子弹呈贝塞尔曲线飞行**」
+
+配套的同批需求（同一个会话提的，落在 §55.6）：
+
+> 「增加保底逻辑，没有目标不释放技能，有目标释放后，即使目标死亡，也会继续播放，
+>  **一定是整个技能动作做完**」
+
+### 55.1 第三条区域洒弹通道，与 §51 / §52 并列互斥
+
+| 通道 | 起点 | 落点 | 颗数 | 轨迹 | 表 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `dropFromPx`（§51） | 区域正上方 | `to` | 1 | 竖直直落 | `ZC_BULLET_DROP_UNITS` |
+| `flyFromX/Y`（§52） | 施法者 | `to` | 1 | 对称抛物线 | `ZC_BULLET_FLY_UNITS` |
+| **`flyFromX/Y` + `flyToX/Y` + `flySwayPx`（本批）** | 施法者 | **区域内随机点** | **N** | **二次贝塞尔** | `ZC_BULLET_RAIN_UNITS` |
+
+同一张卡只走一条。表在 `model/ZCProjectileDropStyle.ts`：
+
+```ts
+'68008': { channels: ['strike'], count: 5, arcPx: 120, swayPx: 34, spreadRatio: 0.85, faceAlongPath: true }
+'68024': { channels: ['aura'],   count: 3, arcPx: 130, swayPx: 30, spreadRatio: 0.80, faceAlongPath: true }
+'68030': { channels: ['zone'],   count: 3, arcPx: 110, swayPx: 28, spreadRatio: 0.75, faceAlongPath: true }
+```
+
+### 55.2 🔴 必须按「通道」分流，不能只按 `unitId`
+
+`68024` 急冻瓜身上挂着**两条**技能：冰山陨落（`self_aura` 的落地那一击，本需求要改）与
+急冻光线（`random_strike`，本需求没提）。只看 `unitId` 会把急冻光线一起改成三颗弧线 —— 超出需求且没人会发现。
+
+⇒ `zcBulletRainStyleOf(unitId, channel)` 双参，三处调用点分别传 `'zone'` / `'aura'` / `'strike'`。
+
+### 55.3 🔴 控制点 = 2 × 峰高
+
+二次贝塞尔 `B(t) = 2(1−t)t·ctrl`，中点只走到 `ctrl/2`。直接把峰高当控制点 ⇒ **屏幕上量到的弧只有配置的一半，且不报错**。
+`zcBulletRainPath` 里写的是 `ctrl = 弦中点 + (2·swayPx, 2·apexPx)`，所以 `t=0.5` 处的实际抬升正好是 `apexPx`。
+一维对照函数 `zcBulletBezierOffsetPx(apexPx, t)` 同理，内部乘 2。
+
+### 55.4 🔴 曲线必须在**屏幕空间**求值
+
+`flyArcPx` / `flySwayPx` 是屏幕 px 量。先在世界坐标插值再 `mapToView`，会被 x / y 两档换算比拉扁
+（横向 0.76875、纵向另一档）⇒「峰高 120」量出来不是 120。视图里的做法：
+
+```ts
+const path = zcBulletRainPath(
+    mapToViewX(originX), mapToViewY(originY),
+    mapToViewX(landX),   mapToViewY(landY),
+    event.flyArcPx ?? 0, event.flySwayPx ?? 0,
+);
+```
+
+朝向走**解析导数**（`zcBezierTangentDegrees`，`B'(1) = 2(P2−P1)`）而不是「取 t 与 t+ε 两点求差」：
+ε 在 t 接近 1 时会跑出曲线外，且端点的导数不该退化成 0（落地那一帧朝向突然归零很扎眼）。
+
+### 55.5 🔴 落点是表现、判定一个字节不动
+
+`to` / `zone.x/y` 是战斗结算用的（`zcGroundZoneReaches` 跟着它走）。所以另起 `flyToX` / `flyToY`
+专门承载**表现落点**：`to` 一动不动，`flyTo*` 只决定子弹看起来落在哪。
+戈壁箭雨那条通道在 `strikeTargets` 里 `to` 也写落点 —— 它没有判定用途（结算已逐个 `victims` 做完）。
+
+散布中心：**有敌人时取敌群质心**（不是施法者，否则一半箭扎在自己脚下）；
+一颗敌人也没有时（见 §55.6）取「朝向前方半个半径」，散布半径同时收到半个半径，保证落点仍在白圈内。
+
+### 55.6 保底：`forceVisual`
+
+`IZCStrikeOptions.forceVisual`。三档：
+
+| 场景 | `forceVisual` | 行为 |
+| :--- | :--- | :--- |
+| 首次施法、搜索半径内 0 个敌人 | 不带 | `strikeTargets` 返回 0 ⇒ 冷却不推进、不建窗口、每帧重试（**没目标不释放**） |
+| 首次施法、有敌人 | 不带 | 正常放，建窗口 + 画白圈 |
+| 窗口内每一波（6/7/8 秒） | **带** | 敌人被打光 / 走光也照发这一批子弹（**放完就演完**） |
+
+`ZCSkillTriggerSystem.applyRandomStrike` 里就一处：`fire(true)` 只在 `unit.strikeUntil` 分支。
+
+> 用户看到的那张「只有白圈、没有子弹」的截图，根因就在第一档：圈是 `pushStrikeRangeRing`
+> 在窗口**开的那一刻**画的，与子弹是两条独立通道；圈内一个敌人都没有 ⇒ `strikeTargets` 早退 ⇒ 有圈无箭。
+> 不是「目标刚好死亡」。
+
+### 55.7 颗数跟配表走
+
+戈壁箭雨三档 `strikeCount` = **5 / 6 / 8**。表里的 `count: 5` 只是缺省，
+`strikeTargets` 把配表值当第 5 个参数传给 `zcBulletRainFieldsAt`（归一化侧摆也按实际颗数走，
+否则 8 颗按 5 摊 ⇒ 三颗弧度完全重叠）。
+`aura` / `zone` 两条通道配表里没有对应字段 ⇒ 只认表里的值。
+
+### 55.8 判据
+
+`tests/zcds-bullet-rain-batch55.test.ts`（12 条，全绿）：
+
+| 分组 | 钉住的东西 |
+| :--- | :--- |
+| ① 贝塞尔 | 端点精确 / 中点抬升 = 峰高 / 中点横移 = swayPx / 一维偏移按 2× 反推 / 非数字退端点 / 切线用解析导数且与差分对得上 / 落地朝向不归零 |
+| ② 名单 | 三张卡各挂一条通道 / **急冻光线保持原样** / 不在表里一律 null / 每家只挂一条通道 / 散布比例落 (0,1] |
+| ② 配表 | 戈壁箭雨三档 5/6/8，表内缺省值与一档对齐 |
+| ③ 落点 | 起点 = 施法者 / 第 0 颗在圆心 / 其余在散布圈内 / 时长按距离夹 LIMIT / 落点不抱团 / 同种子逐位相同 / 换种子换一批 / 半径 0·NaN·Infinity 退圆心 / 侧摆按实际颗数摊开 |
+| ④ 保底 | 0 目标不带 `forceVisual` ⇒ 一条事件都不发、返回 0 / 带 `forceVisual` ⇒ 5 条纯表现事件、伤害 0、朝前方撒且不出圈 / 有敌人 ⇒ 5 条表现 + 2 次结算、`to` 与落点同处 |
+| ⑤ 接线 | 三处各取自己的通道 / 颗数取配表 / 视图 `flyTo ?? to` + 贝塞尔求值 + 切线朝向 / 事件字段齐全 / 窗口内 `fire(true)`、窗口外 `if (!fire())` |
+
+同批改动还修了三份旧用例的「源码逐字断言」（断言的是抛物线那套写法，改贝塞尔后必然红）：
+`zcds-basketball-fly-batch53`（改成断言贝塞尔三条）、`zcds-bullet-drop-batch52`（`dropHeight` 改成按 `rain` 分流）、
+`zcds-ice-mage-bullet-batch51`（`zcCombatEffectFacingDegrees` 调用点从 2 处变 3 处 —— 飞入段也走同一套）。
+
+## 56. 弹道雨收口：速度 150px + 弧线差异化 + 命中即消失并播受击特效（2026-11-26 第 56 批）
+
+用户原话（三句，对应三件事）：
+
+> 「杰克藕，篮球少年，急冻瓜 3 个角色 释放这个圆圈范围技能时，**子弹命中指定坐标消失，
+>  在坐标处播放受击特效**」
+> 「1,释放这种技能的子弹速度 **改成 150px**」
+> 「2.子弹的弧线不够明显，**每个子弹的弧线差异可以再大点，多条不同的贝塞尔曲线行进路线**」
+
+### 56.1 速度 150px：单位口径与「别被 0.55 夹住」
+
+`ZC_BULLET_RAIN_SPEED`：520 → **150**。
+
+- 单位与配表 `projectileSpeed` 同一档：`ZCCombatSystem.attackTravelSeconds` 直接拿速度除**世界**距离，
+  不乘 `combatDistanceScale` ⇒ 「150px」就是 150 世界 px/s，别自己再乘 0.3。
+- 🔴 **飞行时长必须另起上下限**（`ZC_BULLET_RAIN_MIN_SECONDS / MAX_SECONDS = 0.35 / 1.6`）。
+  第 53 批那条 `ZC_BULLET_FLY_MAX_SECONDS = 0.55` 是给「600 px/s 飞 40px」的单颗飞入用的：
+  150 px/s 下大半颗子弹会被夹短 ⇒ 同一段时间要走完更长距离 ⇒ **弧线被抹平**，
+  用户看到的还是「一条线」——改了速度却看着没变慢，就是这个坑。
+
+### 56.2 弧线差异化：高度也要错开
+
+只加 `swayPx`（横向）时所有弧的**高度**仍是同一个，眼睛读出来还是「一批同样的弧斜着撒」。
+
+| 口径 | 值 | 作用 |
+| :--- | :--- | :--- |
+| `arcPx` | 120/130/110 → **170/180/150** | 整体抬高，一眼看出「抛」 |
+| `swayPx` | 34/30/28 → **46/40/38** | 横向铺更开 |
+| `ZC_BULLET_RAIN_ARC_SPREAD` | 0.45 | 逐颗峰高 `×(1 ± 0.45)` |
+| `zcBulletRainSwayPx` | 分摊 + 抖动 | 抖幅 `±0.55 × (1 − |分摊值|)`，贴边那颗不抖 |
+
+🔴 **峰高用「固定分档」而不是散列**：`ZC_BULLET_RAIN_ARC_STEPS = [0, 0.8, -0.53, 1, -1, 0.33, -0.8, 0.53]`。
+散列有可能两个序号散出同一个值（取整后相同）⇒ 两条一模一样的弧，而「每颗都不一样」正是这条需求的全部意义。
+分档互不相同 ⇒ 一批里条条不一样；轮转起点随种子走 ⇒ 换一波时「哪颗最高」也跟着换。
+第 0 颗固定走基准弧（用例与「圈心那一发」都有稳定锚点）。
+
+侧摆的抖幅按 `1 − |分摊值|` 收缩：贴边那颗本来就该走满宽度，再往外抖只会被 clamp 掉、
+和旁边那颗撞成同一条弧。
+
+### 56.3 命中即消失 + 受击特效：一条 `durationSeconds`、一条独立事件
+
+| 事 | 做法 |
+| :--- | :--- |
+| 子弹到点消失 | 子弹事件的 `durationSeconds` 直接取 `flyInSeconds`（原来取 `max(0.3, …)` / `max(波间隔, 特效时长, …)` ⇒ 落在圈里还继续播整段区域寿命，看着像「火球停在地上」） |
+| 视图兜底 | `ZCCombatEffectView` 的飞入分支 `t >= 1` 就 `visualNode.active = false` 并 return（池化复用，别销毁） |
+| 受击特效 | `zcBulletRainImpactAt(style, fields, castAt)` 返回**另一条 `area` 事件**的 `{x, y, startedAt, durationSeconds}`，`startedAt = castAt + flyInSeconds` |
+
+为什么「未来事件」可行：渲染层对 `startedAt` 在未来的事件**直接不建节点**
+（`zcCombatEffectEntered`，第 45 批为「五雷轰顶逐道出现」加的），所以命中特效天然是「子弹到了才出现」，
+不需要任何延时逻辑、也不会在施法那一拍闪一下。
+
+命中特效在表里逐卡登记（`ZCBulletRainStyle.impactPrefabPath / impactSeconds`）：
+
+| 卡 | 命中特效 | 时长 |
+| :--- | :--- | :--- |
+| 68008 戈壁箭雨 | `units/projectiles/磁电菇_子弹命中/磁电菇_子弹命中` | 0.5 |
+| 68024 冰山陨落 | `units/projectiles/冰法师通用子弹命中/冰法师通用子弹命中` | 1.05 |
+| 68030 篮球火 | `units/projectiles/普攻爆炸/普攻爆炸` | 1.0 |
+
+🔴 **必须进资源计划**（`zcBulletRainImpactPathsForUnit` → `ZCVisualResourcePlan`）：
+漏收的后果是「子弹到点消失、落点什么都没有」，而且**不报错**。这条在 §51 已经踩过一次
+（落地一击的路径没被收集），所以这次直接加了用例守。
+
+篮球火那条的命中特效还带 `visualLiftPx: zone.visualLiftPx`：球是抬着飞的，特效应在同一个高度炸，
+否则「球在半空消失、爆炸在地上」。
+
+### 56.4 判据
+
+`tests/zcds-bullet-rain-batch55.test.ts`（15 条，全绿；文件名沿用接入那一批，内容含 55 / 56 两批）：
+
+| 分组 | 新增/改动的钉子 |
+| :--- | :--- |
+| ③ 速度 | `ZC_BULLET_RAIN_SPEED === 150` / 上限必须宽于 0.55 / 距离翻倍时长翻倍 / 五个距离点逐一对照 |
+| ③ 弧线 | 逐颗峰高在 ±45% 内且**两两不同**（3/5/8 颗都验）/ 最高最低 ≥ 1.5 倍 / 侧摆两两不同且用满宽度 / 抖幅贴边收缩 |
+| ③ 可复算 | 同种子逐位相同 / 换种子换落点 / 峰高在连续种子里至少 3 种（7 档轮转，不死盯某一对种子） |
+| ④ 命中特效 | 落在同一坐标 / `startedAt = 起手 + 飞行` / 时长来自表 / 三张卡各不相同 / 非数字不泄进 `startedAt` |
+| ④ 资源计划 | 三张卡的命中特效都进加载清单 / 只收上场单位 |
+| ⑤ 行为 | 5 颗子弹 + 5 条命中特效 / 子弹 `durationSeconds === flyInSeconds` / 命中特效 `toX/toY` 与子弹落点一一对应 |
+| ⑥ 守卫 | 两个推送点都有 `zcBulletRainImpactAt` 与 `durationSeconds: fields.flyInSeconds` / 视图 `t >= 1` 隐藏 / 资源计划接线 |
+
+### 56.5 旧用例的口径同步：断言的是同一件事，只是写法变了
+
+第 55 批改掉「冰山陨落怎么砸下来」之后，`tests/zcds-active-pilot.test.ts` 的那条
+「auraAtTarget 把圆心搬到受击目标，冰锥同点落地」还在按**旧单颗口径**断言
+（`effectPrefabPath` 含 `冰法师_冰锥`、`cones.length === 1`、`angleDegrees === -90`），
+于是它在第 55 批之后一直红着。改成弹道雨口径：
+
+| 旧断言 | 新断言 | 为什么等价 |
+| :--- | :--- | :--- |
+| prefab 含 `冰法师_冰锥` | 按 **`flyToX !== undefined`** 分流取弹体 | 弹体字段变了，但「有东西在飞」这件事没变 |
+| `length === 1` | `length === ZC_BULLET_RAIN_UNITS['68024'].count`（3） | 「一批」取代「一根」 |
+| `fromX/toX === 60` | 保留（判定圆心一个字节不动） | `flyTo*` 只改表现坐标 |
+| `angleDegrees === -90` | `angleDegrees === undefined` + `flyFrom*` = 施法者 | 朝向改走切线，不再摆死一个角 |
+| — | `durationSeconds === flyInSeconds` / 落点在圈内且两两不同 / 每颗配一条命中原事件 | 第 56 批三条新要求 |
+
+🔴 **别用 `effectPrefabPath.includes('冰法师通用子弹')` 筛弹体** —— 命中特效叫
+`冰法师通用子弹命中`，`includes` 会把两类事件一起吃进来，「3 颗弹」当场变成「6 条」。
+按**字段**分流（弹体有 `flyToX`、命中原事件没有），或者按全路径等值比。
+
+## 57. 集火提示与特效下移：补上「美术抬升」+ 按钮恒可点（2026-11-26 第 56 批）
+
+需求原文：「野怪特效按钮需要下移100px，在野怪血条上方间隔3px即可，特效按钮需要放大1.5倍，点击特效按钮后弹出提示UI，地块相邻后才能集火野怪，激活野怪后，点击按钮，弹出屏幕中间弹出文字提示，开始激活野怪，点击取消集火，取消集火时弹出提示【集火取消】」。
+
+### 57.1 🔴 第 53 批只压对了「原点」，没算「原点到可见底边」
+
+§53.1 把特效**节点原点**压到「血条顶边 + 3」，用户实测仍然浮在上面约 100px。
+原因：那颗 spine 的美术整体画在原点**之上**，骨架 `bounds.y ≈ 200` × prefab `_lscale 0.5` = **100px**。
+
+所以现在算的是「**美术底边**」那条线（`zcMonsterFocusSpineY(barTopY, artLift)`）：
+
+```
+origin.y = barTop + 3 − |bounds.y| × scale
+```
+
+- **取绝对值**：spine `data.y` 的符号约定在不同导出工具下不一致；方向靠实测（美术在原点之上），
+  不能让一个负号把整段修正吞掉。
+- 读不到骨架（空骨架 / 单测桩）⇒ 兜底常量 `ZC_MONSTER_FOCUS_SPINE_ART_LIFT = 200`（= 实测 100 ÷ 0.5）。
+- 放大后**先算缩放、再算抬升**：美术变高 ⇒ 原点要让得更多，可见底边才仍钉在同一根线上。
+
+### 57.2 放大 1.5 倍：乘在 prefab 原始缩放上，且必须还原
+
+`zcMonsterFocusSpineScale(baseScaleY)` = `|base| × 1.5`（0.5 ⇒ 0.75），不写死绝对值 ——
+换 prefab / 改导出缩放都不用动代码。基准缩放存 `monsterSpineBaseScale`，
+`restoreMonsterHeader` 里连位置一起还原：池化复用会把放大的特效带进下一个（非野怪）地块。
+
+### 57.3 🔴 按钮改为恒可点：「可点性」≠「现在能不能集火」
+
+以前 `interactable = unlocked && remaining <= 0` ⇒ **点不动**，玩家连「为什么不能点」都得不到。
+现在恒 `true`，能不能集火交给模型判原因、控制器弹吐司：
+
+| 结局 | 提示 |
+| :--- | :--- |
+| `not-adjacent` | 相邻地块才能集火野怪 |
+| `cooldown` | 集火冷却中，请稍候 |
+| `started` | 开始激活野怪 |
+| `cancelled` | 集火取消 |
+
+"现在点不动"的视觉仍由**底特效定格压灰 + 文案收起**表达（§53.2 / 第 51 批），与可点性解耦。
+
+### 57.4 一次切换只回一份结果
+
+`ZCGameModel.toggleMonsterFocusResult()` → `{ ok, kind, reason }`：
+
+- `kind` 由**切换前** `focusOwners` 里有没有本方来定 —— 开和关的返回值都是 `true`，靠返回值区分不出来。
+- 两个都是 `null` ⇒ 这一下什么都不该发生（非对局中 / 非本方），控制器**不弹任何东西**。
+- 判据只有一份：`ZCNeutralFeatureSystem.focusBlockReason()`，`toggleFocus()` 内部也走它，
+  不会出现「按钮说不能集火、模型却切了」。
+- 🔴 `focusBlockReason` 会顺手跑 `unlockMonster`：解锁是**按棋盘实时算**的（相邻地块有我方已建成地块就解锁），
+  刚建好的房子这一拍就该生效，不刷这一遍会被误判成 `not-adjacent`。`unlockMonster` 幂等。
+
+### 57.5 吐司走依赖注入，不直接 import
+
+`common/Toast` 顶层 `import 'cc'`，而 `zcds/application` 的**运行期**依赖图必须 cc-free
+（`tests/helpers/battle-runtime.ts` 直接 `import ZCBattleRuntimeController`，一出现 `cc` 整份用例加载失败）。
+
+⇒ 出口挂在 `IZCBattleRuntimeServices.toast?`，装配在 `BattleComposition.createRuntimeServices`；
+不注入就静默丢弃（同 `FW.showTip`）。同一条文案 **1 秒内不重复**（用对局逻辑秒，不是墙钟）：
+按钮恒可点后，不相邻地块连点会一直弹同一句，而吐司是**排队**播的，连点五下要排队放好几秒。
+
+### 57.6 判据
+
+`tests/zcds-monster-focus-batch56.test.ts`（6 条）+ 改动集：
+
+| 分组 | 钉子 |
+| :--- | :--- |
+| ① 拦截原因 | 不相邻 ⇒ `not-adjacent` 且**不偷着唤醒**；建好邻居立刻可切 ⇒ `started`；同拍再点 ⇒ `cooldown` 且状态不动；3s 后 ⇒ `cancelled`；非对局中 ⇒ 两个都 `null` |
+| ② 文案 | 三句逐字对齐需求 + 冷却那句 |
+| ③ 锚点 | 可见底边 = `barTop + 3`（放大前后都成立）/ 抬升 = `\|bounds.y\| × scale` / 符号无关 / 兜底 200 |
+| ④ 视图 | 旧的 `interactable = unlocked && remaining <= 0` 必须删干净 / 恒可点 / 基准缩放存了要还原、退出要清 |
+| ⑤ 控制器 | 按 `reason ?? kind` 弹 / 两个都空不弹 / 只有真切了才 `render()` / 不 import `Toast` / 同句 1s 去重 / 组合根接 `Toast.show` |
+| ⑥ 通道 | 走公共吐司（根节点居中 + 常驻 `Popup` 层），不新造一套 UI |
+
+### 57.7 按钮的灰不跟「解锁」走，跟「野怪三态」走（第 59 批补）
+
+第 58 批把野怪本体改成「只压亮不压透」后，未激活的怪变暗了，但**头顶集火按钮还是亮的** ——
+一眼看过去像"这只怪能点"。用户在 2026-11-26 第 59 批指出：「按钮也需要是灰色的」。
+
+口径拆成两件互不相干的事（`zcMonsterFocusSpineVisualOf`，三档）：
+
+| 档 | 判据 | 动画 | 颜色 |
+| :--- | :--- | :--- | :--- |
+| `locked` | `!unlocked` | 定格倒数第 2 帧（`timeScale = 0`） | 压灰 |
+| `idle` | 解锁 + 野怪 `sleep` | 循环 `action` | **压灰** |
+| `active` | 解锁 + 野怪 `awake` / `captured` / `null` | 循环 `action` | 原色 |
+
+- 🔴 **灰跟三态、定格跟解锁**。所以「解锁了但怪没醒」= 循环 + 仍灰 —— 少了 `idle` 这一档，
+  就会退回"解锁即白"，本批需求等于没做。
+- 🔴 **两档灰共用 `MONSTER_FOCUS_DIM_TINT = (140,146,158,255)`**（冷灰，蓝比红高 18）。
+  alpha 必须 255：spine 顶点色改 alpha 是**整只按钮变透**，与第 58 批被否掉的是同一个错。
+- 三态算不出来（`null`）按 `active` 处理：按钮本就不显示，不必另造一档，也别顺手把它染灰。
+- `renderMonsterFocus` 每帧全量进来 ⇒ `applyMonsterFocusSpine` 自己 diff（`monsterFocusSpineVisual`），
+  同档早退；`initialize` 必须复位成 `null`，否则池化复用回来停在上一局的定格。
+- 用例：`tests/zcds-monster-focus-grey-batch59.test.ts`（4 条）+ `zcds-resource-unit-preview`
+  那条「集火特效」已改成「解锁 ⇒ 循环 + 仍灰 / 激活 ⇒ 白」。
+
+## 58. 塔防 BOSS 波预警 UI 特效（2026-11-26 第 57 批）
+
+需求原文：「塔防模式，触发 boss 波次的时候播放预警 UI 特效，给特效制作格式一致的预制，特效的宽度要匹配 720px」。
+
+### 58.1 预制：与开局 / 结算横幅同一套「四件套」
+
+`assets/bundles/battle/units/effects/BOSS来袭UI特效/BOSS来袭UI特效.prefab`
+（骨架 `ddz_jinggao_ani.skel` 由美术放在同一目录，动画名就是 `ddz_jinggao_ani`）：
+
+| 件 | 值 | 说明 |
+| :--- | :--- | :--- |
+| 根节点 `_lscale` | `720 ÷ 496 = 1.4516129032…` | **宽度匹配 720 只有这一处**，运行时不再改缩放 |
+| `UITransform._contentSize` | `496 × 496` | = 导出 PNG 画布，锚点 (0.5, 0.5) |
+| `sp.Skeleton._skeletonData` | `.skel.meta` 的 uuid | 与 `开局对战UI特效` 同一引用方式（subMetas 为空，直引文件 uuid）|
+| `defaultAnimation` / `loop` | `ddz_jinggao_ani` / `false` | 预警只播一次 |
+
+🔴 **720 的算法与兄弟预制共用一份**：`zcUiBannerScale(画布宽)`（`ZCUISpineBannerStyle`）。
+560 ⇒ 1.2857…（开局）、744 ⇒ 0.9677…（胜负）、496 ⇒ 1.4516…（本条）。
+换图时**只改 prefab 里那一个 `_lscale` 与 `_contentSize`**，别在代码里补缩放 ——
+`createZCUISpineBannerNode` 只管起播 / 居中 / 销毁，不碰尺寸（见 §55 那套横幅口径）。
+
+**口径分界（改宽度前先看这条）**：这里按**导出画布宽**折算（= 兄弟预制、`zcUiBannerScale` 的口径），
+依据是导出画布本身就是「动画各帧的最大包围盒」—— 横幅骨会横向撑开，画布跟着撑到最大值。
+本条素材的画布 496、atlas 里最宽的一块 `ddz_jinggao_tb_ani` 是 427（其余 426/402/243/226/211），
+所以**静态那几帧**看起来只有 `427 × 1.4516 ≈ 620` 宽。
+如果美术按「可见横幅必须实打实贴满 720」验，把 `_lscale` 换成 `720 ÷ 可见宽`（当前 427 ⇒ **1.68616**）即可，
+**仍然只动 prefab 一个数** —— 代价是动画撑开时会略微溢出屏幕两侧（横幅类特效可接受）。
+
+### 58.2 触发：每帧读波次进度 + 按 `waveId` 去重
+
+`ZCGameHUDView.render(model)` 每帧拿 `model.defenceWaveProgress`，交给
+`zcShouldPlayBossWarning(progress, playedWaveId)`（零 `cc`，可单测）三条件判：
+
+1. 守城局（`defenceWaveProgress` 非 null）；
+2. `currentWaveIsBoss === true` —— 与首领大血条、胜负判定同一份口径（`defenceBossWaveIndex()`）；
+3. `currentWaveId !== playedWaveId` —— 这一波没播过。
+
+🔴 **不能按「当前帧是不是 BOSS 波」判**：`render` 每帧都跑，那样屏幕会叠无数条；
+**也不能按布尔「已播过」**：配置里两波都标 `isBoss` 时第二波就静默没预警了。
+所以记的是**上一次播的那一波的 id**（表主键，唯一）。
+
+骨架异步到货时补播一次（`setBossWarningEffect` → `playBossWarningEffect`）：
+BOSS 波可能比 prefab 先到，尤其第一波就是 BOSS 的短局。
+
+### 58.3 只在守城局加载
+
+`ZCGame.loadBossWarningBanner()` 里 `if (!this.matchConfig?.pveDefence) return;` ——
+普通对局没有 BOSS 波，不白拉这个预制；它和开局 / 胜负横幅一样**不进首包预热清单**
+（`ZC_BATTLE_COMMON_PREFABS` 不收，路径只登记在 `ZC_BATTLE_FX_PATHS.bossWarningBanner`）。
+
+### 58.4 判据
+
+`tests/zcds-boss-warning-batch57.test.ts`（6 条）：
+
+| 分组 | 钉子 |
+| :--- | :--- |
+| ① 格式一致 | 组件序列必须与 `开局对战UI特效` / `胜利失败UI特效` 逐项相同；根节点名 = 预制名；三个 fileId 按名字区分 |
+| ② 720 宽度 | `UITransform` = PNG 画布（496²）；`_lscale` = `720 ÷ 画布宽` 且等比；`画布 × 缩放 === 720`；与 `zcUiBannerScale` 同一个数；兄弟预制 560/744 复核 |
+| ③ 骨架 | prefab 引的 uuid = `.skel.meta` 的 uuid；`defaultAnimation` = 代码常量 = 骨架二进制里真实存在的动画；`loop:false`、非预乘 |
+| ④ meta | `importer: prefab`、`syncNodeName` 对齐、uuid 唯一、文件非空 |
+| ⑤ 判据 | 非守城 / 普通波 / 无 currentWaveId / NaN 都不播；同波只播一次；多段 BOSS 各播各的 |
+| ⑥ 接线 | 资源计划路径；`pveDefence` 才加载；HUD 每帧喂进度 + 只认纯函数 + 播完即收 + `onDestroy` 清干净 |
+
+## 59. 卡牌常用子弹：统一格式 prefab + 白色三角拖尾 + 身体抖动（2026-11-26 第 57 批）
+
+七颗子弹（用户逐条点名，全部走同一套格式）：
+
+| 卡 | 单位 | 触发路径 | 弹体 | 抖动 |
+| :--- | :--- | :--- | :--- | :--- |
+| 豌豆游侠（含机关枪 30801） | 68001 | 配表 `pvpSkill.effectPrefabPath` | `豌豆游侠_子弹` | — |
+| 毒箭菇（蘑菇爆炸） | 68017 | 陷阱**飞行段** `flightVisualPath` | `毒箭菇_子弹` | **Y 轴** |
+| 杰克藕 | 68010 | 配表 | `杰克藕_子弹` | — |
+| 大嘴花（破阵术） | 68007 | `ZCLanceFx` 按单位覆盖 | `大嘴花_子弹` | **X 轴** |
+| 仙桃行者（破阵术） | 68009 | `ZCLanceFx` | `仙桃行者_子弹` | — |
+| 玉林好汉（普攻 30716） | 68004 | 配表 | `玉林好汉_子弹` | — |
+| 诅咒菇（破阵术） | 68018 | `ZCLanceFx` | `诅咒菇_子弹`（**紫**拖尾） | — |
+
+### 59.1 一条命令出七个：`tools/build_card_bullet_fx.py`
+
+素材是七张 215×215 碎图，直接批量生成，**别手改 prefab**（手改的下一张就会漂）：
+
+| 件 | 口径 |
+| :--- | :--- |
+| 节点结构 | 根 Node + 子节点 `body`（`BULLET_BODY_NODE_NAME`）+ `UITransform` + `Sprite`，七个逐字同构 |
+| 尺寸 | 缩放在 **`body._lscale`**，根恒 1（宿主 `setScale` 会冲掉根，见 §1.10） |
+| 缩放值 | 等效直径 `√(w·h)` 归一到 48，再给长边封顶 96（长条子弹不被压成豆） |
+| 位置 | 主体几何中心对齐节点原点：`_lpos = (画布宽/2 − bbox 中心x, bbox 中心y − 画布高/2)` |
+| `Sprite._sizeMode` | `0`（CUSTOM），`_isTrimmedMode: false` —— 素材是 trim 导入，开裁剪会按包围盒重排主体 |
+| 贴图 | `_spriteFrame` = 同目录 PNG `.meta` uuid + `@` + spriteFrame 子资源名 |
+
+🔴 **中心不对齐的代价**：拖尾接在节点本地 −X 上，主体偏了哪怕 8px，屏幕上就是「拖尾从子弹肚子里长出来」。
+
+### 59.2 🔴 拖尾不进 prefab：只登记一张表
+
+`ZC_EFFECT_TRAIL_SPECS` 登记几何，`ZCCombatEffectView.drawMissileTrail` 用 `Graphics` 画在**宿主节点**上
+（宿主 +X 已被转成飞行方向，所以拖尾永远沿本地 −X 往外收尖）。
+
+七条统一：`length: 96`、`tipHalfWidth: 1.5`、`slices: 12`、`alpha: 0.6`，`color` 只有诅咒菇是 `[186,140,255]`、其余纯白。
+`startX` 逐颗不同（= 主体半宽 + 一点余量，由生成器按 bbox 算出：`-40.8 / -33.5 / -26.8 / -20.5 / -25.0 / -35.5 / -20.4`）。
+
+🔴 **单位是「宿主本地 px」，不是屏上 px**：宿主 `nodeScale ≠ 1` 的弹体（如 `lightningBullet` 0.35）要把长度除以缩放；
+本轮七颗**不写 `nodeScale`**，所以本地 px 就等于屏上 px。加 `nodeScale` 时必须回头改 `startX/length`，否则拖尾长度会跟着弹体一起缩。
+
+### 59.3 抖动：挂 `body`，四个关键帧等分一个周期
+
+口径 `1 → 1+amount → 1−amount → 1`（`amount = 0.05`、`periodSeconds = 0.28`），**段内线性插值**，不是正弦 ——
+正弦给不出 0.95 这个值（谷值是 1−amount 的 0.95，正弦在 3/4 相位就是 0.95，但 1/4 相位会是 1.05 = 对的，然而
+用正弦的中间值会过冲；关键是**用户点名要这四个数**，所以按关键帧线性插值，不引入函数形状）。
+
+模型层 `ZCBulletWobble.ts`（零 `cc`，可单测）：`zcBulletWobbleScale` / `zcBulletWobbleScaleXY`；
+非法配置（`amount ≤ 0`、`period ≤ 0`、非有限数）一律收敛成 1，不抛。
+
+视图层 `ZCCombatEffectView.applyBulletWobble`：
+
+| 坑 | 处理 |
+| :--- | :--- |
+| 承载节点 | **`body` 子节点**。宿主的 scale 已被 `nodeScale / grow / sizeScale / effectScale` 用光，抖动只能乘在子节点上 |
+| 写绝对值 | 每帧写 `基准 × 倍率`，基准在 `bindWobbleNode` 时记一次（`wobbleBaseX / wobbleBaseY`） |
+| 🔴 池化复用 | 换事件时**先把基准写回去再读**（`restoreWobble()`）。同一个 `visualNode` 会被下一个事件接着用，直接读会读到上一任抖到一半的缩放，之后全歪 |
+| 时间基准 | `now − event.startedAt`，**不是节点寿命**（与 `growFactorOf` 同一条理由） |
+| 清场 | `initialize` 里也调一次 `restoreWobble()` |
+
+### 59.4 🔴 两条「表里没有」的按单位换美术通道
+
+破阵术（投枪）与蘑菇爆炸飞行段都不在 `pvpSkill` 行里，参数袋只能放 `number`，所以走常数表：
+
+| 通道 | 文件 | 收谁 |
+| :--- | :--- | :--- |
+| 破阵术弹体 | `ZCLanceFx.ZC_LANCE_EFFECT_PREFAB_BY_UNIT` | 68007 / 68009 / 68018；缺省 = `ZC_EFFECT_PATHS.lanceArrow` |
+| 陷阱飞行段 | `ZCTrapFx.ZC_TRAP_FLIGHT_PREFAB_BY_UNIT` | 68017；缺省 = `ZC_TRAP_SPAWN_PREFAB_PATH` |
+
+**两条都必须被 `ZCVisualResourcePlan` 按阵容收到**（`zcLanceEffectPrefabPathsForUnit` / `zcTrapFlightPathsForUnit`）。
+漏收的代价是**静默**的：不报错，只是子弹隐形 / 蘑菇凭空出现。
+
+同时注意守卫 `tests/zcds-effect-path-parity.test.ts`：`*Fx.ts` 里不许出现 `units/projectiles/` 字面量 ⇒
+投枪的缺省箭矢路径也挪进了 `ZC_EFFECT_PATHS.lanceArrow`。
+
+### 59.5 蘑菇爆炸：只换飞行段，机制一个字节不动
+
+`castTrap` 里 `flying` 为真时写 `flightVisualPath: zcTrapFlightPath(unitId)` + `angleDegrees`；
+落地 `ZCGroundZoneSystem.settleFlight` 里 `arc > 0` 时**把 `angleDegrees` 清回 `undefined`** ——
+留着会让落地后的常驻陷阱图歪着躺在地上。
+
+### 59.6 判据
+
+`tests/zcds-card-bullet-batch57.test.ts`（12 条）：
+
+| 分组 | 钉子 |
+| :--- | :--- |
+| ① 目录 | 七条路径都有 spec + 拖尾；全 `layer: 'top'`、都不写 `nodeScale` / `flight` |
+| ② prefab 同构 | 结构逐字相同（含 `_isTrimmedMode: false`、`_sizeMode: 0`）；贴图 uuid 指向同目录 PNG |
+| ③ 拖尾 | 几何统一（96 / 1.5 / 12）；诅咒菇紫、其余六条纯白 |
+| ④ 抖动 | 只登记 Dujuan(Y) + Mouth(X)；四个关键帧精确 1-1.05-0.95-1；只动一个轴；非法配置收敛成 1 |
+| ⑤ 接入 | 破阵术三张卡 + 缺省退回；陷阱飞行段只登记 68017；资源计划两条通道都收得到 |
+| ⑥ 配表 | `remoteRef` 与 client json 一致；破阵术 `lanceEvery` 仍在；源码守卫 |
+
+### 59.7 🔴 范围指示白环的圆心 = 「这一发打在哪」，不是施法者脚下
+
+用户看图后纠正（同日第二遍）：「杰克藕的区域没有出现在对应的目标上，而是以杰克藕为圆心，
+正确是以目标为圆心，检查下篮球少年和急冻瓜的」。
+
+先说三张卡的现状（`ZC_SKILL_RANGE_RING_UNITS` 正好就是这三张）：
+
+| 卡 | 技能 | 通道 | 改前 | 处理后 |
+| :--- | :--- | :--- | :--- | :--- |
+| 杰克藕 68008 | 戈壁箭雨 100804 | `random_strike` | ❌ 圈在自身 | ✅ 圈在敌群散布中心 |
+| 急冻瓜 68024 | 急冻光线 102404 | `random_strike` | ❌ 圈在自身 | ✅ 圈在挑中的第一个目标（见 §60.3） |
+| 急冻瓜 68024 | 冰山陨落 102403 | `self_aura` | ✅（`auraAtTarget: 1`） | 不动 |
+| 篮球少年 68030 | 篮球火 103004 | `area` 区域 | ✅（`zoneX = target.x`） | 不动 |
+
+**根因**：`pushStrikeRangeRing` 写死 `unitPosition(unit)`。而箭是按敌群质心撒的
+（`strikeTargets` 里的 `centerX/centerY`），两者从第一帧就对不上。
+
+**修法要点 —— 必须同源，不能在触发系统里重算**：
+
+1. `IZCStrikeOptions.centerOut?: { x, y }` —— 调用方传一个**可变**对象进来，
+   `strikeTargets` 挑完人之后把中心写回去。改返回类型会牵动所有调用点，这里只有一家在用。
+2. `strikeTargets` 写两处：通用分支按 **`victims[0]` 的本体坐标**（不是全部候选 —— 半径外的敌人不算；
+   第 57 批曾写质心，第 58 批按用户「光圈切换到下个目标」改成第一个目标，见 §60.3）；
+   弹道雨分支覆盖成它自己的 `centerX/centerY`（含「0 目标时朝前半个半径」的兜底），
+   因为那个分支的散布中心可能根本不存在质心。
+3. 🔴 **挑人带随机**（`nearest: false`）：外面重算一遍必然得到另一个质心 ⇒ 圈与箭又错开。
+   这就是必须回填、而不是「画圈时再算一次」的原因。
+4. 没打出去（0 目标且非 `forceVisual`）⇒ `centerOut` 保持 `NaN`，圈心退回施法者。
+   写个 `0,0` 会让圈跑到地图原点。
+
+**窗口内要跟着走**（第二处，很容易漏）：
+
+`pushStrikeRangeRing` 原来只在**首发放出**时调一次。敌人会移动，于是第二秒起就是
+「第一秒的圈、第五秒的箭」。改成窗口内**每一波**都调一次，靠 `pushSkillRangeRingEvent` 的
+第三个参数 `followCenter`（缺省 `false` = 存量逐字不变）实现「原地挪过去 + 续命、不新增」：
+
+```ts
+pushSkillRangeRingEvent(state, options, followCenter = true);
+//  已有存活那条 ⇒ 改 fromX/toX、startedAt = now、effectScale/radius 同步，绝不 push 新的
+```
+
+🔴 **续命只能用剩余窗口**：`seconds = min(strikeSeconds, unit.strikeUntil − now)`。
+用整段 `strikeSeconds` 的话，最后一波会把圈续到技能结束之后，玩家对着空圈继续等。
+
+**判据**（`tests/zcds-bullet-rain-batch55.test.ts` 第 ⑥ 组，6 条）：
+弹道雨单位 `centerOut` = 散布中心（= 挑中目标质心，且与箭群同源）/ 非弹道雨单位 = 第一个目标本体坐标
+（不许退回质心）/ 0 目标不写（保持 NaN）/ 保底那波与箭群中心同源（容差 = 散布半径 20%）/
+白环默认不跟随、`followCenter` 时原地挪且不叠圈 / 源码守卫（窗口内每波都调、寿命取剩余窗口）。
+
+## 60. 弹道雨连发 + 起点抬高 + 白环滑动 + 子弹缩到 70%（2026-11-26 第 58 批）
+
+用户看图后第二遍提的三条（同一句话里改了四件事）：
+
+> 「这类技能的子弹是逐个射出去的 不是逐轮的齐射，不停的发射，每个子弹有 0.1s 左右的间隔，
+>   **光圈（白色指示圈）切换到下个目标是快速移动（150px 速度），不要直接瞬移**
+>   新加的子弹预制 统一改小成 70%，现在的子弹太大了，**拖尾要同步匹配大小**
+>   这一批发射子弹的位置要在角色图片的**中心位置往上 5px**，现在子弹发射的位置太低了」
+
+| # | 要求 | 落点 |
+| :- | :--- | :--- |
+| 1 | 逐颗出手、间隔 0.1s | `ZC_BULLET_RAIN_SHOT_INTERVAL_SECONDS`，三条推送通道各加 `fireAt`（§60.1） |
+| 2 | 白环换目标 150px/s 滑动 | `ZC_SKILL_RANGE_RING_SLIDE_SPEED` + 事件四个 slide 字段 + `ZCCombatEffectSlide`（§60.2） |
+| 3 | 子弹缩到 70%、拖尾同步 | `tools/build_card_bullet_fx.py` 两个常量 + `ZC_EFFECT_TRAIL_SPECS` 七条几何（§60.3） |
+| 4 | 起点 = 角色图片中心 +5px | `ZC_BULLET_RAIN_ORIGIN_LIFT_PX = 25`（§60.4） |
+
+### 60.1 逐颗出手：只错开**表现时刻**，伤害仍在施法那一拍一次性结算
+
+改前一批 N 颗共用 `state.elapsedSeconds` ⇒ 五支箭同一帧全部出现，用户读成「逐轮齐射」。
+
+```ts
+const fireAt = state.elapsedSeconds + index * ZC_BULLET_RAIN_SHOT_INTERVAL_SECONDS; // 0.1
+//  事件的 startedAt 与命中特效的 startedAt **都用 fireAt**
+state.combatEvents.push({ ..., startedAt: fireAt, durationSeconds: fields.flyInSeconds, ... });
+const impact = zcBulletRainImpactAt(rain, fields, fireAt);
+```
+
+三条通道各一份（`strike` / `aura` 在 `ZCSkillResolutionSystem`，`zone` 在 `ZCGroundZoneSystem`）。
+
+🔴 **伤害不许跟着拆**：`victims` 的结算仍在上面那一段一次性做完。逐颗只影响
+`startedAt` / 命中特效时刻，`flyTo*` 的落点集合与 `to`（区域判定圆心）一个字节不动。
+把伤害也摊到 0.1s 一拍，等于把一个爆发技能改成 DoT，DPS 曲线全变。
+
+🔴 **命中特效必须用 `zcBulletRainImpactAt(rain, fields, fireAt)`**，不能用 `state.elapsedSeconds`：
+命中特效的时刻是「**这颗**出手时刻 + 飞行时长」，用施法那一拍会让五颗的爆炸全堆在开头。
+
+### 60.2 白环「滑过去」而不是瞬移：150px/s、飞到之后停住
+
+`pushSkillRangeRingEvent(..., followCenter = true)` 原来直接改 `toX/toY` ⇒ 圈一帧跳过去。
+现在换目标时记下一个**滑动段**：
+
+```ts
+alive.slideFromX = alive.toX;  alive.slideFromY = alive.toY;   // 从上一次的位置出发
+alive.slideStartAt = now;
+alive.slideSeconds = distance / ZC_SKILL_RANGE_RING_SLIDE_SPEED;  // 150 px/s
+alive.fromX = x; alive.fromY = y; alive.toX = x; alive.toY = y;    // to 立刻就是新位置
+```
+
+位移 < 0.5px 时把四个字段清掉、按瞬移处理（省一次无意义插值）。
+
+🔴 **不能复用 `flyFrom*` / `flyInSeconds`**：那一套是**子弹**的，`t = 1` 时会「命中即摘」把节点藏起来。
+白环飞到之后还要在新位置上活满整个技能窗口，两套语义必须分开 —— 这就是
+`ZCCombatEvent` 另开 `slideFromX/slideFromY/slideStartAt/slideSeconds` 四个字段的原因。
+
+视图侧把插值抽成纯函数 `view/ZCCombatEffectSlide.zcCombatEffectSlidePoint(event, now)`
+（不 import `cc`，可以直接被测）：
+
+| 情形 | 返回 |
+| :--- | :--- |
+| 没登记 `slideSeconds` / 没有起点 | `{ to }`（存量逐字不变） |
+| `elapsed <= 0`（时钟回拨 / 快照重算） | 起点，别把圈甩到反方向 |
+| `0 < elapsed < seconds` | 线性插值 |
+| `elapsed >= seconds` | `{ to }`，停在新位置 |
+
+视图那一行随之从 `mapToViewX(event.toX)` 变成 `mapToViewX(slide.x)`（`slide.x` 在缺省路径下逐字等于 `to`）。
+
+### 60.3 七颗子弹缩到 70%：只改生成器两个常量，拖尾必须同步
+
+`tools/build_card_bullet_fx.py`：
+
+```python
+TARGET_EQUIV_DIAMETER = 33.6   # 48 × 70%
+MAX_LONG_EDGE = 67.2           # 96 × 70%
+```
+
+重跑后 prefab 的 `body._lscale` / `_lpos` 自动重算（七条 scale 0.261~0.532），
+但 **`ZC_EFFECT_TRAIL_SPECS` 不会自己变** —— 那里是「宿主本地 px」的手写数值，必须按同比例缩：
+
+| 卡 | scale | 屏上 | startX | rootHalfWidth |
+| :--- | ---: | :--- | ---: | ---: |
+| 仙桃行者 | 0.348 | 67.2×14.6 | −28.5 | 5.6 |
+| 大嘴花 | 0.319 | 55.2×20.4 | −23.5 | 7.7 |
+| 杰克藕 | 0.532 | 44.2×25.5 | −18.8 | 9.1 |
+| 毒箭菇 | 0.261 | 33.7×33.4 | −14.3 | 9.8 |
+| 玉林好汉 | 0.497 | 41.3×27.3 | −17.5 | 9.8 |
+| 诅咒菇 | 0.379 | 58.4×19.3 | −24.8 | 7.0 |
+| 豌豆游侠 | 0.494 | 33.6×33.6 | −14.3 | 9.8 |
+
+统一口径：`length` 一律 67.2（= 2 × 等效直径）、`tipHalfWidth` 一律 1.05（1.5 × 70%）、`slices: 12`。
+只改 prefab 不改这张表 ⇒ 子弹缩了、拖尾还是原来那么粗长，尾巴比弹体还大。
+
+### 60.4 起点抬 25px = 既有「脚点→身体中心」20 + 用户点名的 5
+
+单位根节点是**逻辑脚点**，子弹从脚底冒出来。`zcCombatEffectLiftY` 那套「补偏差」表
+（玉林好汉 +20 / 三叶小丑 +30）是同一口径的既有做法，这里取 20 当基准：
+
+```ts
+export const ZC_BULLET_RAIN_ORIGIN_LIFT_PX = 25;  // 20 + 5
+```
+
+- `strike` / `aura`：事件直接写 `visualLiftPx: ZC_BULLET_RAIN_ORIGIN_LIFT_PX`。
+- `zone`（篮球火）：**叠在区域自己的抬升上** —— `visualLiftPx: (zone.visualLiftPx ?? 0) + ZC_BULLET_RAIN_ORIGIN_LIFT_PX`，
+  直接赋值会把区域原有抬升冲掉。
+
+### 60.5 判据
+
+`tests/zcds-bullet-rain-batch55.test.ts` 第 ⑦ 组（4 条）+ 第 ⑥ 组改 1 拆 2：
+
+| 分组 | 钉子 |
+| :--- | :--- |
+| ⑦ 逐颗 | 5 颗 `startedAt` 严格 `0, 0.1, 0.2, 0.3, 0.4`；落点两两不同；命中特效各自 `startedAt + flyInSeconds` |
+| ⑦ 起点 | 常量 = 25；`skill` 里两处 `visualLiftPx: ZC_BULLET_RAIN_ORIGIN_LIFT_PX,`；`zone` 里叠加 |
+| ⑦ 滑动 | 50px ⇒ `slideSeconds = 50/150`；中点 (15,20)；走完停住；负时间给起点；无字段直接给 `to` |
+| ⑦ 接线 | 模型层 `slideSeconds = distance / ZC_SKILL_RANGE_RING_SLIDE_SPEED;`、微调清字段；视图层走 `slidePoint` + `mapToViewX(slide.x)` |
+| ⑥ 圈心 | 弹道雨单位 = 散布中心（与箭群同源）；非弹道雨单位 = 第一个目标本体坐标（不许退回质心） |
+
+⚠️ 同期被这一批改到锚点的两条老守卫（`zcds-bullet-drop-batch52` ② / `zcds-combat-effect-placement` ⑦）
+跟着改成 `slide.x/y` —— 它们钉的是「抬升加在 `mapToViewY` 之后」「x 不被 dropFromPx 影响」这两个**语义**，
+缺省路径同义，不是放宽。
+
+### 60.6 附：四条技能的真实判定范围（对「圈画多大」的唯一依据）
+
+`pvpSkillPlan` 的 `skillParamJson`（源表 = `armySkillLevelUp` → `modfiy` → `pvpSkillPlan`），
+世界半径 = 逻辑半径 × `combatDistanceScale 0.3`，圈半径再经
+`searchRadius = min(strikeRadius × 0.3, attackReach)` 收窄 —— **圈画的是实际搜索半径，不是裸表值**。
+
+| 技能 | 通道 | 逻辑半径 | 世界半径 | 持续 | 每波 | 档位差异 |
+| :--- | :--- | ---: | ---: | ---: | :--- | :--- |
+| 戈壁箭雨 100804 | `random_strike` | 210 | 63 | 6 / 7 / 8s | `strikeInterval 1s`，5 / 6 / 8 颗 | 只有颗数、时长、倍率变，半径三档同 210 |
+| 冰山陨落 102403 | `self_aura` | 120 | 36 | 3s | `auraInterval 0.5s` | 倍率 0.55 / 0.65 / 0.75，`auraAtTarget: 1` |
+| 急冻光线 102404 | `random_strike` | 260 | 78 | **无窗口**（不发 `strikeSeconds`） | 3 颗一次性 | `strikeNearest: 1` + `strikeAppliesStatus`（numb） |
+| 篮球火 103004 | `area` | 110 | 33 | 3s | 1 波 | 倍率 0.7 / 1.0 / 1.4 |
+
+两条容易记错的：
+
+- **急冻光线没有 `strikeSeconds`** ⇒ `windowSeconds = 0` ⇒ 圈只在开火那一拍推一次、不跟随、不滑动。
+  它的「切目标」发生在每次冷却到点（`strikeEvery 9` 次普攻）时，不是窗口内每波。
+- **急冻光线的 260 比戈壁箭雨的 210 大**，但它的 `nearest: 1` 让它总是打最近的三只 ⇒ 圈心落在胸口那三只身上，
+  视觉上比箭雨那张「撒在敌群里」的圈更靠前。
+
+### 3.58 chapter_01：10 个 1023 银币宝箱按位置均匀改配（2026-11-26）
+
+> 「按照位置均匀的 抽取 10个 1023 替换成8个1016 ，以及1个1015 和1个1012 ，
+>  这10个修改的奖励对应的建筑id也同步改成69005」
+
+#### 一、改了什么
+
+`chapter_01` 里 22 个 `rewardId=1023`（银币宝箱）的格，挑 10 个改奖励，**建筑一起改**：
+
+| 新奖励 | 池内容（`levelMapGrideReward`） | 格数 | 建筑 |
+| :-- | :-- | ---: | :-- |
+| `1016` | 银币 + 资源 `19104` + 角色经验 `19350/19301`（8 条） | 8 | `69020` → `69005` |
+| `1015` | 银币 + 资源 `10010` + `19101`（4 条） | 1 | `69020` → `69005` |
+| `1012` | 只有 `resId=9`（钻石）10 个（1 条） | 1 | `69020` → `69005` |
+
+🔴 **建筑必须跟着奖励走**：`69020` 是 `coinBox`（银币箱子），而 `1023` 是**全表唯一整组只发 `resId=7`**
+的池（§3.35）。换成 `1016/1015/1012` 以后还挂着 `coinBox`，就是「箱子画成银币宝箱、开出来却是碎片」。
+`69005` 是通用的 `territory_fixed_resource_v1`，与 `fixedResource` 的空串回退同款（§3.35 那条）。
+
+只改 `rewardId` 与 `buildingId`；`cellId / footprint / type / unlock / configId` 一个字节不动。
+剩下 12 格仍是 `1023` + `69020` ⇒ §3.35 与「1023 的格必须显式配 69020」继续成立。
+
+#### 二、落地的 10 格
+
+| cell | 新奖励 | 半径 px | 方位角 |
+| ---: | ---: | ---: | ---: |
+| 29 | 1015 | 788.8 | 93.4° |
+| 72 | 1016 | 607.9 | 67.7° |
+| 97 | 1016 | 864.0 | 36.8° |
+| 102 | 1016 | 790.6 | 151.1° |
+| 189 | 1016 | 81.8 | 124.3° |
+| 195 | 1016 | 511.8 | 7.6° |
+| 206 | 1016 | 329.9 | -168.2° |
+| 232 | 1016 | 279.3 | -34.3° |
+| 268 | 1016 | 364.8 | -112.3° |
+| 393 | 1012 | 892.9 | -68.8° |
+
+改完 `chapter_01` 的奖励分布：`1012×1 / 1015×1 / 1016×60 / 1023×12 / 1024×1`。
+
+#### 三、「位置均匀」的判据（`pick_even`）
+
+22 选 10 ⇒ **全枚举 `C(22,10) = 646646` 组**（1~2 秒），按三条排序：
+
+1. **硬约束：10 个格两两方位角至少差 `25°`**。少了这条会选出「同方向、不同半径」的组合 ——
+   实测 `29` 与 `109` 都在 93°，欧氏距离却有 358px：数学上散得开，看着还是一条竖线上的两点。
+   收不到解时按 `20 / 15 / 10 / 0` 逐级放宽并打印实际用的阈值。
+2. **最小两两欧氏距离最大**（`p-dispersion`）—— 不许扎堆。
+3. **覆盖半径最小**（`k-center`）—— 每个没被选中的 1023 格都要离某个选中格足够近。
+
+距离和方位角都取**游戏真实格心**（`HexGridLayout` 的 `92.25 / 90 / ±22.5`），不拿行列表号当欧氏空间
+（奇偶列有 22.5px 错位）。落地方位角空档 `55.9 / 43.5 / 34.5 / 41.9 / 29.2 / 30.9 / 25.7 / 30.9 /
+26.8 / 40.7`（10 等分理想 36°，最大空档在左下那一段，那里只有 22 个候选里的两个）。
+
+**两只稀有箱**（`1015` / `1012`）取这 10 格里**距离最远的一对** ⇒ 落在正上方（`29`）与正下方（`393`），
+`cellId` 小的给 `1015` 只为可复现。
+
+#### 四、落点 / 工具 / 用例
+
+- 工具 `tools/map-editor/retune_chapter_01_rewards.py`：`--dry-run` / `--no-publish` / `--preview`
+  （出 `tmp/chapter01_reward_retune.png` 改前改后对照）。**幂等护栏**：`1023` 格数不是 22 就直接报错退出
+  （跑过第二遍不会是 22），不会把剩下 12 个再吃一遍。
+- 落点照旧三处：预设 + `assets/resources/config/territory-maps/` + 策划 `sever/territorymap/`。
+- 用例同步：`tests/territory-building-id.test.ts` 的 `expectedByChapter` 由 `[23, …]` 改成 `[12, …]`、
+  合计 `146 → 135`；`tests/territory-silver-chest-open.test.ts` 同样 `146 → 135`。
+  ⚠️ `chapter_01` 在本次改动**之前**就已经是 22 格（用例原先按 23 写，1 格缺口是既有差异），
+  改成 12 之后那条用例不再覆盖这个缺口。
+- 七章 `1023` 合计：`12 + 27 + 36 + 15 + 15 + 15 + 15 = 135`。（§3.35 的 148 是 11-10 的历史数。）

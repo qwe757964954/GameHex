@@ -33,6 +33,15 @@ Prefab 取**单节点**（而不是 `玉米射手_普攻` 那种「根 + offset�
 （第 19 帧，alpha>60 底部 12% 带 = 339 源 px），不是画布宽 —— 画布 1019 宽里
 闪电只占 450，拿画布当分母会把雷缩到三分之一。
 
+    旧：裁 474×566 → 画布 237×283 + 根 `_lscale 0.816372`（屏上 193.5×231）
+    新（2026-11-26）：直接重烘成 **193×231**、`_lscale = 1`、`_contentSize = 193×231`
+
+旧做法把 1.22 倍的画布留在纹理里：20 帧 237×283 的矩形（含 2px padding 后 245×291）
+在 1024 的 PAC 里只能 4×3 排 12 张 ⇒ **2 页**；烘成 193×231（201×239）后 5×4 刚好
+**1 页装满 20 帧**。屏幕尺寸不变（193.5 × 0.816372 ≈ 158 … 以爆闪 138.4 为准，
+重烘后 138.4 直接就是贴图 px）。`地面接地点压到原点` 改由 `_lpos.y ≈ 110.6` 承担
+（画布变矮，抬升量按同一公式重算，见 step 3）。
+
 **雷电冲击**：判定半径 `auraRadius = 180`（L2 档）⇒ 冲击波长度 `180 × 2 × 0.76875 = 276.6` 屏上 px。
 分母取**内容并集宽**（961 源 px，光核在左端的深色球）。三档半径 160 / 180 / 200
 只有一个预制体，按中档 L2 烘焙 ⇒ L1 视觉偏大 12.5%、L3 偏小 10%（视觉与判定本来就不是
@@ -66,6 +75,8 @@ import uuid as uuid_mod
 
 from PIL import Image
 
+from resize_fx_frames import resize_premultiplied
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECTILES_DIR = os.path.join(ROOT, 'assets', 'bundles', 'battle', 'units', 'projectiles')
 SRC_CACHE_ROOT = os.path.join(ROOT, 'tmp', 'projectile_src')
@@ -92,6 +103,11 @@ SETS = [
         target_screen_px=90 * 2 * SCREEN_PX_PER_LOGIC,
         #  分母：地面爆闪的可见宽（量法见文件头）—— 见 footer 里 anchor 的说明。
         measure='ground_splash',
+        #  2026-11-26：按屏上尺寸重烘（见文件头）。给了 `out_canvas` 就跳过「再缩一半 + 反算缩放」，
+        #  画布 = 目标尺寸、缩放恒 1；重采样仍从源散图裁切窗口出发，不二次降采样。
+        out_canvas=(193, 231),
+        #  根散图在断言前的去重里被搬到了 `_根散图`（原来的 `<目录>/` 已空）。
+        src_dir='磁电菇_劈雷技能_根散图',
         sample=30,
         wrap=WRAP_ONCE,
         clip_name='磁电菇_劈雷技能',
@@ -494,15 +510,19 @@ def build_prefab_meta(name, meta_uuid):
 
 # ─────────────────────────── 主流程 ───────────────────────────
 
-def source_path(set_dir, frame):
-    """散图可能已被上一次运行搬进缓存目录。"""
+def source_path(set_dir, frame, src_dir=None):
+    """散图可能已被上一次运行搬进缓存目录（含去重后的 `_根散图` 变体）。"""
     direct = os.path.join(set_dir, frame)
     if os.path.isfile(direct):
         return direct
-    cached = os.path.join(SRC_CACHE_ROOT, os.path.basename(set_dir), frame)
-    if os.path.isfile(cached):
-        return cached
-    raise RuntimeError('缺帧：%s' % direct)
+    candidates = [os.path.basename(set_dir)]
+    if src_dir:
+        candidates.append(src_dir)
+    for folder in candidates:
+        cached = os.path.join(SRC_CACHE_ROOT, folder, frame)
+        if os.path.isfile(cached):
+            return cached
+    raise RuntimeError('缺帧：%s（也不在 tmp/projectile_src/%s）' % (direct, '/'.join(candidates)))
 
 
 def build_set(cfg):
@@ -518,7 +538,7 @@ def build_set(cfg):
     os.makedirs(cache_dir, exist_ok=True)
 
     frames = cfg['frames']
-    sources = [source_path(set_dir, f) for f in frames]
+    sources = [source_path(set_dir, f, cfg.get('src_dir')) for f in frames]
 
     # 1) 可见并集 → 裁切框（按 DOWNSCALE 取偶数，保证画布是整数且不抖）
     boxes = [alpha_bbox(p) for p in sources]
@@ -531,10 +551,16 @@ def build_set(cfg):
     crop_top = max(0, top - CROP_MARGIN)
     crop_right = min(src_w, right + CROP_MARGIN)
     crop_bottom = min(src_h, bottom + CROP_MARGIN)
-    crop_w = (crop_right - crop_left) // DOWNSCALE * DOWNSCALE
-    crop_h = (crop_bottom - crop_top) // DOWNSCALE * DOWNSCALE
-    canvas_w = crop_w // DOWNSCALE
-    canvas_h = crop_h // DOWNSCALE
+    if cfg.get('out_canvas'):
+        #  已按屏上尺寸重烘：裁切窗口原样，直接落到目标画布（缩放 1）。
+        canvas_w, canvas_h = cfg['out_canvas']
+        crop_w = crop_right - crop_left
+        crop_h = crop_bottom - crop_top
+    else:
+        crop_w = (crop_right - crop_left) // DOWNSCALE * DOWNSCALE
+        crop_h = (crop_bottom - crop_top) // DOWNSCALE * DOWNSCALE
+        canvas_w = crop_w // DOWNSCALE
+        canvas_h = crop_h // DOWNSCALE
 
     # 2) 反算缩放：分母 = 源图上「要跟判定对齐的那一段」的可见尺寸
     if cfg['measure'] == 'ground_splash':
@@ -553,7 +579,7 @@ def build_set(cfg):
         measured_src = right - left
         measured_label = '内容并集宽'
     measured_canvas = measured_src * canvas_w / float(crop_w)
-    scale = cfg['target_screen_px'] / measured_canvas
+    scale = 1.0 if cfg.get('out_canvas') else cfg['target_screen_px'] / measured_canvas
 
     # 3) 摆位：把「接地点」压到节点原点（落雷），或保持居中（冲击波）
     if cfg['anchor'] == 'ground':
@@ -571,7 +597,8 @@ def build_set(cfg):
         dst_meta = dst + '.meta'
         with Image.open(src) as im:
             im = im.convert('RGBA').crop((crop_left, crop_top, crop_left + crop_w, crop_top + crop_h))
-            im = im.resize((canvas_w, canvas_h), Image.LANCZOS)
+            #  预乘 alpha + LANCZOS：直通 alpha 缩会在半透明辉光外围掉一圈脏边。
+            im = resize_premultiplied(im, (canvas_w, canvas_h))
             im.save(dst, 'PNG', optimize=True)
         meta_uuid = existing_uuid(dst_meta)
         write_json(dst_meta, build_sprite_frame_meta(meta_uuid, os.path.splitext(frame)[0],
@@ -605,7 +632,13 @@ def build_set(cfg):
     # 7) 自动图集
     pac_path = os.path.join(atlas_dir, name + '.pac')
     write_json(pac_path, {'__type__': 'cc.SpriteAtlas'})
-    write_json(pac_path + '.meta', build_pac_meta(existing_uuid(pac_path + '.meta')))
+    pac_meta_path = pac_path + '.meta'
+    if os.path.isfile(pac_meta_path):
+        #  已有以编辑器为准：Cocos 重导入会把 filterUnused / remove*InBundle 翻成 true，
+        #  重跑再写回 false 只会制造来回 diff（大威天芦那批踩过）。
+        pass
+    else:
+        write_json(pac_meta_path, build_pac_meta(new_uuid()))
 
     # 8) 动画
     clip_name = cfg['clip_name']
@@ -644,8 +677,14 @@ def build_set(cfg):
 
 
 def main():
-    results = [build_set(cfg) for cfg in SETS]
-    print('\n完成 %d 套。' % len(results))
+    results = []
+    for cfg in SETS:
+        try:
+            results.append(build_set(cfg))
+        except RuntimeError as err:
+            #  兄弟目录的源散图可能已被搬走/清理；缺帧就跳过，别让整套脚本一起挂掉。
+            print('[skip] %s：%s' % (cfg['name'], err))
+    print('\n完成 %d/%d 套。' % (len(results), len(SETS)))
 
 
 if __name__ == '__main__':

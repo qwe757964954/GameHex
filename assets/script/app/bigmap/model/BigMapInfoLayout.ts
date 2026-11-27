@@ -22,25 +22,25 @@
  */
 
 /** 标题中心距卡片顶边的距离（含关闭按钮那一行的高度）。 */
-export const BIGMAP_INFO_TITLE_TOP_GAP = 46;
+const BIGMAP_INFO_TITLE_TOP_GAP = 46;
 /** 标题中心到图标上沿的距离。 */
-export const BIGMAP_INFO_ICON_GAP = 30;
+const BIGMAP_INFO_ICON_GAP = 30;
 /** 图标下沿到正文上沿的距离。 */
-export const BIGMAP_INFO_ICON_BODY_GAP = 12;
+const BIGMAP_INFO_ICON_BODY_GAP = 12;
 /** 按钮中心距卡片底边的距离（与领地页弹窗的「返回地图 / 开战」同一排法）。 */
-export const BIGMAP_INFO_ACTION_BOTTOM_GAP = 46;
+const BIGMAP_INFO_ACTION_BOTTOM_GAP = 46;
 /** 有按钮时，正文下沿与卡片底边之间留多少（要让开按钮 + 描边）。 */
-export const BIGMAP_INFO_BODY_BOTTOM_GAP_ACTIONS = 78;
+const BIGMAP_INFO_BODY_BOTTOM_GAP_ACTIONS = 78;
 /** 没有按钮时（纯说明卡），正文可以再往下探一点。 */
-export const BIGMAP_INFO_BODY_BOTTOM_GAP_IDLE = 30;
+const BIGMAP_INFO_BODY_BOTTOM_GAP_IDLE = 30;
 /** 正文左右各留多少（卡片内边距）。 */
-export const BIGMAP_INFO_PADDING_X = 28;
+const BIGMAP_INFO_PADDING_X = 28;
 /** 图标缩到这个高度以下就不显示（再小也读不出是什么，不如把空间给文字）。 */
-export const BIGMAP_INFO_MIN_ICON_HEIGHT = 56;
+const BIGMAP_INFO_MIN_ICON_HEIGHT = 56;
 /** 正文最少给多高（一行半，保证不会缩成一条缝）。 */
-export const BIGMAP_INFO_MIN_BODY_HEIGHT = 40;
+const BIGMAP_INFO_MIN_BODY_HEIGHT = 40;
 /** 两颗按钮并排时的中心间距（各离中线 `±BIGMAP_INFO_ACTION_GAP`）。 */
-export const BIGMAP_INFO_ACTION_GAP = 76;
+const BIGMAP_INFO_ACTION_GAP = 76;
 
 /** 一帧的排版输入。全部是卡片局部坐标下的尺寸（像素）。 */
 export interface IBigMapInfoLayoutInput {

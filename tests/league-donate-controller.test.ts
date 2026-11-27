@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { LeagueDonateController } from '../assets/script/app/league/LeagueDonateController';
 import { LeagueDonateModel } from '../assets/script/app/league/LeagueDonateModel';
-import { LeagueDonateEvent, type ILeagueDonateIntent, type ILeagueDonateViewState } from '../assets/script/app/league/LeagueDonateEvents';
+import { LeagueDonateEvent, type ILeagueDonateIntent, type ILeagueDonateViewState, type LeagueDonateOutput } from '../assets/script/app/league/LeagueDonateEvents';
 import type { ILeagueDonateSnapshot, ILeagueRewardResult, LeagueRequestResult } from '../assets/script/app/league/LeagueRepository';
 import type { IResGoodsInfo as IActivityGoodsInfo } from '../assets/script/app/common/ResTypes';
 import {
@@ -53,6 +53,7 @@ interface IDonateCall {
 
 function fixture() {
     const owner = {};
+    const observer = {};
     const states: ILeagueDonateViewState[] = [];
     const tips: string[] = [], cancelled: object[] = [];
     const rewards: CmdGoods[][] = [];
@@ -60,23 +61,41 @@ function fixture() {
     const loadCalls: ILoadCall[] = [], donateCalls: IDonateCall[] = [];
     const adPlays: Array<{ resolve: (watched: boolean) => void; reject: (error: Error) => void }> = [];
     const model = new LeagueDonateModel();
-    const controller = new LeagueDonateController(createControllerContext(), {
-        owner, model,
+    const controller = new LeagueDonateController(createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => cancelled.push(caller),
+        },
+    }), {
+        model,
         repository: {
             loadDonate: () => new Promise<ILeagueDonateSnapshot>((resolve, reject) => loadCalls.push({ resolve, reject })),
             requestDonate: (adv, caller) => new Promise<ILeagueRewardResult>((resolve, reject) => {
                 donateCalls.push({ adv, caller: caller as object, resolve: status => resolve({ status, rewards: status === 'ok' ? [{ resId: 11, number: '300' }] as unknown as CmdGoods[] : [] }), reject });
             }),
         },
-        view: { render: state => states.push({ ...state }) },
-        feedback: {
-            tip: text => tips.push(text),
-            reward: goods => rewards.push(goods),
-            confirm: (content, onSure) => confirms.push({ content, onSure }),
-        },
         ads: { play: () => new Promise<boolean>((resolve, reject) => adPlays.push({ resolve, reject })) },
-        requests: { removeCaller: caller => cancelled.push(caller) },
     });
+    EventMgr.instance.on(LeagueDonateEvent.Output, (output: LeagueDonateOutput, source: object) => {
+        if (source !== controller) return;
+        switch (output.kind) {
+            case 'render':
+                states.push({ ...output.state });
+                break;
+            case 'tip':
+                tips.push(output.text);
+                break;
+            case 'reward':
+                rewards.push(output.goods);
+                break;
+            case 'confirm':
+                confirms.push({
+                    content: output.content,
+                    onSure: () => EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind: 'confirmCoin' } satisfies ILeagueDonateIntent),
+                });
+                break;
+        }
+    }, observer);
     controller.start();
     const emit = (kind: 'free' | 'coin') =>
         EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind } as ILeagueDonateIntent);

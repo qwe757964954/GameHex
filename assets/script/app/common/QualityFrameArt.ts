@@ -8,7 +8,7 @@ import { FRAME_ART_ROOT, spriteFramePath } from '../ArtPaths';
  */
 export const QUALITY_FRAME_ROOT = FRAME_ART_ROOT;
 
-export const QUALITY_FRAME_LEVELS = 4;
+const QUALITY_FRAME_LEVELS = 4;
 
 export const QUALITY_FRAME_NAMES: readonly string[] = [
     'common_img_pzk_01',

@@ -38,7 +38,7 @@ import { spriteFramePath } from '../ArtPaths';
 import type { IItemIconRef } from '../common/RewardIcon';
 
 /** 战令自有图目录（运行时时相对 `resources` 的路径）。 */
-export const BT_ART_ROOT = 'image/battletoken';
+const BT_ART_ROOT = 'image/battletoken';
 
 /**
  * 战令自有图（`key` → 文件名，不含扩展名）。
@@ -131,14 +131,7 @@ export function btSharedPath(ref: IItemIconRef): string {
     return spriteFramePath(ref.root, ref.name);
 }
 
-// ============================================================
-// 品质框（与七日 / 礼包 / 活动同一套）
-// ============================================================
-
-/** 品质框统一在 `common/QualityFrameArt`，这里只转发，不重算。 */
-import { qualityFrameLevel, qualityFrameName } from '../common/QualityFrameArt';
-
-export { qualityFrameLevel, qualityFrameName };
+// 品质框请直接从 `common/QualityFrameArt` 导入。
 
 // ============================================================
 // 九宫
@@ -180,17 +173,4 @@ export function btSpriteType(artName: string): number {
     return BT_ART_SLICED.has(artName) ? BT_SPRITE_SLICED : BT_SPRITE_SIMPLE;
 }
 
-// ============================================================
-// 奖励图标（两支分流，唯一入口）
-// ============================================================
-
-/**
- * 奖励图标的解析**唯一入口** —— 直接复用活动模块那条（老端 `ModelGoods.GetGoodsIconKeyByRefId` 的两支）：
- *   - `item` 表（`iconIsPath = true`）⇒ 资源路径直通，只认 `icons/` 前缀
- *   - `roleProperty` 表（`iconIsPath = false`）⇒ FGUI 裸名，落 `icons/resource/`
- *
- * ⚠️ 战令的奖励与消耗**几乎全是 `roleProperty` 档**（银币 7 / 体力 9 / 金币 10），
- * 只走 `item` 那一支会让奖励格**只剩品质框、不报错**。
- */
-export { resolveRewardIconRef } from '../common/RewardIcon';
-export type { IResGoodsInfo as IBattleTokenGoodsInfo } from '../common/ResTypes';
+// 奖励图标解析与类型请直接从 `common/RewardIcon`、`common/ResTypes` 导入。

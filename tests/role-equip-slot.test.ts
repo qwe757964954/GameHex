@@ -21,7 +21,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildEquipSlotPlan, equipLevelOf } from '../assets/script/app/role/RoleTable';
+import { buildEquipSlotPlan, equipDisplayQuality, equipLevelOf } from '../assets/script/app/role/RoleTable';
 
 /** 造一条 `CmdEquipPart`。 */
 const part = (equipId: unknown, equip: unknown) => ({ equipId, equip });
@@ -35,6 +35,9 @@ const page = (rows: Array<{ equipId: unknown; level: unknown }>) => ({ page: 0, 
 
 /** 造一行 equip 表。 */
 const refRow = (resId: number, icon: string, quality = 1) => ({ resId, icon, name: `N${resId}`, quality });
+
+/** 造一行 equipRank（rank + qualityLevel 复合主键；quality 才是 1..7 展示品质）。 */
+const rankRow = (rank: number, qualityLevel: number, quality: number) => ({ rank, qualityLevel, quality });
 
 test('恒返回 6 条，partId 依次 1..6', () => {
     const plan = buildEquipSlotPlan([], [], []);
@@ -52,14 +55,50 @@ test('部位 1/3/5 穿着装备 ⇒ entry 直接由 part.equip 构建，空位�
         [part(1, eq(5001, 401111)), part(3, eq(5003, 401112)), part(5, eq(5005, 401113))],
         [page([{ equipId: 401111, level: 11 }, { equipId: 401112, level: 13 }, { equipId: 401113, level: 15 }])],
         [refRow(401111, '图标_装备_武器6'), refRow(401112, '图标_装备_帽子6'), refRow(401113, '图标_装备_衣服6')],
+        [rankRow(1, 2, 2)],
     );
     assert.deepEqual(plan.map((p) => (p.entry ? p.entry.resId : null)), [401111, null, 401112, null, 401113, null]);
     assert.deepEqual(plan.map((p) => p.level), [11, 0, 13, 0, 15, 0]);
     const first = plan[0].entry!;
     assert.equal(first.iconKey, '图标_装备_武器6');
     assert.equal(first.name, 'N401111');
-    assert.equal(first.quality, 2);      // curQuality 优先于表品质
+    assert.equal(first.quality, 2);      // curQuality=2 → equipRank[1,2].quality=2（展示品质）
     assert.equal(first.equipped, true);  // 部位上的装备必然「穿着中」
+});
+
+test('展示品质走 equipRank.quality（curQuality 是 1..17 品质档，不能直接当 1..7 品质框）', () => {
+    const rankRows = [
+        rankRow(3, 6, 4),   // 史诗·平凡
+        rankRow(3, 8, 4),   // 史诗·完美
+        rankRow(3, 9, 5),   // 传说·平凡
+        rankRow(20, 17, 7), // 神话
+    ];
+    assert.equal(equipDisplayQuality(rankRows, 3, 6, 1), 4);
+    assert.equal(equipDisplayQuality(rankRows, 3, 8, 1), 4);
+    assert.equal(equipDisplayQuality(rankRows, 3, 9, 1), 5);
+    assert.equal(equipDisplayQuality(rankRows, 20, 17, 1), 7);
+    // 精确档缺行 ⇒ 老端退 qualityLevel-1（9 缺、8 在 ⇒ 史诗 4）
+    assert.equal(equipDisplayQuality([rankRow(3, 8, 4)], 3, 9, 1), 4);
+    // 两档都缺 ⇒ 回退 equip.quality
+    assert.equal(equipDisplayQuality(rankRows, 3, 17, 3), 3);
+
+    const plan = buildEquipSlotPlan(
+        [part(1, eq(5001, 401111, { rank: 3, curQuality: 8 }))],
+        [],
+        [refRow(401111, 'x', 1)],
+        rankRows,
+    );
+    assert.equal(plan[0].entry!.quality, 4);
+    assert.equal(plan[0].entry!.rank, 3);
+
+    // curQuality 缺失 ⇒ ref.quality 直接作为展示品质，不能当品质档再查表
+    const noCurQuality = buildEquipSlotPlan(
+        [part(1, eq(5002, 401112, { rank: 3, curQuality: 0 }))],
+        [],
+        [refRow(401112, 'y', 5)],
+        rankRows,
+    );
+    assert.equal(noCurQuality[0].entry!.quality, 5);
 });
 
 test('★ 等级按「分页行 equipId = 装备 resId」匹配 —— 用部位号匹配是上一版的事故根因', () => {

@@ -73,6 +73,7 @@ export interface IPopupInfo {
     /** 关闭后是否回收进实例池。 */
     cache: boolean;
     releaseCompositionOwner?: () => void;
+    releaseScope?: () => void;
 }
 
 interface IPopupOpening {
@@ -81,6 +82,7 @@ interface IPopupOpening {
     cancelled: boolean;
     promise: Promise<PopupBase | null>;
     entry?: IPopupInfo;
+    releaseScope?: () => void;
 }
 
 @ccclass('PopupManager')
@@ -166,9 +168,15 @@ export class PopupManager extends Component {
         if (PopupManager._instance === this) {
             PopupManager._instance = null;
         }
-        for (const opening of this._openings) opening.cancelled = true;
+        for (const opening of this._openings) {
+            opening.cancelled = true;
+            opening.releaseScope?.();
+            opening.releaseScope = undefined;
+        }
         const opened = this._stack.splice(0).reverse();
         for (const entry of opened) {
+            entry.releaseScope?.();
+            entry.releaseScope = undefined;
             this.disposeComposition(entry);
             entry.popup._internalClose(PopupCloseReason.Force);
             if (entry.popup.node?.isValid) entry.popup.node.destroy();
@@ -222,6 +230,7 @@ export class PopupManager extends Component {
             console.error(`[PopupManager] ${cls.name} 未声明 static prefabPath，无法定位预制体`);
             return Promise.resolve(null);
         }
+        if (params.scope?.disposed) return Promise.resolve(null);
 
         const unique = params.allowMultiple !== true;
         if (unique) {
@@ -241,6 +250,9 @@ export class PopupManager extends Component {
         opening.promise = task;
         this._openings.add(opening);
         if (unique) this._openingByPath.set(path, opening);
+        if (params.scope) {
+            opening.releaseScope = params.scope.defer(() => this._cancelOpening(opening));
+        }
         const finish = () => this._finishOpening(opening);
         task.then(finish, finish);
         return task;
@@ -290,8 +302,10 @@ export class PopupManager extends Component {
             path: opening.path,
             layer,
             cache: params.cache === true,
+            releaseScope: opening.releaseScope,
         };
         opening.entry = entry;
+        opening.releaseScope = undefined;
         this._stack.push(entry);
 
         if (this._callbackOwners) popup._bindCallbackOwners(this._callbackOwners);
@@ -300,7 +314,13 @@ export class PopupManager extends Component {
         // onOpen 里可能已经自己 close 了（例如数据加载失败直接关掉）
         if (this._stack.indexOf(entry) < 0) return null;
         if (!node.isValid) {
+            entry.releaseScope?.();
+            entry.releaseScope = undefined;
             this._stack.splice(this._stack.indexOf(entry), 1);
+            return null;
+        }
+        if (this._disposed || opening.cancelled) {
+            this.close(popup, PopupCloseReason.Force);
             return null;
         }
 
@@ -313,17 +333,41 @@ export class PopupManager extends Component {
                 if (this._stack.indexOf(entry) >= 0) this.close(popup, PopupCloseReason.Force);
                 return null;
             }
-            if (this._disposed || opening.cancelled || this._stack.indexOf(entry) < 0 || !node.isValid) return null;
+            if (this._disposed || opening.cancelled || this._stack.indexOf(entry) < 0 || !node.isValid) {
+                if (this._stack.indexOf(entry) >= 0) this.close(popup, PopupCloseReason.Force);
+                return null;
+            }
         }
         this._refreshDepth();
         this._refreshCover();
         return popup;
     }
 
+    private _cancelOpening(opening: IPopupOpening): void {
+        opening.cancelled = true;
+        opening.releaseScope = undefined;
+        if (this._openingByPath.get(opening.path) === opening) {
+            this._openingByPath.delete(opening.path);
+        }
+        const entry = opening.entry;
+        if (entry && this._stack.indexOf(entry) >= 0) {
+            entry.releaseScope = undefined;
+            this.close(entry.popup, PopupCloseReason.Force);
+        }
+    }
+
     private _finishOpening(opening: IPopupOpening): void {
         this._openings.delete(opening);
         if (this._openingByPath.get(opening.path) === opening) {
             this._openingByPath.delete(opening.path);
+        }
+        if (!opening.entry || opening.cancelled || this._stack.indexOf(opening.entry) < 0) {
+            opening.releaseScope?.();
+            opening.releaseScope = undefined;
+            if (opening.entry) {
+                opening.entry.releaseScope?.();
+                opening.entry.releaseScope = undefined;
+            }
         }
     }
 
@@ -350,6 +394,8 @@ export class PopupManager extends Component {
 
         const entry = this._stack[idx];
         this._stack.splice(idx, 1);
+        entry.releaseScope?.();
+        entry.releaseScope = undefined;
 
         // 必须先清 opening 记录：onClose 回调里立即重开同类弹窗时，应创建新任务而不是拿到旧 Promise。
         for (const opening of this._openings) {
@@ -435,7 +481,11 @@ export class PopupManager extends Component {
     /** 关闭栈内所有弹窗（从顶到底依次关，保证每个都能收到正确的 onReveal）。 */
     public closeAll(reason: PopupCloseReason = PopupCloseReason.Force): void {
         for (const opening of this._openings) {
-            if (!opening.entry) opening.cancelled = true;
+            if (!opening.entry) {
+                opening.cancelled = true;
+                opening.releaseScope?.();
+                opening.releaseScope = undefined;
+            }
         }
         this._openingByPath.clear();
         let guard = 0;
@@ -448,7 +498,11 @@ export class PopupManager extends Component {
     /** 关闭栈内所有指定类的弹窗。 */
     public closeByClass<T extends PopupBase>(cls: new () => T, reason: PopupCloseReason = PopupCloseReason.Force): void {
         for (const opening of this._openings) {
-            if (opening.cls === cls && !opening.entry) opening.cancelled = true;
+            if (opening.cls === cls && !opening.entry) {
+                opening.cancelled = true;
+                opening.releaseScope?.();
+                opening.releaseScope = undefined;
+            }
             if (opening.cls === cls && this._openingByPath.get(opening.path) === opening) {
                 this._openingByPath.delete(opening.path);
             }

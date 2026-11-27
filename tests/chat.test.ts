@@ -87,6 +87,7 @@ import {
 import {
     recruitLayout,
 } from './fixtures/chat-recruit-layout';
+import { CHAT_ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
     chatSpriteType,
     chatTint,
@@ -94,7 +95,6 @@ import {
     CHAT_ART_BUBBLE_BG,
     CHAT_ART_DIRS,
     CHAT_ART_INPUT_BG,
-    CHAT_ART_ROOT,
     CHAT_ART_SLICED,
     CHAT_EMOJI_PREFIX,
     CHAT_HEAD_ART,

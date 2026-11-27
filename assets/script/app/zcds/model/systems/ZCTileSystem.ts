@@ -4,6 +4,14 @@ import type { ZCOwner } from '../ZCMapConfig';
 
 /** 地块状态与城墙暴露规则。*/
 export class ZCTileSystem {
+    static finishDevelopment(hex: ZCHexState, wallMaxHp: number, wallLevel?: number): void {
+        hex.developmentResolved = true;
+        hex.state = 'developed';
+        hex.wallMaxHp = hex.wallHp = wallMaxHp;
+        if (wallLevel !== undefined) hex.wallLevel = wallLevel;
+        hex.wallBreachedEdge = null;
+    }
+
     static refresh(state: ZCSnapshot, map: ZCMatchMap): void {
         for (const hex of state.hexes) {
             if (hex.building !== 'none' && hex.hp > 0) {

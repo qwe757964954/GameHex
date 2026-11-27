@@ -1,6 +1,7 @@
 /**
  * 网络请求的通用守卫工具，纯函数、零引擎依赖，Node 单测可直接 import。
  */
+import { ResourceScope } from '../../core/asset/ResourceScope';
 import { toCount, toIdString, toPositiveInt } from '../../core/value/Coerce';
 import { WRITE_TIMEOUT_MS } from './Timeouts';
 
@@ -12,9 +13,152 @@ export interface IGameSendPort {
     send(message: unknown, cache: boolean): Promise<boolean>;
 }
 
+/** 支持按宿主统一注销的网络端口（供会话级发送器使用）。 */
+export interface IScopedNetPort extends IGameSendPort {
+    removeCaller(caller: object): void;
+}
+
 /** 网络请求三态；与 `core/types/NetResult` 同口径。 */
 export type GameRequestStatus = 'ok' | 'offline' | 'failed';
 export type CancellableRequest<T> = Promise<T> & { cancel(): void };
+
+/** 会话级请求四态：明确区分服务端 `CmdTips` 拒单（`rejected`）与未发/未确认。 */
+export type ScopedRequestStatus = 'ok' | 'rejected' | 'offline' | 'unconfirmed';
+
+export type ScopedRequestOutcome<TResponse = unknown> =
+    | { readonly status: 'ok'; readonly response: TResponse }
+    | { readonly status: Exclude<ScopedRequestStatus, 'ok'> };
+
+export interface IScopedRequestMessage {
+    allowRetry: boolean;
+    canSend: (() => boolean) | null;
+    fErrorCallback: Function;
+}
+
+export interface IScopedRequestOptions {
+    readonly timeoutMs?: number;
+    readonly expiresMs?: number;
+    readonly tag?: string;
+    readonly allowRetry?: boolean;
+    /** 单次请求结束后立即注销宿主（如串行榜单查询在超时的情况下立即释放底层挂起项）。 */
+    readonly releaseCallerOnSettled?: boolean;
+    readonly onBlock?: (status: Exclude<ScopedRequestStatus, 'ok'>, failure: string | null) => void;
+}
+
+export interface IScopedNetSenderOptions {
+    readonly name?: string;
+    readonly scope?: ResourceScope;
+    readonly isAlive?: () => boolean;
+}
+
+/**
+ * 绑定会话作用域的网络请求发送器。
+ *
+ * 将宿主存活检查、`canSend` 有效期、`fErrorCallback` 四态归类与释放时唯一一次 `removeCaller`
+ * 收口到同一处，业务网关只需保留协议构造与入参校验。
+ */
+export class ScopedNetSender {
+    readonly scope: ResourceScope;
+    private readonly isAlive: () => boolean;
+
+    constructor(
+        private readonly net: () => IScopedNetPort,
+        private readonly caller: object,
+        options?: IScopedNetSenderOptions,
+    ) {
+        this.scope = options?.scope ?? new ResourceScope(options?.name ?? 'scoped-net');
+        this.isAlive = options?.isAlive ?? (() => true);
+        this.scope.defer(() => {
+            this.net().removeCaller(this.caller);
+        });
+    }
+
+    get disposed(): boolean {
+        return this.scope.disposed;
+    }
+
+    get alive(): boolean {
+        return !this.scope.disposed && this.isAlive();
+    }
+
+    dispose(): void {
+        this.scope.dispose();
+    }
+
+    async send<TResponse = unknown>(
+        make: (receive: (response: TResponse) => void) => IScopedRequestMessage,
+        options?: IScopedRequestOptions,
+    ): Promise<ScopedRequestOutcome<TResponse>> {
+        if (this.scope.disposed) {
+            options?.onBlock?.('offline', 'disposed');
+            return { status: 'offline' };
+        }
+        if (!this.isAlive()) {
+            options?.onBlock?.('offline', 'owner_switched');
+            return { status: 'offline' };
+        }
+        let response: TResponse | null = null;
+        let hasResponse = false;
+        let failure: string | null = null;
+        const request = make((rsp) => {
+            response = rsp;
+            hasResponse = true;
+        });
+        const timeoutMs = options?.timeoutMs ?? WRITE_TIMEOUT_MS;
+        const expiresMs = options?.expiresMs;
+        if (expiresMs !== undefined) {
+            const expiresAt = Date.now() + expiresMs;
+            request.canSend = () => !this.scope.disposed && this.isAlive() && Date.now() < expiresAt;
+        } else {
+            request.canSend = () => !this.scope.disposed && this.isAlive();
+        }
+        if (options?.allowRetry !== undefined) {
+            request.allowRetry = options.allowRetry;
+        }
+        // 传输层失败原因（server_error / timeout / cancelled / send fail）在 onReject 时先回填再 resolve(false)。
+        request.fErrorCallback = (reason: string | null): void => {
+            failure = reason;
+        };
+        const net = this.net();
+        let status: GameRequestStatus;
+        try {
+            status = await sendGameRequest(net, () => request, { timeoutMs, tag: options?.tag });
+        } finally {
+            if (options?.releaseCallerOnSettled) {
+                net.removeCaller(this.caller);
+            }
+        }
+        if (status === 'offline') {
+            options?.onBlock?.('offline', 'offline');
+            return { status: 'offline' };
+        }
+        if (this.scope.disposed || !this.isAlive()) {
+            if (failure === 'cancelled' || failure === 'send fail') {
+                options?.onBlock?.('offline', failure);
+                return { status: 'offline' };
+            }
+            options?.onBlock?.('unconfirmed', failure ?? 'owner_changed');
+            return { status: 'unconfirmed' };
+        }
+        if (failure === 'server_error') {
+            options?.onBlock?.('rejected', failure);
+            return { status: 'rejected' };
+        }
+        if (status !== 'ok') {
+            if (failure === 'cancelled' || failure === 'send fail') {
+                options?.onBlock?.('offline', failure);
+                return { status: 'offline' };
+            }
+            options?.onBlock?.('unconfirmed', failure);
+            return { status: 'unconfirmed' };
+        }
+        if (!hasResponse) {
+            options?.onBlock?.('unconfirmed', 'missing_response');
+            return { status: 'unconfirmed' };
+        }
+        return { status: 'ok', response: response as TResponse };
+    }
+}
 
 export interface IGameRequestOptions {
     readonly timeoutMs?: number;

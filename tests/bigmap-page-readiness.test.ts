@@ -196,6 +196,7 @@ function createEntryHarness() {
     runInNewContext(code, { exports, console,
         require: (name: string) => {
             if (name.endsWith('/EventMgr')) return { EventMgr };
+            if (name.endsWith('/ResourceScope')) return { ResourceScope };
         if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { Node: FakeNode, UITransform, Widget, UIOpacity,
                 Prefab: class {}, AssetManager: class {},

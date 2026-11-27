@@ -1,4 +1,4 @@
-import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 import { presetFormationId } from './LineupPresets';
 
 /** 布阵编辑器对外暴露的不可变快照。 */

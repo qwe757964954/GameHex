@@ -82,8 +82,8 @@ const neutral = (): ZCDeckBonuses => ({
 
 test('normalizeCardRow 把表里的数字 enabled 归一化成布尔（否则整表被过滤空）', () => {
     const rows = readPvpRef('pvpCard');
-    // 36 张卡池（含末行 enabled=0 的占位卡「民兵」）+ 16 张出战卡 + 1 行主城 = 38 行
-    assert.equal(rows.length, 37);
+    // 35 张兵种卡 + 主角 1001（enabled=0，只提供单位定义、不进卡池）+ 主城 + 金矿 = 38 行
+    assert.equal(rows.length, 38);
     assert.equal(deckRows().length, 17, '固定夹具含玩家 8 + 敌方 8 + 主城 1');
 
     // 原始行直接交给 parseCard：enabled 是数字 1，严格判等拿不到 true —— 这就是当初的坑

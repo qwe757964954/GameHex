@@ -9,6 +9,7 @@
  * | `RDFriend` | `friendRepository.load()` + `RdJudgements.friendRedDot` | 有好友申请 **或** 「领取体力」可点（`RDFriend`） |
  * | `RDGift` / `RDGiftOnce` / `RDGiftWeek` / `RDGiftDaily` / `RDGiftMonth` | `rechargeActivityRepository.load().hasRedDot` | 充值页签里任一有可领奖励（`hasRecharegeTotalRd`） |
  * | `RDLeague` | `leagueRepository.loadLeagueEntryRedDots()` + `RdJudgements.leagueRedDot` | 已入盟 ∧（砍价 ∪ 任务 ∪ 北伐）—— 老端 `RDLeague.OnComputeResult()`；**不含捐献**（广告未迁） |
+ * | `RDEquipLevelUp` | `roleRepository.equipRedDots()` | 装备可强化 ∪ 可升品 ∪ 可洗炼（角色页装备页签与锻造页共用同一份快照） |
  *
  * ## 统一的写法（新加一个照抄）
  * ```
@@ -44,11 +45,14 @@
  *   - `RDLimitTime`：限时礼包页在新工程还没落地。
  *
  * ## 顺带记一笔：变量接好了，但**界面**还没挂红点节点的地方
- * 红点体系只负责「表达式 → 值」；界面上要真看见，还得对应 prefab 里有 `RedDot` 节点
- * （或挂 `ui/common/RedDot.prefab`）。目前这些位置还是「故意没建空节点」的状态：
+ * 红点体系只负责「表达式 → 值」；界面上要真看见，还得对应 prefab 里有通用 `RedDot`
+ * （本地三层结构 `Icon/Spine/Title` + 骨架 `skel/reddot`，或挂 `ui/common/RedDot.prefab`）。
+ * 工程内所有 `RedDot` 节点**已统一迁到通用组件**（2026-11-26），脚本侧一律
+ * `@property(RedDot)` + `setRedDot(...)`，不再直接读写节点 `active`。
+ * 变量接好但界面仍「故意没建空节点」的位置：
  * - 礼包：`GiftSubTab`（子页签）、`RechargeDailyView` / `RechargeTotalView`（页内）、`RechargeChest`；
- * - 邮件：`MailRow`（`com_rd`）；
  * - 聊天：`ChatPrivateHead`（`com_rd`）；主界面底部聊天条暂不接红点。
+ * 已挂的：`MailRow` 的 `UnreadDot`（工程通用 `RedDot` + `skel/reddot` 骨架，按行内未读态显隐，不走 RD 表达式）。
  *
  * ⚠️ 礼包子页签那四个（413 每日 / 414 周常 / 415 月度 / 416 终身）变量**值都等于整页聚合**，
  * 见上面 `RDGiftDaily` 的注释 —— 要接子页签红点得先按 plan 周期拆判据，否则四个页签一起亮。
@@ -62,6 +66,7 @@ import { battleTokenRdType } from '../battletoken/BattleTokenTable';
 import { friendRepository } from '../friend/FriendRepository';
 import { rechargeActivityRepository } from '../gift/RechargeActivityRepository';
 import { leagueRepository } from '../league/LeagueRepository';
+import { roleRepository } from '../role/RoleRepository';
 import { battleTokenRedDot, friendRedDot, leagueRedDot } from './RdJudgements';
 import { RdAsyncClientVar } from './RdClientVar';
 
@@ -302,6 +307,44 @@ export class RDLeague extends RDLeagueVar {
     static __cname: string = 'RDLeague';
 }
 
+// ============================================================
+// 装备锻造（角色页「装备」页签 / 底栏角色入口）
+// ============================================================
+
+/**
+ * 装备锻造红点 —— `open.json` refId 16「角色-装备」页签、refId 2「角色主入口」聚合都用它。
+ *
+ * 判定 = `RoleRepository.equipRedDots()`：6 个部位里任一可强化 / 可升品 / 可洗炼。
+ * 同一份快照也驱动角色页的装备页签 / 锻造入口 / 6 格装备、以及锻造弹窗内部的页签与按钮，
+ * 所以不会出现「角色页亮了、锻造页没亮」。
+ *
+ * ⚠️ 名字沿用老端「装备升级」，但口径包含洗炼 —— 老端 `RDEquipLevelUp` 的判定源码未随本工程
+ * 迁移，锻造页的洗炼与升品同属「装备可操作」；策划若只想要强化，应在 `open.json` 拆变量。
+ */
+class RDEquipLevelUpVar extends RdAsyncClientVar {
+    private hasRedDot = false;
+
+    protected GetWatchCacheNames(): readonly string[] {
+        // 装备部位 / 分页等级 / 背包材料 / 金币，任一变化都可能改变「能不能操作」。
+        return ['CmdEquipPart', 'CmdEquipPage', 'CmdItem', 'CmdRole'];
+    }
+
+    protected async loadSnapshot(): Promise<boolean> {
+        const dots = await roleRepository.equipRedDots();
+        if (this.destroyed) return false;
+        this.hasRedDot = dots.any;
+        return true;
+    }
+
+    protected OnComputeResult(): number {
+        return this.hasRedDot ? 1 : 0;
+    }
+}
+
+export class RDEquipLevelUp extends RDEquipLevelUpVar {
+    static __cname: string = 'RDEquipLevelUp';
+}
+
 /** 变量名 → 实现类。`RdRegistry` 遍历它注册，其余客户端型自动补桩。 */
 export const RD_CLIENT_VAR_CLASSES: Readonly<Record<string, new () => ExprVarBase>> = {
     RDActivity,
@@ -310,6 +353,7 @@ export const RD_CLIENT_VAR_CLASSES: Readonly<Record<string, new () => ExprVarBas
     RDBattleToken,
     RDFriend,
     RDLeague,
+    RDEquipLevelUp,
     RDGift,
     RDGiftDaily,
     RDGiftMonth,

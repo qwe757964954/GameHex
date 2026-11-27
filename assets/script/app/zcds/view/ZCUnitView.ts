@@ -1,7 +1,7 @@
 import { ZCDC_LOG_DIAGNOSTICS } from '../ZCDCLogSwitch';
 import { _decorator, Color, Component, instantiate, Label, Material, Node, Prefab, ProgressBar, sp, Sprite, SpriteFrame, UIOpacity, UITransform, Vec3 } from 'cc';
 import type { ZCUnitDefinition } from '../model/ZCCombatCatalog';
-import type { ZCUnitState } from '../model/ZCGameModel';
+import type { DeepReadonly, ZCUnitState } from '../model/ZCGameTypes';
 import { ZCOwner } from '../model/ZCMapConfig';
 import { ZC_CLIENT_COLORS } from './ZCTheme';
 import { isHealthBarVisible, pickHealthBarFill, spawnShakePulse, SPAWN_SHAKE_PHASE_SECONDS, updateHealthBar, healthBarRatio } from './ZCGameViewUtil';
@@ -24,7 +24,7 @@ export const ZC_SPINE_CANVAS_TARGET_HEIGHT = 69.4;
 export const ZC_MONSTER_HEALTH_BAR_GAP = 6;
 
 export interface IZCUnitPresentation {
-    unit: Readonly<ZCUnitState>;
+    unit: DeepReadonly<ZCUnitState>;
     definition: Readonly<ZCUnitDefinition>;
     x: number;
     y: number;
@@ -632,7 +632,7 @@ export class ZCUnitView extends Component {
      * 整体外轮廓：只给「非我方席位 + 没阵亡 + 有 spine 外形可描」的单位显示。
      * 材质缺失（effect 没加载成功）时整层关掉，不影响其余表现。
     */
-    private renderOutline(unit: Readonly<ZCUnitState>): void {
+    private renderOutline(unit: DeepReadonly<ZCUnitState>): void {
         const copy = this.outlineCopyNode;
         const skeleton = this.outlineCopySkeleton;
         if (!copy || !skeleton) return;
@@ -760,7 +760,7 @@ export class ZCUnitView extends Component {
         return null;
     }
 
-    private renderHealthBar(unit: Readonly<ZCUnitState>, definition: Readonly<ZCUnitDefinition>, now: number): void {
+    private renderHealthBar(unit: DeepReadonly<ZCUnitState>, definition: Readonly<ZCUnitDefinition>, now: number): void {
         const width = definition.hero ? this.barWidthHero : this.barWidth;
         const height = this.barHeight;
         if (width !== this.barAppliedWidth || height !== this.barAppliedHeight) {
@@ -819,7 +819,7 @@ export class ZCUnitView extends Component {
      * 没有可用美术 prefab 时的兜底：white 色块 + 「兵 / 弓 / 将」字。
      * 形态与归属没变就不重复赋值（`fallbackKey` 是这三者的指纹）。
     */
-    private renderFallback(unit: Readonly<ZCUnitState>, definition: Readonly<ZCUnitDefinition>): void {
+    private renderFallback(unit: DeepReadonly<ZCUnitState>, definition: Readonly<ZCUnitDefinition>): void {
         // 指纹用位掩码而不是模板字符串：这段每帧每单位都会跑，
         // `${a}|${b}|${c}` 每次都新建一个字符串（46 单位 × 60 帧 ≈ 2800 个/秒），
         // 而它只是拿来判"要不要重画"。四个因子各占一位，够用且零分配。

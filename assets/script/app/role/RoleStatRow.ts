@@ -58,15 +58,15 @@ export class RoleStatRow extends Component {
         this.keyLabel.string = key;
         this.valueLabel.string = value;
 
-        const color = TONE_COLORS[tone] ?? TONE_COLORS.normal;
+        const color = TONE_COLORS[tone];
         this.valueLabel.color = color;
         this.dotLabel.color = color;
         this.dotLabel.string = '●';
 
-        if (this.lineNode) this.lineNode.active = true;
-        const hasTag = !!tag;
-        if (this.tagNode) this.tagNode.active = hasTag;
-        if (this.tagLabel && tag) this.tagLabel.string = tag;
+        this.lineNode.active = true;
+        // 标签一律全量写（没有 tag 就清空）：只「有值才写」会把上一行的「宝石」带到别的行上。
+        this.tagNode.active = !!tag;
+        this.tagLabel.string = tag ?? '';
     }
 
     public setLine(line: string, tone: RoleStatTone = 'normal', tag?: string): void {

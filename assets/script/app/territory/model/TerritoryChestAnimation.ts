@@ -829,16 +829,16 @@ export function territoryChestCameraFx(
 /** 同一 `(seed, index, salt)` 的确定性噪声由 `core/math/DeterministicNoise` 提供。 */
 
 /** 喷泉粒子的重力（px/s²）与出射档位（规格「60°~100° 扇形、初速 600~900」）。 */
-export const TERRITORY_CHEST_FOUNTAIN_GRAVITY = 1400;
-export const TERRITORY_CHEST_FOUNTAIN_SPEED_MIN = 600;
-export const TERRITORY_CHEST_FOUNTAIN_SPEED_MAX = 900;
+const TERRITORY_CHEST_FOUNTAIN_GRAVITY = 1400;
+const TERRITORY_CHEST_FOUNTAIN_SPEED_MIN = 600;
+const TERRITORY_CHEST_FOUNTAIN_SPEED_MAX = 900;
 
 /** 星光粒子的扩散速度（px/s，规格「200~500 无重力」）。 */
-export const TERRITORY_CHEST_STAR_SPEED_MIN = 200;
-export const TERRITORY_CHEST_STAR_SPEED_MAX = 500;
+const TERRITORY_CHEST_STAR_SPEED_MIN = 200;
+const TERRITORY_CHEST_STAR_SPEED_MAX = 500;
 /** 星光单颗生命周期（秒，规格「1.5~2.5s 后淡出」）。 */
-export const TERRITORY_CHEST_STAR_LIFE_MIN = 1.5;
-export const TERRITORY_CHEST_STAR_LIFE_MAX = 2.5;
+const TERRITORY_CHEST_STAR_LIFE_MIN = 1.5;
+const TERRITORY_CHEST_STAR_LIFE_MAX = 2.5;
 
 /** 一颗喷泉粒子的当帧状态（坐标相对**箱口**）。 */
 export interface ITerritoryChestParticle {
@@ -945,7 +945,7 @@ export interface ITerritoryChestFlyFx {
 }
 
 /** 飞行段的拱高比例（规格「控制点向上偏移屏幕高的 18%~25%」，这里按起终点距离的 0.55 取）。 */
-export const TERRITORY_CHEST_FLY_ARC_RATIO = 0.55;
+const TERRITORY_CHEST_FLY_ARC_RATIO = 0.55;
 
 /**
  * 第 `index` 枚奖励图标在 `t` 秒时的飞行状态。

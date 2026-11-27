@@ -1,5 +1,5 @@
 import { _decorator, Component, EventTouch, Label, Node, Prefab, Sprite, SpriteFrame, Vec2 } from 'cc';
-import { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import type { IBoardCardHost } from './LineupBoardCard';
 import { CardUnitPreview } from './CardUnitPreview';

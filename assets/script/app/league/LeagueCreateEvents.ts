@@ -1,6 +1,9 @@
 import type { ILeagueCostView } from './LeagueTable';
 
-export const LeagueCreateEvent = { Intent: 'league-create:intent' } as const;
+export const LeagueCreateEvent = {
+    Intent: 'league-create:intent',
+    Output: 'league-create:output',
+} as const;
 
 /**
  * 一次创建弹窗会话的意图。
@@ -23,3 +26,10 @@ export interface ILeagueCreateViewState {
     readonly cost: ILeagueCostView | null;
     readonly submitting: boolean;
 }
+
+/** 来源为产生输出的联盟创建控制器。 */
+export type LeagueCreateOutput =
+    | { readonly kind: 'render'; readonly state: ILeagueCreateViewState }
+    | { readonly kind: 'tip'; readonly text: string }
+    | { readonly kind: 'close' }
+    | { readonly kind: 'joined' };

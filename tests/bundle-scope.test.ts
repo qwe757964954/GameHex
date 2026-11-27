@@ -19,19 +19,20 @@ function load(path: string, dependencies: Record<string, unknown>) {
 }
 
 test('分包目录清单与路由表一致，命中前缀走对应 bundle', () => {
-    assert.equal(BUNDLE_DIRECTORIES[BATTLE_BUNDLE].length, 7);
+    assert.equal(BUNDLE_DIRECTORIES[BATTLE_BUNDLE].length, 8);
     assert.equal(BUNDLE_DIRECTORIES[BIGMAP_BUNDLE].length, 4);
     assert.ok(BUNDLE_DIRECTORIES[MAIN_PAGES_BUNDLE].length >= 20);
     // 战斗
     assert.equal(bundleForPath('units/archer/archer'), BATTLE_BUNDLE);
     assert.equal(bundleForPath('ui/game/ZCGameHUD'), BATTLE_BUNDLE);
     assert.equal(bundleForPath('image/effects/hex_ground_glow/hex_ground_glow_01'), BATTLE_BUNDLE);
+    assert.equal(bundleForPath('image/barracks/barracks_info_bg'), BATTLE_BUNDLE);
     assert.equal(bundleForPath('image/map-resource/coin_icon'), BATTLE_BUNDLE);
     assert.equal(bundleForPath('image/spawn-region/frame_01'), BATTLE_BUNDLE);
     assert.equal(bundleForPath('image/gameui/whh'), BATTLE_BUNDLE);
     assert.equal(bundleForPath('image/settlement/title_victory'), BATTLE_BUNDLE);
     // 大世界（2026-11-04 bundle 内 `image/bigmap/` 上提成 `image/`，只能逐条登记）
-    assert.equal(bundleForPath('image/concept/sprites/grain'), BIGMAP_BUNDLE);
+    assert.equal(bundleForPath('image/concept/ui/top_grain'), BIGMAP_BUNDLE);
     assert.equal(bundleForPath('image/concept/ui/stamina'), BIGMAP_BUNDLE);
     assert.equal(bundleForPath('image/base_background'), BIGMAP_BUNDLE);
     assert.equal(bundleForPath('bigMapBG'), BIGMAP_BUNDLE);

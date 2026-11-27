@@ -2,6 +2,7 @@
  * 主界面顶部资源栏数据层 —— 纯函数，零引擎依赖。
  * 槽位顺序固定（银币/晶石/体力），体力值为 当前/上限。
  */
+import { formatResourceAmount } from '../../core/math/CompactNumber';
 import { FALLBACK_RES_ICON_ART } from '../common/ResTypes';
 import { toCount, toIdString } from '../net/RequestGuard';
 
@@ -51,7 +52,12 @@ export interface LevelRow {
 export interface ResBarSlot {
     readonly key: string;
     readonly iconArt: string;
+    /** 显示文本（已过 {@link formatResBarAmountText}）；读数滚动/扣除比对**不能**拿它反解析。 */
     readonly valueText: string;
+    /** 原始数量（滚动与涨扣比对用）；体力为当前值（已夹到 0 以上）。 */
+    readonly amount: number;
+    /** 体力上限（`end` 拼 `/上限`）；其余资源为 `0`。 */
+    readonly cap: number;
     readonly showPlus: boolean;
 }
 
@@ -64,16 +70,52 @@ export interface ResBarView {
     readonly slots: readonly ResBarSlot[];
 }
 
+/**
+ * 资源格**显示文本**：体力为 `当前/上限`，其余走工程公共大数换算。
+ *
+ * 大数换算统一走 `core/math/CompactNumber.formatResourceAmount`（1 万起 K/M/B/T、保留一位小数），
+ * 不在这里另抄阈值/后缀 —— 老端资源栏用的是 `bigNum` 表驱动的 `BigNum.shortNum`，阶梯同源。
+ *
+ * `key === 'end'` 不走缩写：体力上限通常只有三位数，缩写反而读不出「还剩几次」。
+ */
+export function formatResBarAmountText(key: string, amount: number, cap = 0): string {
+    if (key === 'end') {
+        const current = Math.max(Math.floor(toCount(amount)), 0);
+        return `${current}/${Math.floor(toCount(cap))}`;
+    }
+    return formatResourceAmount(toCount(amount));
+}
+
+/**
+ * 一格的**原始数量 + 体力上限**（滚动与涨扣比对的数据源）。
+ *
+ * 体力当前值夹到 0（老端 `Math.max(vo.GetEnd(), 0)`，可以被消耗成负数但显示 0）；
+ * 其余资源照原值，脏负值不在模型层掩盖。
+ */
+export function resBarAmountOf(
+    role: ResBarRoleRow | null | undefined,
+    key: string,
+): { amount: number; cap: number } {
+    if (!role) return { amount: 0, cap: 0 };
+    if (key === 'end') {
+        return { amount: Math.max(toCount(role.end), 0), cap: toCount(role.endMax) };
+    }
+    return { amount: toCount((role as Record<string, unknown>)[key]), cap: 0 };
+}
+
 /** 资源数值文本。体力为 当前/上限，可为负时当前值归零、上限不变。 */
 export function formatResValue(role: ResBarRoleRow | null | undefined, key: string): string {
     if (!role) return '';
-    if (key === 'end') {
-        const cur = Math.max(toCount(role.end), 0);
-        return `${cur}/${toCount(role.endMax)}`;
-    }
+    if (key === 'end') return formatResBarAmountText('end', toCount(role.end), toCount(role.endMax));
     const raw = (role as Record<string, unknown>)[key];
-    if (typeof raw === 'string') return raw || '0';
-    if (typeof raw === 'number') return String(raw);
+    if (typeof raw === 'string') {
+        // 空串按 0（服务端偶发空字段）；非数字的脏串原样显示，别硬换算成 0。
+        if (raw === '') return formatResBarAmountText(key, 0);
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? formatResBarAmountText(key, parsed) : raw;
+    }
+    if (typeof raw === 'number') return formatResBarAmountText(key, raw);
+    if (raw && typeof raw === 'object') return formatResBarAmountText(key, toCount(raw));
     return '';
 }
 
@@ -113,6 +155,8 @@ export function buildResBarSlots(
         key,
         iconArt: iconOf(key),
         valueText: '0',
+        amount: 0,
+        cap: 0,
         showPlus: key === 'end',
     }));
 }
@@ -130,10 +174,10 @@ export function buildResBarView(
     iconOf?: (key: string) => string,
 ): ResBarView | null {
     if (!role) return null;
-    const slots: ResBarSlot[] = buildResBarSlots(keys, iconOf).map((slot) => ({
-        ...slot,
-        valueText: formatResValue(role, slot.key),
-    }));
+    const slots: ResBarSlot[] = buildResBarSlots(keys, iconOf).map((slot) => {
+        const { amount, cap } = resBarAmountOf(role, slot.key);
+        return { ...slot, amount, cap, valueText: formatResValue(role, slot.key) };
+    });
     return {
         name: typeof role.name === 'string' ? role.name : '',
         // 2026-10-20 起只显示等级数字（原为 `LV12`，需求要求去掉 `LV` 前缀）。

@@ -9,10 +9,10 @@ import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { loadArt } from '../card/CardLineupIcons';
 import { HeadArt } from '../HeadArt';
+import { LEAGUE_ART_ROOT } from '../ArtPaths';
 import {
     LEAGUE_ART_BANNER_BASE,
     LEAGUE_ART_BANNER_FRAME,
-    LEAGUE_ART_ROOT,
     LEAGUE_ART_TAB_UP,
     LEAGUE_ART_TAB_DOWN,
     LEAGUE_BANNER_DEFAULT_COLOR,

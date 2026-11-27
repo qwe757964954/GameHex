@@ -54,7 +54,7 @@ const CHAIN = 103103;
 const UNIT_ID = '68031';
 const SKILL_ID = 30706;
 const MODIFIER_IDS = [94031031, 94031032, 94031033];
-const UNLOCKS = [9, 18, 27];
+const UNLOCKS = [5, 18, 27];
 /** 与配表逐字一致；三档只差 hp / attack / seconds。 */
 const TIER_PARAMS: Array<Record<string, number>> = [
     {

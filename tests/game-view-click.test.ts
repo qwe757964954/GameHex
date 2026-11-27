@@ -266,13 +266,7 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
     host.showPage = () => {};
     host.renderNav = index => switches.push(index);
     const controller = new MainTabController(createControllerContext(), {
-        owner: host,
         assetType: class {},
-        failed: assert.fail,
-        view: {
-            showPage() {},
-            renderNav: tab => switches.push(tab)
-        },
         world: {
             openWorld: async () => {},
             closeWorld() {},
@@ -289,6 +283,12 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
             reportClick: tab => { reports.push({ mark: tab === MainTab.World ? service.GAME_VIEW_MARK.World : service.GAME_VIEW_MARK.Other, caller: host }); }
         },
     });
+    const outputOwner = {};
+    EventMgr.instance.on(MainTabEvent.Output, (output: { kind: string; tab?: number; error?: unknown }, source: object) => {
+        if (source !== controller) return;
+        if (output.kind === 'renderNav' && typeof output.tab === 'number') switches.push(output.tab);
+        else if (output.kind === 'failed') assert.fail(String(output.error));
+    }, outputOwner);
     controller.start();
     host.onLoad();
     await controller.switchTab(3);
@@ -318,6 +318,7 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
     host.switchToTab(0);
     await Promise.resolve();
     assert.equal(reports.length, 0, '程序跳转不计入点击');
+    EventMgr.instance.offTarget(outputOwner);
     host.onDestroy();
     controller.dispose();
 });

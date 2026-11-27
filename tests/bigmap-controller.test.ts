@@ -5,6 +5,9 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { loadBigMapController, type IBigMapNetPort } from './helpers/bigmap-controller';
 import { BigMapModel, type IBigMapActionFeedback } from '../assets/script/app/bigmap/application/BigMapModel';
 import { BigMapCampRepository } from '../assets/script/app/bigmap/application/BigMapCampRepository';
+import { BigMapSlgRepository, type IBigMapSlgRequestName, type IBigMapSlgRequestOutcome } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
+import { BIGMAP_SLG_TEXT } from '../assets/script/app/bigmap/model/BigMapServerState';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { BIGMAP_BATTLE_READY, BigMapUiEvent, BigMapViewEvent, type BigMapIntent } from '../assets/script/app/bigmap/application/BigMapEvents';
 import { BATTLE_START_SETTLED } from '../assets/script/app/battle/BattleStartModel';
 import type { IBigMapViewState } from '../assets/script/app/bigmap/application/BigMapViewState';
@@ -122,7 +125,7 @@ test('controller / model / repository 多层 dispose 重复调用只释放一次
         fetchSimple: async () => null,
         fetchDetail: async () => null,
         fetchRoles: async () => null,
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
         dispose: () => { gatewayDisposals += 1; },
     });
     const h = create(repository);
@@ -150,7 +153,7 @@ test('意图派发中关闭控制器，当前派发中的旧意图监听也立�
 
 test('点击联机城池同时查询详情与排行榜，不再跳过榜单请求', () => {
     const repository = new BigMapCampRepository({ fetchSimple: async () => null, fetchDetail: async () => null,
-        fetchRoles: async () => null, requestMove: async () => null });
+        fetchRoles: async () => null, requestMove: async () => ({ status: 'unconfirmed' }) });
     const h = create(repository);
     const city = [...h.model.world.cities.values()][0];
     const details: number[] = [];
@@ -166,7 +169,7 @@ test('点击联机城池同时查询详情与排行榜，不再跳过榜单请�
 
 test('驻守玩家入口可翻页，迁城先选格确认且拒绝城外位置与重复提交', async () => {
     const repository = new BigMapCampRepository({ fetchSimple: async () => null, fetchDetail: async () => null,
-        fetchRoles: async () => null, requestMove: async () => null });
+        fetchRoles: async () => null, requestMove: async () => ({ status: 'unconfirmed' }) });
     const h = create(repository);
     const territory = h.model.territoryRegions()[0];
     const city = h.model.world.cities.get(territory.id);
@@ -202,7 +205,7 @@ test('出生广播补查未知据点且列表可循环查看，滑动时新城�
     let queryCount = 0;
     let position = 0;
     const repository = new BigMapCampRepository({ fetchSimple: async () => ({ infos: [] }),
-        fetchDetail: async () => ({ infos: [] }), requestMove: async () => null,
+        fetchDetail: async () => ({ infos: [] }), requestMove: async () => ({ status: 'unconfirmed' }),
         fetchRoles: async (campId) => {
             queryCount++;
             return { campId, infos: [
@@ -244,7 +247,7 @@ test('出生广播补查未知据点且列表可循环查看，滑动时新城�
 test('首轮名单未返回时收到出生广播，旧包失效后必须补发名单查询', async () => {
     const pending: ((value: unknown) => void)[] = [];
     const repository = new BigMapCampRepository({ fetchSimple: async () => null,
-        fetchDetail: async () => ({ infos: [] }), requestMove: async () => null,
+        fetchDetail: async () => ({ infos: [] }), requestMove: async () => ({ status: 'unconfirmed' }),
         fetchRoles: () => new Promise((resolve) => pending.push(resolve)) });
     const h = create(repository);
     const territory = h.model.territoryRegions()[0];
@@ -266,7 +269,7 @@ test('首轮名单未返回时收到出生广播，旧包失效后必须补发�
 test('角色网络广播经 Controller 归一化、提交 Model 后以 Render 事件刷新详情，关闭后不再更新', async () => {
     let position = 0;
     const repository = new BigMapCampRepository({
-        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => null,
+        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => ({ status: 'unconfirmed' }),
         fetchRoles: async (campId) => ({ campId, infos: [{ roleId: '1', serverId: '2', roleName: 'player', img: '1', pos: position, defenseHp: 100 }] }),
     });
     const h = create(repository);
@@ -390,7 +393,7 @@ test('Simple 请求按最新可见集合整批发送，静止不重发；新增�
         },
         fetchDetail: async () => ({ infos: [] }),
         fetchRoles: async (campId) => ({ campId, infos: [] }),
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
     }, () => now);
     const h = create(repository);
     const ids = [...h.model.world.cities.keys()].slice(0, 3);
@@ -447,7 +450,7 @@ test('视野刷新按城预取名单（窗口内不重发），打开城池复�
         fetchSimple: async () => ({ infos: [] }),
         fetchDetail: async () => ({ infos: [] }),
         fetchRoles: async (campId: number) => { roleCalls.push(campId); return { campId, infos: [] }; },
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
     });
     const h = create(repository);
     const campId = [...h.model.world.cities.keys()][0];
@@ -478,7 +481,7 @@ test('名单失败后再打开可重试，重复打开共享在途查询，成�
             if (calls === 1) return null;
             return new Promise((resolve) => { complete = resolve; });
         },
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
     });
     const h = create(repository);
     const campId = [...h.model.world.cities.keys()][0];
@@ -674,4 +677,172 @@ test('建造目录点空白关闭后状态跟着关：不会在下一次时钟 p
         h.intent({ kind: 'closeBuildMenu' });
         assert.equal(h.snapshots.length, count, '已经关掉时不再多发一次快照');
     } finally { h.dispose(); }
+});
+
+test('服务端 CmdTips 拒绝（status=rejected）时 Controller 不再补发 feedback Toast', async () => {
+    const h = create();
+    const commands: unknown[] = [];
+    const owner = {};
+    EventMgr.instance.on(BigMapViewEvent.Command, ({ command }) => {
+        commands.push(command);
+    }, owner);
+    try {
+        h.model.requestUnlockBuildQueue = async () => {
+            return { ok: false, status: 'rejected', message: '服务端未确认' };
+        };
+        h.intent({ kind: 'build', buildingKind: -1 });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(commands, [], 'rejected 已有 CmdTips 展示原因，Controller 不得再发 feedback');
+    } finally {
+        h.dispose();
+        EventMgr.instance.offTarget(owner);
+    }
+});
+
+test('共享 ResourceScope 时 Controller / Model / 双 Repository / 双 Gateway 只触发一次释放', () => {
+    const scope = new ResourceScope('shared-session');
+    let campDisposals = 0;
+    let slgDisposals = 0;
+    const campGateway = {
+        fetchSimple: async () => null,
+        fetchDetail: async () => null,
+        fetchRoles: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' as const }),
+        dispose: () => {
+            campDisposals += 1;
+        },
+    };
+    const slgGateway = {
+        request: async (): Promise<IBigMapSlgRequestOutcome> => ({ status: 'offline' }),
+        dispose: () => {
+            slgDisposals += 1;
+        },
+    };
+    const campRepository = new BigMapCampRepository(campGateway, Date.now, scope);
+    const slgRepository = new BigMapSlgRepository(slgGateway, config, () => 957600, 100, scope);
+    const model = new BigMapModel({
+        config,
+        campRepository,
+        slgRepository,
+        storage: createMemoryBigMapStorage(),
+        saveKey: 'shared-scope',
+        now: () => 957600,
+        adventureChapter: () => 3,
+        scope,
+    });
+    const controller = new BigMapController(model, {
+        context: createControllerContext(),
+        campRepository,
+        slgRepository,
+        scope,
+        schedule: () => () => {},
+    });
+    controller.start();
+    controller.dispose();
+    controller.dispose();
+    assert.equal(scope.disposed, true);
+    assert.equal(controller.isDisposed, true);
+    assert.equal(model.scope.disposed, true);
+    assert.equal(campDisposals, 1);
+    assert.equal(slgDisposals, 1);
+});
+
+test('Controller 将 SLG 仓储结构化结果统一映射为 UI 文案与奖励命令，rejected 静默', async () => {
+    const scope = new ResourceScope('slg-feedback');
+    const grain = Array.from(config.buildings.values()).find((item) => item.kind === 2)!;
+    const snapshot = {
+        info: {
+            builds: [
+                { buildInstId: 1, buildingId: config.mainBuildingId, position: 0, level: 1, state: 0 },
+                { buildInstId: 2, buildingId: grain.id, position: 1, level: 1, state: 0 },
+            ],
+            queues: [],
+            unlockQueue: 1,
+        },
+    };
+    let nextOutcome: IBigMapSlgRequestOutcome | null = null;
+    const slgGateway = {
+        request: async (name: IBigMapSlgRequestName): Promise<IBigMapSlgRequestOutcome> => {
+            if (nextOutcome && name !== 'CmdSlgBuildInfoReqMsg' && name !== 'CmdSlgActionUpdateReqMsg'
+                && name !== 'CmdSlgGameInfoReqMsg') {
+                const current = nextOutcome;
+                nextOutcome = null;
+                return current;
+            }
+            if (name === 'CmdSlgBuildInfoReqMsg') {
+                return { status: 'ok', response: snapshot };
+            }
+            if (name === 'CmdSlgActionUpdateReqMsg') {
+                return { status: 'ok', response: { info: { nextRevertTime: 0 } } };
+            }
+            if (name === 'CmdSlgGameInfoReqMsg') {
+                return { status: 'ok', response: { info: { maxMonsterLevel: 0, toCampId: 0 } } };
+            }
+            if (name === 'CmdSlgBuildCollectReqMsg') {
+                return { status: 'ok', response: { tlCmdGoods: [{ resId: 18501, number: '9' }] } };
+            }
+            return { status: 'ok', response: {} };
+        },
+    };
+    const slgRepository = new BigMapSlgRepository(slgGateway, config, () => 957600, 100, scope);
+    const model = new BigMapModel({
+        config,
+        slgRepository,
+        storage: createMemoryBigMapStorage(),
+        saveKey: 'slg-feedback',
+        now: () => 957600,
+        adventureChapter: () => 10,
+        scope,
+    });
+    const controller = new BigMapController(model, {
+        context: createControllerContext(),
+        slgRepository,
+        scope,
+        schedule: () => () => {},
+    });
+    const commands: unknown[] = [];
+    const owner = {};
+    EventMgr.instance.on(BigMapViewEvent.Command, ({ command }) => {
+        commands.push(command);
+    }, owner);
+    controller.start();
+    try {
+        // 未初始化前发起建造 → slgRepository.build 返回 loading，由 Controller 解析文案。
+        EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'mode', mode: 'base' } });
+        EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'build', buildingKind: grain.kind } });
+        EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'plotTap', hexId: 2 } });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(JSON.parse(JSON.stringify(commands.at(-1))), {
+            kind: 'feedback',
+            ok: false,
+            message: BIGMAP_SLG_TEXT.loading,
+        });
+        EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'build', buildingKind: grain.kind } });
+
+        await slgRepository.initialize();
+        const beforeRejected = commands.length;
+        nextOutcome = { status: 'rejected' };
+        EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'build', buildingKind: -1 } });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(commands.length, beforeRejected, 'CmdTips 拒单后 Controller 不补发 Toast');
+
+        nextOutcome = { status: 'offline' };
+        EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'build', buildingKind: -1 } });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(JSON.parse(JSON.stringify(commands.at(-1))), {
+            kind: 'feedback',
+            ok: false,
+            message: BIGMAP_SLG_TEXT.offline,
+        });
+
+        EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'harvestAll' } });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(JSON.parse(JSON.stringify(commands.slice(-2))), [
+            { kind: 'feedback', ok: true, message: BIGMAP_SLG_TEXT.collected },
+            { kind: 'rewards', rewards: [{ resId: 18501, amount: 9 }] },
+        ]);
+    } finally {
+        controller.dispose();
+        EventMgr.instance.offTarget(owner);
+    }
 });

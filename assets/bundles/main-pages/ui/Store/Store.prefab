@@ -656,6 +656,18 @@
       },
       {
         "__id__": 38
+      },
+      {
+        "__id__": 152
+      },
+      {
+        "__id__": 154
+      },
+      {
+        "__id__": 156
+      },
+      {
+        "__id__": 158
       }
     ],
     "removedComponents": []
@@ -697,9 +709,9 @@
     "_target": null,
     "_left": 0,
     "_right": 0,
-    "_top": 78,
+    "_top": 16,
     "_bottom": 0,
-    "_horizontalCenter": -131,
+    "_horizontalCenter": 0,
     "_verticalCenter": 0,
     "_isAbsLeft": true,
     "_isAbsRight": true,
@@ -743,8 +755,8 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": -131,
-      "y": 509,
+      "x": 0,
+      "y": 604,
       "z": 0
     }
   },
@@ -787,7 +799,7 @@
     "propertyPath": [
       "resKeys"
     ],
-    "value": "gold,gem"
+    "value": "gold,end,coin"
   },
   {
     "__type__": "cc.TargetInfo",
@@ -2442,5 +2454,88 @@
     "localID": [
       "70y6NSEq1M/7+8829H8QOn"
     ]
+  },
+  {
+    "__type__": "cc.TargetInfo",
+    "localID": [
+      "EVJE9fbfHGiZ9JqiwGhsge"
+    ]
+  },
+  {
+    "__type__": "CCPropertyOverrideInfo",
+    "targetInfo": {
+      "__id__": 151
+    },
+    "propertyPath": [
+      "_contentSize"
+    ],
+    "value": {
+      "__type__": "cc.Size",
+      "width": 424,
+      "height": 40
+    }
+  },
+  {
+    "__type__": "cc.TargetInfo",
+    "localID": [
+      "62Tbv0Vi9Ixa0FfdRX974d"
+    ]
+  },
+  {
+    "__type__": "CCPropertyOverrideInfo",
+    "targetInfo": {
+      "__id__": 153
+    },
+    "propertyPath": [
+      "_lpos"
+    ],
+    "value": {
+      "__type__": "cc.Vec3",
+      "x": -146,
+      "y": 0,
+      "z": 0
+    }
+  },
+  {
+    "__type__": "cc.TargetInfo",
+    "localID": [
+      "ecRvio3cpEJ4TdoBMNGavl"
+    ]
+  },
+  {
+    "__type__": "CCPropertyOverrideInfo",
+    "targetInfo": {
+      "__id__": 155
+    },
+    "propertyPath": [
+      "_lpos"
+    ],
+    "value": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    }
+  },
+  {
+    "__type__": "cc.TargetInfo",
+    "localID": [
+      "44O+u6NPBKeYlg3ycrjtTu"
+    ]
+  },
+  {
+    "__type__": "CCPropertyOverrideInfo",
+    "targetInfo": {
+      "__id__": 157
+    },
+    "propertyPath": [
+      "_lpos"
+    ],
+    "value": {
+      "__type__": "cc.Vec3",
+      "x": 146,
+      "y": 0,
+      "z": 0
+    }
   }
 ]

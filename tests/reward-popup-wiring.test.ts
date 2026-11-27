@@ -221,9 +221,10 @@ function hasDelegatedWiring(request: string, file: string, scope: string): boole
             && repository.includes("{ status: 'ok', rewards }")
             && controller.includes(`case '${reward.kind}': return repository.${reward.method}(`)
             && controller.includes("if (this.isDisposed) return;")
-            && controller.includes('feedback.reward(result.rewards)')
+            && controller.includes('LeagueRewardEvent.Output')
+            && controller.includes("kind: 'reward'")
             && composition.includes('new LeagueRewardController(')
-            && composition.includes('reward: goods => FW.ShowReward(goods)')
+            && composition.includes('FW.ShowReward(output.rewards)')
             && reward.pages.every(name => {
                 const view = read(`league/${name}.ts`);
                 return composition.includes(`view instanceof ${name}`)

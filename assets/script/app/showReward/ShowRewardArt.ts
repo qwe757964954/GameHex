@@ -3,9 +3,6 @@
  * 加载复用 ItemDetailArtLoader 的缓存；公共件（hintBg / star）落 `image/common`，不在本模块另存。
  */
 
-/** 本模块自有图目录（`assets/resources/image/showReward`）。 */
-export const SR_ART_DIR = 'showReward';
-
 /** 全部图 key → 相对 `assets/resources/image/` 的路径；compile() 按 FGUI 原尺寸反查，不符即 throw。 */
 export const SR_ART_NAMES: Readonly<Record<string, string>> = {
     /** 弹窗底 338×280，九宫 border 84,97,86,114；实例显示 648×402。 */

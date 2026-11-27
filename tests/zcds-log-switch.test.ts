@@ -21,7 +21,7 @@ import ts from 'typescript';
 
 const ZCDS_ROOT = 'assets/script/app/zcds';
 const SWITCH_FILE = join(ZCDS_ROOT, 'ZCDCLogSwitch.ts');
-const SWITCHES = ['ZCDC_LOG_DIAGNOSTICS', 'ZCDC_LOG_WARNINGS', 'ZCDC_LOG_MISSILE', 'ZCDC_LOG_SKILL_CAST', 'ZCDC_LOG_DAMAGE_FLOAT'] as const;
+const SWITCHES = ['ZCDC_LOG_DIAGNOSTICS', 'ZCDC_LOG_WARNINGS', 'ZCDC_LOG_MISSILE', 'ZCDC_LOG_SKILL_CAST', 'ZCDC_LOG_DAMAGE_FLOAT', 'ZCDC_LOG_SKILL_ANNOUNCE'] as const;
 
 /** 递归列出目录下所有 .ts（跳过 .d.ts 与 meta 噪声）。 */
 function listTs(dir: string): string[] {

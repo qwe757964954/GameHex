@@ -230,6 +230,7 @@ assets/script/app/bigmap/
 | 地块默认色 | **一律沙地本色** `#CFAF8C`，地形只保留极轻冷暖差 | `BigMapWorldView` 的 `TERRAIN_TINT`（**乘算**，只能压暗） |
 | 势力范围 | **整片势力范围**（布局里的 `rangeHex`，线上 30~88 格/城）逐格填势力色，填充半透明（α≈40%），地块纹理透上来 | `paintTerritory` + `BIGMAP_TERRITORY_COLORS` |
 | 势力归属（2026-10-28） | **我占据的城池** → 整片范围**绿**；**其他玩家占据** → **红**（这两种填充更实，α≈59%，压过中立色） | `IBigMapCityView.territoryOwner`（`bigMapTerritoryOwnerOf`）+ `BIGMAP_TERRITORY_SELF_COLOR` / `BIGMAP_TERRITORY_ENEMY_COLOR` |
+| 打不了的据点（2026-11-26） | 配置层「打不了」（`IBigMapCityView.unplayable`：本期未开放 / 未解锁）→ 整片范围**中性灰 `#757575`**（α≈52%）。**不看 `state`**（服务器快照会把它改写成 `open`） | `BIGMAP_TERRITORY_LOCKED_COLOR` / `BIGMAP_TERRITORY_LOCKED_FILL_ALPHA`，见 §「打不了的据点地块改灰」 |
 | 相邻势力 | **不同色**；邻接取布局的 `adjacentCityIds`（编辑器按范围实际咬合推导），没有布局时按 10 格距离兜底 | `assignTerritoryColorSlotsFromAdjacency` / `assignTerritoryColorSlots`（DSATUR 图着色，`model/BigMapTerritoryColor.ts`） |
 | 城池状态 | 走**角标**颜色（可打/已占领/未解锁），不占用地块颜色；**例外：己方占据的城角标转绿**，与那片地同色 | `cityTint` / `city.territoryOwner === 'self'` 分支 |
 
@@ -640,6 +641,7 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
 
 - 基地背景使用页面沙地底衬。草地切片按实际基地地块绘制，与摆放、移动和拾取共用 123×90 的台面；服务端位置编号沿用既有规则。基地没有翻格解锁，空地是可以参与建造校验的实际地块。
 - 底栏建造页优先展示可建造项，其余卡片按实际解锁条件显示。点击建造卡进入地图摆放态，当前建造页再次点击「建造」可打开完整目录及队列解锁入口。升级页读取已建与施工中的建筑，建筑卡和地图建筑共用详情，升级或取消施工经原有确认和请求流程。顶部建造队列读取快照；研究队列无数据时显示「—」。
+- 基地左侧新增锤子「建造」入口（`BuildEntryButton`，111×95，贴左 17 / 贴底 `navigationHeight + 128`，设计 nav=88 时为 216），底板与锤子直接用蓝湖 `hud_task_tab` / `icon_jz` 切图，文字「建造」为 22px 白字 2px 黑描边；点击与顶部队列卡共用 `onQueueClick`，两条入口只维护一份展开状态。入口只在基地显示，世界模式随锤子一起收起。底边由 `applyNavigationHeight` 统一抬高，不能写死，否则刘海屏 nav=150 时会压住下方模式切换按钮。
 - 基地支持单指拖动、双指锚点缩放和鼠标滚轮缩放；纯函数约束缩放与边界，防止露底。进入基地定位主城，正常浏览隐藏空地文本与格线，建造/搬移时显示空位提示。
 - 所有建筑与收取图标共用手势判定，拖动距离超过12或发生双指操作时松手不触发点击。建筑按屏幕纵向排序，视口外节点隐藏；关闭/切换模式清理手势状态。
 - 回归：`bigmap-base-camera`、`bigmap-base-view`、`bigmap-base-render`、`bigmap-base-presentation`、`bigmap-latest-queue-config`、`bigmap-art-loading`。
@@ -772,4 +774,56 @@ npx tsx --test tests/bigmap-info-layout.test.ts     # 15 条：详情弹窗排�
 - prefab 的 `_active` 保持 `true`（编辑器里看得见、好摆位置），初始态由 `initialize → buildUi → render → applyMode` 在首帧定。
 - 入战锁不变：`sendIntent` 仍看 `inputEnabled`，隐藏与禁用是两条独立的门。
 - 判据：`tests/bigmap-page-bindings.test.ts`——`render(base)` 后 `exploreButton.node.active === false`，`render(world)` 后又变 `true`。
+
+### 模式按钮的「基地 / 大地图」文案丢失（2026-11-25）
+
+现象（用户截图）：左下角模式按钮只剩图标/底框，下面的「基地」（大地图模式下）与「大地图」（基地模式下）四个字整条不见。
+
+根因是**显隐没人管**：`BigMapPage.prefab` 里 `BaseWorldToggle` 的 `ModeIcon` 与 `ModeLabel` 两个子节点都是 `_active:false`。
+
+- 图标之所以还在显示，是因为 `fitBigMapSprite` 第一句就是 `sprite.node.active = !!frame` —— 顺手把节点打开了；
+- 文案只被写了 `modeLabel.string`，**没有任何地方把它 `active = true`** ⇒ 字符串写进去了、节点是关的，等于没写。
+
+修法（`BigMapPageLayout`）：
+
+- 抽 `refreshModeButton(mode)` 作为模式按钮**唯一写入口**（图标 / 底框 / 兜底底框 / 文案），`applyMode` 与 `applyDockVisibility` 两处调用。之前这 6 行在两个方法里各抄一份，正是「一处改了另一处漏」的温床。
+- 文案的显隐在函数内显式写 `this.modeLabel.node.active = true` —— 不再依赖 prefab 的 `_active`，深覆盖/外部重存 prefab 也吞不掉它。
+- `modeLabel.string` 提到 `if (!this.art) return;` **之前**写：纯文本不吃贴图，否则美术未就绪的那几帧，基地模式会停在 prefab 默认的「基地」上（按钮文案是「点下去会去哪」，写反了）。
+- prefab 侧同时把 `ModeLabel._active` 改回 `true`（编辑器里看得见、好摆位置），与代码一致、互为保险。`ModeIcon` 仍留 `false`（本来就由 `fitBigMapSprite` 按有没有图来决定显隐）。
+
+⚠️ 这是一类**通病**，见到「prefab 子节点默认关 + 代码只赋值不显隐」的写法都要查一遍：2026-11-11 的 `ExploreButton`（基地界面还在显示）是反面，这次 `ModeLabel`（该显示却没显示）是正面，两条都栽在同一件事上。
+
+判据：`tests/bigmap-page-bindings.test.ts`——基地模式 `modeLabel.string === '大地图'`、大地图模式 `=== '基地'`，两处都断言 `modeLabel.node.active === true`；把 `active = true` 那行删掉，用例立刻红。
+
+### 打不了的据点地块改灰（2026-11-26）
+
+用户口径（两条，前后相隔十几分钟）：
+
+1. *「大地图未开放的据点用灰色填充」* → 追问「灰到哪一层」= **只灰地块部分**（图标 / 名条不动）；
+2. *「这类不可攻打的城池据点的势力范围都要使用灰色 / 拖动地图以后叠加的灰色会消失，又变回了原本的颜色 / 灰色使用 #757575」*。
+
+即：**只换势力范围的填充色**，据点建筑图与名条一律不动（建筑图的压暗仍只服务 `unavailable`，见 `BigMapWorldView.refresh`；名条四张 `plate_*` 只表达归属）。
+
+- 取色是 `territoryPaint` 的第四分支（顺序：归属 → 打不了 → 色板）：
+  ```ts
+  if (city && (city.unplayable || city.state === 'unavailable' || city.state === 'locked')) {
+      return { color: BIGMAP_TERRITORY_LOCKED_COLOR, alpha: BIGMAP_TERRITORY_LOCKED_FILL_ALPHA };
+  }
+  ```
+- 🔴 **判据必须是 `IBigMapCityView.unplayable`（配置层），不能只看 `state`** —— 这就是用户报的那个 bug：
+  - 进页面时该据点还没收到服务器快照，`campInfo` 为 null ⇒ `state` 走配置 = `locked` ⇒ 铺灰；
+  - 地图一拖 → 新据点进入视野 → `visibleCamps` → `CmdSlgCampSimpleInfoRspMsg` 回包 ⇒ `campInfo` 到手 ⇒
+    `cityView` 按「服务器能下发就说明已开放」把 `state` **改写成 `open` / `occupied`** ⇒ 灰当场变回色板色；
+  - `unplayable = bigMapCityUnlock().reason !== ''`（本期未开放 / 章节 / 开服天数 / 前置城池），**跨快照恒定**。
+  两个 `state` 值只留作兜底（老快照缺字段时不至于漏灰）。
+- **归属先判**是有意的：服务器下发过的据点必然是 `open` / `occupied`，所以灰与红/绿正常不会同时成立；万一配置把已占的城标成打不了，玩家关心的仍是「这块地是谁的」。
+- 为什么不给两档灰度（未开放 / 未解锁）：玩家视角都是「这块还不能玩」，多一档只会让人猜深浅含义。
+- 🔴 **灰必须严格 `r = g = b`**（`#757575` = 117）。掺一点蓝就落回色板的「青灰 `(124,140,160)`」，会被读成「某号势力」；用例按 HSV 饱和度 = 0 断言。
+- 🔴 **α 取 132（无主 104 与归属 150 之间）**：地图底是暖沙 `#CFAF8C`，中灰按 41% 叠上去几乎等于没染（沙地本身太亮），压到 52% 才落成一块「发闷的暗灰」；但也不该比「己方/他人占据」更抢眼——那才是玩家要冲的目标。
+- 刷新要带上新字段：`contentKey` 的城市段里加了 `unplayable ? 'L' : 'O'`（只带 `state` 会在章节推进后不重绘）。
+
+判据（两条腿，缺一条就会出现「单测绿、实机拖一下就退色」）：
+
+- `tests/bigmap-unplayable-ground.test.ts`：联机档只通关第 1 章时，据点 201 快照前 `state='locked'`、快照后 `state='open'`，而 `unplayable` **两端都为 true**；据点 101 已解锁 ⇒ `unplayable=false`（否则整张图会灰）。
+- `tests/bigmap-transparent-tiles.test.ts`「打不了的据点整片势力范围铺中性灰」：两种态 + 快照后形态（`state:'open'` 且 `unplayable:true`）都等于 `BIGMAP_TERRITORY_LOCKED_COLOR`、饱和度 0、不与任何色板色重合、能打的仍走色板、α 严格夹在 104 与 150 之间。
 

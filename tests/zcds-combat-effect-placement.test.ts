@@ -105,13 +105,13 @@ test('②-3 普攻刀光走兜底：caster 锚点 + top 层 + 不登记尺寸/�
 /**
  * 仙桃行者「重击」落地柱：锚点与层序都按路径登记，尺寸只用 prefab 烘焙那一份。
  */
-test('②-2 重击柱登记：target 锚点 + top 层 + 不写 nodeScale（尺寸唯一真源在 prefab）', () => {
+test('②-2 重击柱登记：target 锚点 + top 层 + 不写 nodeScale（尺寸烘在画布里）', () => {
     const QUAKE = 'units/projectiles/仙桃行者_重击技能/仙桃行者_重击技能';
     assert.equal(zcCombatEffectAnchorOf(QUAKE), 'target');
     //  `area` 事件类型默认被压到地面层；这根柱子是「打在空中的一下」，必须按路径抢回 top。
     assert.equal(zcCombatEffectLayerOfPath('area', QUAKE), 'top');
     assert.equal(zcCombatEffectLayerOfPath('melee', QUAKE), 'top');
-    //  尺寸：目录里不登记倍率 ⇒ 走「prefab 根 `_lscale` 说了算」，屏上只有 0.56 这一份。
+    //  尺寸：目录与 prefab 都不登记倍率，画布 144×321 就是屏上尺寸（`_lscale` 全是 1）。
     assert.equal(zcCombatEffectNodeScaleOf(QUAKE), 1);
 });
 
@@ -212,7 +212,11 @@ test('⑥ 发射高度：飞镖 +20 / 小丑子弹 +30，其余一律 0', () => 
 test('⑦ 源码守卫：补偿加在 mapToViewY 之后，直线与弧线两条 setPosition 都不能漏', () => {
     const source = codeOf(EFFECT_VIEW);
     const from = source.indexOf("if (event.type === 'projectile')");
-    const to = source.indexOf('this.node.setPosition(mapToViewX(event.toX)');
+    //  锚点容忍换行：这条守卫钉的是「抬升加在 `mapToViewY` 之后」这个语义，
+    //  不该因为有人把 `setPosition` 拆成多行就红（2026-11-25 第 52 批加 `dropPx` 时踩过）。
+    //  （2026-11-26 第 58 批：定点那一档换成 `slide.x/y`，没登记滑动时逐字等于 `to`，语义不变。）
+    const tail = /this\.node\.setPosition\(\s*mapToViewX\(slide\.x\)/.exec(source);
+    const to = tail ? tail.index : -1;
     assert.ok(from > 0 && to > from, '两处锚点都要在（炮弹分支到近战分支之间）');
     const branch = source.slice(from, to);
 

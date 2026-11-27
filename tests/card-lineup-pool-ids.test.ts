@@ -91,8 +91,10 @@ test('图鉴口径不受影响：全表可浏览（含未拥有的卡）', async
 
     assert.ok(ids.includes('68028'), '饥饿战士必须出现在图鉴里');
     assert.ok(!ids.includes('2002'), '主城不是卡，图鉴里也不该有');
-    // 图鉴 = 全表减主城：真表 37 行，去掉主城 2002 应是 36
-    const tableCount = readRows('pvpCard').filter((row) => String(row.id) !== '2002').length;
+    // 图鉴 = 全表 − 主城 − 未启用（1001 主角 enabled=0：只给主城出兵用，不是可浏览的卡）
+    assert.ok(!ids.includes('1001'), '主角不是卡池卡，图鉴里也不该有');
+    const tableCount = readRows('pvpCard')
+        .filter((row) => String(row.id) !== '2002' && Number(row.enabled) === 1).length;
     assert.equal(ids.length, tableCount, '图鉴应包含表里每一张非主城的启用卡');
 });
 

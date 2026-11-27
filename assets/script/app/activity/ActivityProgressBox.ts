@@ -1,4 +1,5 @@
 import { _decorator, Color, Component, Label, Node, Sprite, SpriteFrame, Tween, tween, UITransform, Vec3 } from 'cc';
+import { RedDot } from '../common/RedDot';
 import type { ActivityBoxPhase } from './LayerActivityTable';
 
 const { ccclass, property } = _decorator;
@@ -55,8 +56,8 @@ export class ActivityProgressBox extends Component {
     @property({ type: Node, tooltip: 'ChestBtn/Check：已领取对勾（默认隐藏）' })
     checkMark: Node = null;
 
-    @property({ type: Node, tooltip: 'ChestBtn/RedDot：可领取红点（默认隐藏）' })
-    redDot: Node = null;
+    @property({ type: RedDot, tooltip: 'ChestBtn/RedDot：可领取红点（工程通用红点，默认隐藏）' })
+    redDot: RedDot = null;
 
     @property({ type: Label, tooltip: 'ChestBtn/Hint：可领取时显示「可领取」' })
     hintLabel: Label = null;
@@ -107,7 +108,7 @@ export class ActivityProgressBox extends Component {
 
         // 三态一律绝对赋值（宝箱会被反复复用）
         this.checkMark.active = phase === 'taken';
-        this.redDot.active = phase === 'claimable';
+        this.redDot.setRedDot(phase === 'claimable');
         this.hintLabel.string = phase === 'claimable' ? hintText : '';
 
         this.stopBreath();

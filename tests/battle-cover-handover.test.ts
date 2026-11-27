@@ -90,7 +90,7 @@ test('★★★云必须被搬出匹配页：留在页里就活不过 navigate�
     const body = handOver.slice(0, handOver.indexOf('\n    }\n'));
     assert.ok(body.includes('TerritoryBattleCoverOverlay.create'), '没有把云交给跨流程宿主');
     assert.ok(body.includes('this.cover = null'), '所有权没转交（dispose 会把云一起销毁）');
-    assert.match(COMPOSITION, /private onHandoff\(\): void \{\s*this\.handOverCover\(this\.mounted\.page\.node\)/);
+    assert.match(COMPOSITION, /private onHandoff\([^)]*\): void \{[\s\S]*?this\.handOverCover\(mounted\.page\.node\)/);
     // dispose 里那份清理也要按"还是不是自己的云"判断，否则交接完又被销毁
     assert.ok(COMPOSITION.includes('const cover = this.cover;') && COMPOSITION.includes('this.cover = null;') && COMPOSITION.includes('cover?.dispose()'),
         'dispose 会销毁已经交接出去的那层云');

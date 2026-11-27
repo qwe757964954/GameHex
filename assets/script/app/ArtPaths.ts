@@ -11,6 +11,18 @@ export const ART_ROOT = 'image';
 /** 主界面常驻图：底部导航、木牌底。 */
 export const MAIN_ART_ROOT = `${ART_ROOT}/main`;
 
+/** 主界面 HUD 专用件：头像框、等级圆徽、入口图标。 */
+export const MAIN_HUD_ART_ROOT = `${MAIN_ART_ROOT}/hud`;
+
+/** 主界面弹窗框：巡逻宝箱同款木牌 / 羊皮纸底板 / 关闭钮。 */
+export const MAIN_POPUP_ART_ROOT = `${MAIN_ART_ROOT}/popup`;
+
+/** 主界面宝箱弹窗切图（小按钮 `chest_btn_green/gold/blue` 也在这里）。 */
+export const MAIN_CHEST_ART_ROOT = `${MAIN_ART_ROOT}/chest`;
+
+/** 角色页切图（页签轨道 / 选中底）。 */
+export const ROLE_ART_ROOT = `${ART_ROOT}/role`;
+
 /** 跨 feature 复用的页面/组件大图根目录；新增时只在这里写真源。 */
 export const HANG_ART_ROOT = `${ART_ROOT}/hang`;
 export const CHAT_ART_ROOT = `${ART_ROOT}/chat`;

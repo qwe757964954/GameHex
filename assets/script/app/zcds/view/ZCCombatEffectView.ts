@@ -5,9 +5,11 @@ import { zcCombatEffectAnchorOf, zcCombatEffectAnchorPoint, zcCombatEffectLiftY,
 import { zcCombatEffectFlightOf, zcCombatEffectFacingDegrees, zcCombatEffectHeadingDegrees } from '../model/ZCCombatEffectFlight';
 import { zcBeamCoreWidthOf, zcBeamFrame, zcBeamSpecOf, zcBeamStretchOf, zcBeamWidthScaleOf } from './ZCBeamEffect';
 import type { IZCBeamSpec } from './ZCBeamEffect';
-import { zcCombatEffectGrowFactor, zcCombatEffectNodeScaleOf } from './ZCCombatEffectScale';
+import { zcCombatEffectGrowFactor, zcCombatEffectNodeScaleOf, zcCombatEffectWobbleOf, zcCombatEffectWobbleScaleOf } from './ZCCombatEffectScale';
 import { zcBlendCombatEffectTint, zcCombatEffectTintOf } from './ZCCombatEffectTint';
 import { zcMissileTrailOf, zcMissileTrailQuads } from './ZCMissileTrail';
+import { zcCombatEffectSlidePoint } from './ZCCombatEffectSlide';
+import { zcBezierTangentDegrees, zcBezierXAt, zcBezierYAt, zcBulletDropOffsetPx, zcBulletFlyProgress, zcBulletRainPath } from '../model/ZCProjectileDropStyle';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
 
 const { ccclass, property } = _decorator;
@@ -19,6 +21,16 @@ const GENERIC_RING_GROWTH = 14;
 const GENERIC_FADE_RATIO = 0.7;
 /** 光束兜底线的颜色：偏青白的激光色，与镭射飞龙那根光束同色系。*/
 const BEAM_FALLBACK_COLOR = new Color(150, 240, 255);
+/**
+ * 弹体抖动的承载节点名（2026-11-26 第 57 批）。
+ *
+ * 「卡牌常用子弹」那七份 prefab 由 `tools/build_card_bullet_fx.py` 统一生成，
+ * 结构固定为「根 + `body`」；抖动只改 `body` 的缩放，**不动宿主** ——
+ * 宿主 scale 已经被 `nodeScale / grow / sizeScale / effectScale` 用掉了，
+ * 再乘一次抖动会和「强化那击放大 20%」互相打架。
+ * 找不到这个名字就静默不抖（存量弹体一根都不是这个结构）。
+ */
+const BULLET_BODY_NODE_NAME = 'body';
 
 /** 技能表现优先使用专属 Prefab；渐进加载局在它尚未就绪时使用短暂通用表现。*/
 @ccclass('ZCCombatEffectView')
@@ -74,6 +86,18 @@ export class ZCCombatEffectView extends Component {
     private readonly tintBaseColor = new Map<UIRenderer, Color>();
     /** 混色用的临时 `Color`（避免每个渲染器 new 一个，每帧分配在热路径上）。*/
     private readonly tintScratch = new Color(255, 255, 255, 255);
+    /**
+     * 弹体抖动的承载节点与它的**基准缩放**（2026-11-26 第 57 批）。
+     *
+     * 🔴 基准必须自己记：抖动是「每帧写绝对值」，读到被上一任改过的 `body.scale`
+     * 就会越抖越大（池化复用下同一份 prefab 共用同一个 `visualNode`，
+     * `initialize` 根本不会重建它）。所以换事件时先把基准写回去、再从干净的节点读。
+     */
+    private wobbleNode: Node | null = null;
+    private wobbleBaseX = 1;
+    private wobbleBaseY = 1;
+    /** 已绑定基准的事件 id；`-1` = 本任还没绑过。*/
+    private wobbleEventId = -1;
 
     initialize(prefab: Prefab | null, allowGeneric = false, effectPrefabPath?: string | null,
         tint?: readonly [number, number, number] | null): void {
@@ -82,6 +106,9 @@ export class ZCCombatEffectView extends Component {
         //  它同 prefab 复用（灼热地带紫 → 文明之火蓝）时不会重建节点，晚赋值就还是上一任的颜色。
         this.diagEffectTint = tint && tint.length === 3 ? [tint[0], tint[1], tint[2]] : null;
         this.graphics.clear();
+        //  上一任的抖动必须还原：同一个 prefab 复用同一个 `visualNode`，
+        //  不还原就会带着「抖到 0.97」的缩放进入下一任（而且是永久偏小）。
+        this.restoreWobble();
         this.renderedEventId = -1;
         this.appliedSpineAnimation = '';
         this.overlayChildName = zcCombatEffectOverlayChild(effectPrefabPath);
@@ -243,13 +270,21 @@ export class ZCCombatEffectView extends Component {
      *
      * 用 `getComponentInChildren`：鹿神守护那份预制的骨架在子节点 `spine` 上，根节点只有一个
      * UITransform。没有骨架的特效（磁电菇 / 雷弹那一类）直接跳过，不会被这条影响。
-    */
-    private applySpineAnimation(clip: string | null | undefined): void {
-        if (!clip || clip === this.appliedSpineAnimation) return;
+     *
+     * 循环位（2026-11-25 第 47 批）：原来硬编码 `true`。持续型特效（鹿神守护走 / 待机）本来就要循环，
+     * 但一次性演出（通用治疗光环 `eff_buff_heal` 1.0s）循环了就没有「播完」这回事 ——
+     * 事件寿命到点回池时正好卡在重播帧上，看起来像抽了一下。所以改成由事件带 `spineLoop`，
+     * 缺省 `true` ⇒ 存量全部逐字不变。
+     * 判「要不要重设」必须连循环位一起比：同一个 clip 名、两种循环位是两个不同的播放状态。
+     */
+    private applySpineAnimation(clip: string | null | undefined, loop = true): void {
+        if (!clip) return;
+        const key = loop ? `${clip}\u0001loop` : clip;
+        if (key === this.appliedSpineAnimation) return;
         const skeleton = this.visualNode ? this.visualNode.getComponentInChildren(sp.Skeleton) : null;
         if (!skeleton) return;
-        this.appliedSpineAnimation = clip;
-        skeleton.setAnimation(0, clip, true);
+        this.appliedSpineAnimation = key;
+        skeleton.setAnimation(0, clip, loop);
     }
 
     private applyOverlayFx(active: boolean | undefined): void {
@@ -291,9 +326,14 @@ export class ZCCombatEffectView extends Component {
         if (this.visualNode) this.visualNode.active = true;
         //  阶段动画（2026-11-07 鹿神守护：走过去播 `move`、提速扑击播 `attack`）。
         //  只有模型给了名字才切；没给的一次都不碰，预制体自带的 `defaultAnimation` 照旧播。
-        this.applySpineAnimation(event.spineAnimation);
+        //  循环位跟着事件走（第 47 批）：一次性演出带 `spineLoop: false`，缺省仍是循环。
+        this.applySpineAnimation(event.spineAnimation, event.spineLoop !== false);
         //  叠层（2026-11-12 鹿神守护：火船只在提速段覆盖在身上）。没登记叠层的特效不做任何事。
         this.applyOverlayFx(event.overlayFx);
+        //  弹体抖动（2026-11-26 第 57 批）：不登记抖动的特效只会在换事件时走一次解绑，
+        //  逐帧零开销。放在所有分支之前 —— projectile / melee 飞行 / area 三条路都会 return，
+        //  挂在分支里就得写三份。
+        this.applyBulletWobble(event, now);
 
         // ── 整体尺寸（按 prefab 路径登记的倍率，未登记 = 1）──
         //  需求 2026-11-03「龙卷风的特效范围和预制大小整体缩小成 80%」；
@@ -379,7 +419,15 @@ export class ZCCombatEffectView extends Component {
             //  `setRotationFromEuler` 转成侧移）。数值表见 `ZCCombatEffectPlacement.zcCombatEffectLiftY`。
             const liftY = zcCombatEffectLiftY(event.effectPrefabPath);
             this.node.setPosition(mapToViewX(headX), mapToViewY(headY) + liftY, 0);
-            const angle = Math.atan2(mapToViewY(event.toY - event.fromY), mapToViewX(event.toX - event.fromX)) * 180 / Math.PI;
+            //  转角 = 弹道方向 + 登记的朝向偏移，与 melee 的飞行分支**同一套算式**
+            //  （`zcCombatEffectFacingDegrees`）。两处不要各写一份。
+            //  2026-11-25 第 51 批补上偏移：原来这里只给纯弹道角度，于是「素材正前方不与 +X
+            //  重合」的弹体（冰法师通用子弹正前方是 +Y）会横着飞 —— 冰爆头指着侧面、
+            //  且不报错。没登记朝向的路径 `flight` 为 null ⇒ 偏移 0，存量逐帧不变。
+            const angle = zcCombatEffectFacingDegrees(
+                Math.atan2(mapToViewY(event.toY - event.fromY), mapToViewX(event.toX - event.fromX)) * 180 / Math.PI,
+                zcCombatEffectFlightOf(event.effectPrefabPath),
+            );
             this.node.setRotationFromEuler(0, 0, angle);
             //  追踪导弹的弧线：飞行进度在中段达到最大横向偏移（`sin(π·progress)`）。
             //  偏移方向 = 弹道方向逆时针转 90°（即垂直于弹道的一侧），
@@ -407,7 +455,66 @@ export class ZCCombatEffectView extends Component {
         //  竖直抬升（2026-11-11 磁电冲击「起始位置要在角色的中心点」）：加在 `mapToViewY` 之后，
         //  就是屏幕竖直方向、不跟下面那行转角走 —— 与 `zcCombatEffectLiftY`（弹道补偿）同口径。
         //  缺省 0 ⇒ 所有既有特效位置逐字不变。
-        this.node.setPosition(mapToViewX(event.toX), mapToViewY(event.toY) + (event.visualLiftPx ?? 0), 0);
+        //  「从上方落下」（2026-11-25 第 52 批，`ZCProjectileDropStyle`）：在同一个竖直轴上再叠
+        //  `dropFromPx × (1 − progress)` —— 开头在上方、落地那一拍归 0。
+        //  🔴 只动**位置**，`to` 坐标与伤害判定一个字节都不变：这一批是表现，不是结算。
+        //
+        //  「从施法者飞入」（2026-11-25 第 53 批，篮球火）：`flyFrom*` / `flyInSeconds` 齐了
+        //  就按**自己的时长**插值（不是事件进度 —— 事件要活满区域寿命 3 秒，飞只占开头一段）。
+        //  2026-11-26 第 56 批改成「命中即消失」：飞到 t=1 就把可视节点藏掉，落点上的
+        //  受击特效是**另一条独立事件**（`zcBulletRainImpactAt` 排在到达时刻）。
+        //  原来飞完还钉在 `to` 上播到事件结束 —— 用户看到的就是「火球停在地上不炸」。
+        const flySeconds = event.flyInSeconds ?? 0;
+        const flyingIn = flySeconds > 0 && event.flyFromX !== undefined && event.flyFromY !== undefined;
+        if (flyingIn) {
+            const t = zcBulletFlyProgress(now - event.startedAt, flySeconds);
+            //  到点 → 整颗子弹消失（下一帧事件被回收、节点回池）
+            if (t >= 1) {
+                if (this.visualNode) this.visualNode.active = false;
+                else this.graphics.clear();
+                return;
+            }
+            const originX = event.flyFromX as number;
+            const originY = event.flyFromY as number;
+            //  表现落点优先 `flyTo*`（弹道雨：区域内随机点），缺省退回判定圆心 `to`
+            //  —— 只影响这颗子弹看起来落在哪，`to` 与区域判定一个字节都不动。
+            const landX = event.flyToX ?? event.toX;
+            const landY = event.flyToY ?? event.toY;
+            //  🔴 整条曲线在**屏幕空间**求值：`flyArcPx` / `flySwayPx` 本来就是屏幕 px 量。
+            //  先在世界坐标插值再 `mapToView` 会把弧线按 x/y 换算比拉扁（横向 0.76875、
+            //  纵向另一档），「峰高 120」量出来就不是 120。
+            const path = zcBulletRainPath(
+                mapToViewX(originX), mapToViewY(originY),
+                mapToViewX(landX), mapToViewY(landY),
+                event.flyArcPx ?? 0,
+                event.flySwayPx ?? 0,
+            );
+            this.node.setPosition(
+                zcBezierXAt(path, t),
+                zcBezierYAt(path, t) + (event.visualLiftPx ?? 0),
+                0,
+            );
+            //  朝向 = 切线方向（子弹头朝飞的方向），再叠素材自身登记的朝向偏移。
+            //  与 projectile / melee 飞行段同一套 `zcCombatEffectFacingDegrees`，三处不要各写一份。
+            this.node.setRotationFromEuler(0, 0, zcCombatEffectFacingDegrees(
+                zcBezierTangentDegrees(path, t),
+                zcCombatEffectFlightOf(event.effectPrefabPath),
+            ));
+            //  转角已经在上面定死，不能再走后面的 `angleDegrees` 与 heading 两段（会覆盖）。
+            return;
+        }
+        const dropPx = zcBulletDropOffsetPx(event.dropFromPx ?? 0, progress);
+        //  定点表现「平滑移过去」而不是瞬移（2026-11-26 第 58 批，技能范围指示白环）：
+        //  模型层每换一批目标就把 `to` 改到新位置，并在 `slideFrom*` 里记下上一次的位置。
+        //  这里按 `slideSeconds` 线性插值 —— 用户口径「150px 速度，不要直接瞬移」。
+        //  🔴 与上面 `flyingIn` 那一档**不是一回事**：那个是子弹，t=1 就整颗消失；
+        //  这里飞到之后还要停在新位置上活满整个技能窗口，所以不能复用 `flyFrom*`。
+        const slide = zcCombatEffectSlidePoint(event, now);
+        this.node.setPosition(
+            mapToViewX(slide.x),
+            mapToViewY(slide.y) + (event.visualLiftPx ?? 0) + dropPx,
+            0,
+        );
         this.node.setRotationFromEuler(0, 0, event.angleDegrees ?? 0);
         if (event.type === 'melee') {
             // ── 登记了飞行段的近战特效：像子弹一样从出手点飞向目标 ──
@@ -419,7 +526,10 @@ export class ZCCombatEffectView extends Component {
             if (flight) {
                 const headX = event.fromX + (event.toX - event.fromX) * progress;
                 const headY = event.fromY + (event.toY - event.fromY) * progress;
-                this.node.setPosition(mapToViewX(headX), mapToViewY(headY), 0);
+                //  竖直抬升同上面那条口径（2026-11-25 第 49 批）：加在 `mapToViewY` 之后、
+                //  是屏幕竖直方向，**不跟下面那行转角走**。写进 prefab 的 `_lpos` 会被转成侧移。
+                //  缺省 0 ⇒ 存量（斧盾兵反击气刃 30271）一个像素都不动。
+                this.node.setPosition(mapToViewX(headX), mapToViewY(headY) + (event.visualLiftPx ?? 0), 0);
                 //  转角 = 弹道方向 + 登记的朝向偏移（`facingOffsetDegrees`）。
                 //  猎头者那条登记 90°：长轴垂直弹道，长轴的法线正好指着目标 —— 顺着弹道摆
                 //  法线会甩向侧下方，看着像"斜着飘过去"（2026-11-02 用户口径）。
@@ -475,6 +585,58 @@ export class ZCCombatEffectView extends Component {
         if (!(speed > 0)) return projectile.durationSeconds;
         const aim = Math.hypot(projectile.toX - projectile.fromX, projectile.toY - projectile.fromY) / speed;
         return aim > 0 ? Math.min(aim, projectile.durationSeconds) : projectile.durationSeconds;
+    }
+
+    /**
+     * 弹体飞行抖动（2026-11-26 第 57 批：毒箭菇 Y 轴 / 大嘴花 X 轴，`1-1.05-0.95-1`）。
+     *
+     * 三个容易写错的地方：
+     *  ① **每帧写绝对值**（`基准 × 倍率`），不在 `body.scale` 上累乘 —— 累乘在 60fps 下
+     *    半秒就撑到几倍，看着像子弹在膨胀；
+     *  ② **换事件时先把基准写回去再读**：同一份 prefab 池化复用不会重建 `visualNode`，
+     *    直接读会读到上一任抖到一半的缩放，于是「第一颗是 0.95、第二颗从 0.95 起抖」；
+     *  ③ 只认 `body` 这个子节点名。存量弹体没有它 ⇒ 一次都不进这条分支（连查找都跳过）。
+     *
+     * 时间基准是 `event.startedAt` 而不是节点寿命：池化复用后节点比事件活得久，
+     * 用节点自己的时钟会让第二颗子弹接上一颗的相位（与 `growFactorOf` 同一条理由）。
+     */
+    private applyBulletWobble(event: Readonly<ZCCombatEvent>, now: number): void {
+        if (this.wobbleEventId !== event.id) {
+            this.restoreWobble();
+            this.wobbleEventId = event.id;
+            const wobble = zcCombatEffectWobbleOf(event.effectPrefabPath);
+            if (wobble) this.bindWobbleNode();
+        }
+        const body = this.wobbleNode;
+        if (!body || !body.isValid) return;
+        const wobble = zcCombatEffectWobbleOf(event.effectPrefabPath);
+        if (!wobble) return;
+        const [scaleX, scaleY] = zcCombatEffectWobbleScaleOf(wobble, now - event.startedAt);
+        body.setScale(this.wobbleBaseX * scaleX, this.wobbleBaseY * scaleY, 1);
+    }
+
+    /** 找到 `body` 并记下它的基准缩放（此刻节点必须还没被本组件改过）。*/
+    private bindWobbleNode(): void {
+        const visual = this.visualNode;
+        if (!visual?.isValid) return;
+        //  无引擎夹具的假节点没有 `getChildByName`（`zcds-progressive-art` 那一类）：
+        //  先判方法再调，别让「没有抖动这条功能」变成夹具崩掉。
+        const probe = visual as unknown as { getChildByName?: unknown };
+        if (typeof probe.getChildByName !== 'function') return;
+        const body = visual.getChildByName(BULLET_BODY_NODE_NAME);
+        if (!body) return;
+        this.wobbleNode = body;
+        this.wobbleBaseX = body.scale.x;
+        this.wobbleBaseY = body.scale.y;
+    }
+
+    /** 把 `body` 的缩放写回基准并解绑（换事件 / 重新 initialize 时都要做）。*/
+    private restoreWobble(): void {
+        const body = this.wobbleNode;
+        this.wobbleNode = null;
+        this.wobbleEventId = -1;
+        if (!body || !body.isValid) return;
+        body.setScale(this.wobbleBaseX, this.wobbleBaseY, 1);
     }
 
     /** 固定局部几何每事件画一次，后续随宿主变换；重画前清屏避免池化残留。*/

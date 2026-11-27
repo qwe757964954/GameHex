@@ -10,14 +10,16 @@ import { assetPath } from './helpers/asset-paths';
 
 const root = assetPath(BIGMAP_CONCEPT_ROOT);
 
-test('8 张在用设计切图与清单一致，建筑和 UI 保持真实透明通道', () => {
+test('清单只剩体力图标，切图与清单一致，保持真实透明通道', () => {
     const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
     // 2026-11-12 第一刀：9 张基地/世界旧概念图（barracks/farm/fortress/headquarters/ironworks/
     // mutant_camp/sawmill/warehouse/water_tower）随新美术删库，清单同步裁到 16 条。
     // 2026-11-12 第二刀：8 张零消费 UI 件（header/detail/button/tab_idle/tab_active/badge/plot/home）
     // 已经 uuid 反查（prefab/scene/json 零命中）后连 PNG 一起删，清单裁到 8 条；只剩 stamina。
-    assert.equal(manifest.assets.length, 8);
-    assert.equal(new Set(manifest.assets.map((asset: { path: string }) => asset.path)).size, 8);
+    // 2026-11-26 第三刀：`sprites/` 7 张切片整目录删除（`W-物品表` 18501-18504 改指 `concept/ui/top_*`，
+    // 顶栏金币也改绑 `top_coin`），清单裁到 1 条。
+    assert.equal(manifest.assets.length, 1);
+    assert.equal(new Set(manifest.assets.map((asset: { path: string }) => asset.path)).size, 1);
     for (const asset of manifest.assets) {
         const bytes = readFileSync(join(root, asset.path));
         assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256, asset.path);
@@ -35,9 +37,10 @@ test('实际配置建筑与所有运行时图标均有资源，自动图集只�
     // 已从加载链摘除并**连 PNG 一起删**；只剩 `stamina` 还被资源图标兜底用 —— 就钉这一张。
     assert.equal(BIGMAP_STAMINA_ART, `${BIGMAP_CONCEPT_ROOT}/ui/stamina`);
     assert.ok(existsSync(assetPath(`${BIGMAP_STAMINA_ART}.png`)), BIGMAP_STAMINA_ART);
-    // 剩下的 7 张 sprites：4 张资源图标 + 3 张基地/地形（建造中、石头、草）。
-    for (const name of ['grain', 'wood', 'iron', 'coin', 'construction', 'rocks', 'grass']) {
-        assert.ok(existsSync(join(root, 'sprites', `${name}.png`)), name);
+    // 2026-11-26 第三刀：`sprites/` 整目录删除（item 表 18501-18504 已改指 `concept/ui/top_*`，
+    // 顶栏金币改绑 `top_coin`）—— 资源图标兜底与顶栏同源，钉这 5 张，删一张就集体失图。
+    for (const name of ['top_grain', 'top_wood', 'top_iron', 'top_coin', 'top_stamina']) {
+        assert.ok(existsSync(join(root, 'ui', `${name}.png`)), name);
     }
     // 自动图集只能贴在 bundle 的 `image/` 根上（`bigmap` 分包内路径，2026-11-04 上提后少一层 `bigmap`）。
     // 这里**不能用 `assetExists`** —— 它按分包根顺序探测，会先命中 main-pages 的同名 pac，断言就失去意义。

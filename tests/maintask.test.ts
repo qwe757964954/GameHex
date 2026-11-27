@@ -408,7 +408,9 @@ test('B5 详情 / 入口用的是同一份进度与上限（只有换行不同�
 
 test('C1 MT_ART_NAMES 每个 key 都在磁盘上（相对 assets/resources/image）', () => {
     const keys = Object.keys(MT_ART_NAMES);
-    assert.ok(keys.length >= 12, `至少要 12 个 key（详情 5 + 入口 3 + 10级领取 4）实际 ${keys.length}`);
+    // 详情 5 + 入口 3 + 10级领取 3：入口的「可领取红点」已改用工程通用 `RedDot` 组件
+    // （`cm_red_dot` + spine 由组件自己管），不再登记为本模块的图 key。
+    assert.ok(keys.length >= 11, `至少要 11 个 key（详情 5 + 入口 3 + 10级领取 3）实际 ${keys.length}`);
     const missing: string[] = [];
     for (const [key, rel] of Object.entries(MT_ART_NAMES)) {
         if (!existsSync(assetPath(`image/${rel}.png`))) missing.push(`${key} → ${rel}.png`);
@@ -651,13 +653,18 @@ test('D12 入口 HUD：根 113×96、锚点 (0.5,0.5)、`_active = true`、挂 M
     assert.equal(scriptTypes(entry, 1).length, 1);
 });
 
-test('D13 入口 HUD：根子序 = Bg → Chest → RedDot → Label，且红点烘隐藏', () => {
+test('D13 入口 HUD：根子序 = Bg → Icon → RedDot → Label，且红点烘隐藏', () => {
     const names = (entry[1]._children ?? []).map((c: any) => byId(entry, c.__id__)._name);
     assert.deepEqual(names, ['Bg', 'Icon', 'RedDot', 'Label']);
     const rects = collectRects(entry);
     const redDot = rects.get('RedDot')!;
     assert.equal(entry[redDot.id]._active, false, '红点初始必须隐藏（老端由 OnRDUpdate 驱动，规则 82 每趟无条件写）');
-    assert.equal(entry[rects.get('RedDot/DotText')!.id]._active, false, '红点里的数字同样隐藏');
+    // 入口红点必须是工程通用 `RedDot` 结构（静态底图 + spine + 数字），不能再是手搓的 Dot/DotText。
+    const dotChildren = (entry[redDot.id]._children ?? []).map((c: any) => byId(entry, c.__id__)._name);
+    assert.deepEqual(dotChildren, ['Icon', 'Spine', 'Title'], '红点结构必须是 Icon → Spine → Title');
+    for (const name of dotChildren) {
+        assert.equal(entry[rects.get(`RedDot/${name}`)!.id]._active, false, `红点的 ${name} 初始也要隐藏`);
+    }
 });
 
 test("D14 任务入口使用三段皮肤，图标与文字不横向溢出", () => {
@@ -750,7 +757,7 @@ test('E7 入口：`applySnapshot` 每处都**无条件写**（规则 82，`_acti
     const body = methodBody(ENTRY_SRC, 'applySnapshot');
     assert.ok(body.includes('this.node.active = snapshot.visible'), 'visible 必须无条件写');
     assert.ok(body.includes('this.label.string ='), 'label 必须无条件写');
-    assert.ok(body.includes('this.redDot.active = snapshot.showRedDot'), '红点必须无条件写');
+    assert.ok(body.includes('this.redDot.setRedDot(snapshot.showRedDot)'), '红点必须无条件写（布尔交给通用 RedDot 归一化）');
     assert.ok(!/if\s*\([^)]*!==\s*this\.\w+/.test(body), '不该出现「只在翻转时写」的短路');
 });
 

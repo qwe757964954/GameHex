@@ -39,7 +39,7 @@ function fixture(canRequestBattle = true, campResponse: unknown = { infos: [{ ca
         fetchSimple: async () => campResponse,
         fetchDetail: async () => campResponse,
         fetchRoles: async (campId: number) => ({ campId, infos: [] }),
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
     });
     const storage = createMemoryBigMapStorage();
     if (clearedMonsterLevel > 0) {

@@ -14,26 +14,33 @@ Sprite 根本取不到图。所以本脚本干三件事：
 
 ## 帧图 meta 为什么用 `trimType: "none"`（不裁剪）
 
-同一段动画的 18 帧共享一张 1296×1228 画布，**内容在画布里居中、逐帧变大**。
+同一段动画的 18 帧共享同一张画布，**内容在画布里居中、逐帧变大**。
 如果让编辑器自动裁剪，每帧的 `width/height/offsetX/offsetY` 都不一样；
-而 Sprite 是 `sizeMode = CUSTOM`（contentSize 固定 1296×1228），裁剪信息一旦参与
+而 Sprite 是 `sizeMode = CUSTOM`（contentSize 固定画布尺寸），裁剪信息一旦参与
 顶点计算，逐帧的偏移就会把「原地爆开」画成「原地抖着爆开」。
 `hex_pulse_seq`（同一类序列帧特效）用的就是 `trimType: none`，这里照抄同一口径：
 **raw == trimmed**，画布 1:1，18 帧严丝合缝。
 
-## 尺寸：80px × 80px 是怎么反算的
+## 尺寸：80px × 80px（2026-11-26 已烘进贴图，倍率归 1）
 
 需求：「特效大小约为 80px × 80px」。
 
 按项目口径（`ZCCombatEffectScale.ts` 里镭射飞龙那条注释确立的），**分母取可见内容、
 不取画布** —— 画布周围那一圈透明不占屏幕。用 PIL 按 `alpha ≥ 8` 逐帧量 18 帧的可见
-bbox，**最大的一帧是第 15 帧 1166×1166**（之后 16/17 帧开始收）
+bbox，**最大的一帧是第 15 帧 1166×1166**（之后 16/17 帧开始收）。
 
-    1166 / 1296 = 90% 的画布     ← 拿画布当分母会把特效缩小 10%
-    80 / 1166   = 0.06861        ← 实际采用的烘焙缩放
+旧做法是保留 1296×1228 画布、根节点 `_lscale = 80/1166 = 0.06861` ——
+屏幕上对，但每帧 1300×1232 的矩形塞不进 2048 的 auto-atlas（两帧并排 2600 > 2048），
+18 帧各占一页，合计 109 MB 纹理像素。
 
-⇒ prefab 根节点 `_lscale = 0.0686`，最大那一帧的可见圆正好是 80×80。
-（若按画布 1296 折算应是 80/1296 = 0.0617，那会让最大帧只有 72px，不采用。）
+2026-11-26 改成**按 80px 峰值重烘**：以可见并集 `(69,31)-(1235,1197)` 裁 1166×1166，
+再按 80/1166 重采样成 80×80，于是
+
+    prefab `_lscale = 1`、`_contentSize = 80×80`、帧图 80×80
+
+屏幕尺寸与旧版逐像素一致（旧 1296×0.06861 = 88.9 画布 px，内容 1166×0.06861 = 80 px）；
+原始 1296×1228 的 18 帧备份在 `tmp/fx_src_backup/瞬间移动特效/`。
+重烘命令：`python tools/resize_fx_frames.py --dir <目录> --width 80 --height 80 --crop 69,31,1235,1197`
 
 ## 时长：18 帧 / sample 24 = 0.75s
 
@@ -52,12 +59,12 @@ import uuid
 ROOT = 'assets/bundles/battle/units/projectiles/瞬间移动特效'
 NAME = '瞬间移动特效'
 
-# 可见内容最大那一帧（第 15 帧）的 bbox 边长，见文件头注释。
-PEAK_VISIBLE_PX = 1166
-# 需求给的屏上尺寸（px）。
+# 原始 18 帧共享的画布与可见并集（第 15 帧最大），仅作追溯，见文件头注释。
+SOURCE_CANVAS = (1296, 1228)
+CROP_BOX = (69, 31, 1235, 1197)
+# 需求给的屏上尺寸（px），已烘进贴图：帧图 80×80 ⇒ 缩放 1。
 TARGET_SIZE_PX = 80
-# 烘焙缩放 = 80 / 1166。
-SCALE = round(TARGET_SIZE_PX / PEAK_VISIBLE_PX, 5)
+SCALE = 1
 
 # 18 帧 / 24fps = 0.75s。
 SAMPLE = 24
@@ -338,7 +345,7 @@ def main():
                asset_meta('animation-clip', '2.0.4', clip_uuid, NAME))
 
     print(f'\n[info] {NAME}: {len(frames)} 帧 / 画布 {width}x{height}'
-          f' / 可见峰值 {PEAK_VISIBLE_PX}px / 烘焙缩放 {SCALE} ⇒ 屏上约 {TARGET_SIZE_PX}px')
+          f' / 源可见峰值 {CROP_BOX[2] - CROP_BOX[0]}px 裁到 {TARGET_SIZE_PX}px / 烘焙缩放 {SCALE}')
     print(f'[info] sample={SAMPLE} duration={DURATION}s')
 
 

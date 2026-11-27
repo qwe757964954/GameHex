@@ -51,8 +51,8 @@ test('armySkillLevelUp：按 skillId 聚合，一行只是一个等级档', () =
     assert.ok(skill, '100101（超视孢子）必须存在于表里');
     assert.equal(skill.name, '超视孢子');
     assert.deepEqual(skill.levels.map((row) => row.level), [1, 2, 3]);
-    // 100101 是 68001 的**第 1 格** ⇒ 按「技能1 = 3 / 10 / 22」的统一档位。
-    assert.deepEqual(skill.levels.map((row) => row.unlockHeroLevel), [3, 10, 22]);
+    // 100101 是 68001 的**第 1 格** ⇒ 按「技能1 = 2 / 10 / 22」的统一档位（设计案口径）。
+    assert.deepEqual(skill.levels.map((row) => row.unlockHeroLevel), [2, 10, 22]);
     assert.equal(skillMaxLevel(skill), 3);
 });
 
@@ -91,8 +91,9 @@ test('resolveCardSkills：顺序以卡表 skillList 为准，缺失告警跳过'
     const skills = resolveCardSkills(TABLE, PEASHOOTER_SKILLS, '68001');
     assert.deepEqual(skills.map((skill) => skill.skillId), PEASHOOTER_SKILLS);
     // 名称以 `pvpSkillPlan`（实际研发）为准：100104 已由「黄袍加身」更名为「豌豆机关枪」，
-    // 100103 已由「饥饿缠身」换成 V5 的「异种猎杀协议」（对蘑菇阵营增伤 + 暴击率）。
-    assert.deepEqual(skills.map((skill) => skill.name), ['超视孢子', '强化豌豆', '异种猎杀协议', '豌豆机关枪']);
+    // 100103 已由「饥饿缠身」换成 V5 的「异种猎杀」（对蘑菇阵营增伤 + 暴击率）；
+    // 🔴 2026-11-25 设计案做了一轮统一命名：所有「XX 协议」去掉后缀 ⇒「异种猎杀」（原「异种猎杀协议」）。
+    assert.deepEqual(skills.map((skill) => skill.name), ['超视孢子', '强化豌豆', '异种猎杀', '豌豆机关枪']);
     // 名称变了、身份没变：仍是 100101~100104 这四条链，顺序照卡表。
     assert.deepEqual(skills.map((skill) => skill.skillId), [100101, 100102, 100103, 100104]);
 

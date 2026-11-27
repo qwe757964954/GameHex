@@ -29,7 +29,7 @@ import {
     visibleTierIndexes,
 } from '../assets/script/app/firstRecharge/FirstRechargeTable';
 import type { IFirstRechargeState, IFirstRechargeTier } from '../assets/script/app/firstRecharge/FirstRechargeTable';
-import { QUALITY_FRAME_NAMES, qualityFrameName } from '../assets/script/app/firstRecharge/FirstRechargeArt';
+import { QUALITY_FRAME_NAMES, qualityFrameName } from '../assets/script/app/common/QualityFrameArt';
 import { FIRST_RECHARGE_TEXTS } from '../assets/script/app/firstRecharge/FirstRechargeTexts';
 
 // ============================================================

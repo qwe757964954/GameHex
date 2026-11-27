@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { LeagueCreateController } from '../assets/script/app/league/LeagueCreateController';
 import { LeagueCreateModel } from '../assets/script/app/league/LeagueCreateModel';
-import { LeagueCreateEvent, type ILeagueCreateIntent, type ILeagueCreateViewState } from '../assets/script/app/league/LeagueCreateEvents';
+import { LeagueCreateEvent, type ILeagueCreateIntent, type ILeagueCreateViewState, type LeagueCreateOutput } from '../assets/script/app/league/LeagueCreateEvents';
 import type { LeagueRequestResult } from '../assets/script/app/league/LeagueRepository';
 import type { ILeagueCostView } from '../assets/script/app/league/LeagueTable';
 import {
@@ -41,26 +41,43 @@ interface ICreateCall {
 
 function fixture() {
     const owner = {};
+    const observer = {};
     const states: ILeagueCreateViewState[] = [];
     const tips: string[] = [], cancelled: object[] = [], joined: boolean[] = [];
     const costCalls: ICostCall[] = [], createCalls: ICreateCall[] = [];
     let closed = 0;
     const model = new LeagueCreateModel();
-    const controller = new LeagueCreateController(createControllerContext(), {
-        owner, model,
+    const controller = new LeagueCreateController(createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => cancelled.push(caller),
+        },
+    }), {
+        model,
         repository: {
             createCost: () => new Promise<ILeagueCostView>((resolve, reject) => { costCalls.push({ resolve, reject }); }),
             requestCreat: (icon, name, quick, caller) => new Promise<LeagueRequestResult>((resolve, reject) => {
                 createCalls.push({ icon, name, quick, caller: caller as object, resolve, reject });
             }),
         },
-        view: { render: state => states.push({ ...state }), close: () => { closed += 1; } },
-        feedback: {
-            tip: text => tips.push(text),
-            notifyJoined: () => joined.push(true),
-        },
-        requests: { removeCaller: caller => cancelled.push(caller) },
     });
+    EventMgr.instance.on(LeagueCreateEvent.Output, (output: LeagueCreateOutput, source: object) => {
+        if (source !== controller) return;
+        switch (output.kind) {
+            case 'render':
+                states.push({ ...output.state });
+                break;
+            case 'tip':
+                tips.push(output.text);
+                break;
+            case 'close':
+                closed += 1;
+                break;
+            case 'joined':
+                joined.push(true);
+                break;
+        }
+    }, observer);
     controller.start();
     const emit = (intent: ILeagueCreateIntent) => EventMgr.instance.emit(LeagueCreateEvent.Intent, intent);
     const submit = (name = '联盟名', quickJoin = true) =>

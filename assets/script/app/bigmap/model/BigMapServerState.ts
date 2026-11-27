@@ -1,5 +1,57 @@
 import { BigMapQueueState, type IBigMapBaseState, type IBigMapConfig } from './BigMapTypes';
 
+export type BigMapSlgResultStatus =
+    | 'ok'
+    | 'rejected'
+    | 'offline'
+    | 'loading'
+    | 'syncFailed'
+    | 'busy'
+    | 'disposed'
+    | 'invalid'
+    | 'failed';
+
+export type BigMapSlgActionKind = 'built' | 'upgraded' | 'cancelled' | 'moved' | 'collected' | 'unlocked';
+
+/** SLG 基地操作结果文案（`rejected` 由服务端 `CmdTips` 提示，客户端留空以避免二次弹 Toast）。 */
+export const BIGMAP_SLG_TEXT: Readonly<Record<
+    Exclude<BigMapSlgResultStatus, 'ok'> | BigMapSlgActionKind,
+    string
+>> = {
+    failed: '服务器未确认操作，请刷新后重试',
+    offline: '网络未连接，请稍后重试',
+    rejected: '',
+    loading: '正在同步基地信息',
+    busy: '操作处理中，请稍候',
+    /**
+     *首帧同步确实失败过（不是还在路上）时的文案。
+     *
+     *只用 `loading` 的话，玩家看到的是「正在同步基地信息」，等十秒也没变化，
+     *既不知道是不是卡死、也不知道该不该重试 —— 2026-11-11 用户反馈的正是这个。
+     */
+    syncFailed: '基地信息同步失败，请检查网络后重试',
+    disposed: '页面已关闭',
+    invalid: '操作参数无效',
+    built: '已提交建造',
+    upgraded: '已提交升级',
+    cancelled: '已取消建造或升级',
+    moved: '建筑已移动',
+    collected: '已领取产出',
+    unlocked: '建造队列已解锁',
+} as const;
+
+export function formatBigMapSlgMessage(result: {
+    readonly ok: boolean;
+    readonly status?: BigMapSlgResultStatus;
+    readonly action?: BigMapSlgActionKind;
+}): string {
+    if (result.ok) {
+        return result.action ? BIGMAP_SLG_TEXT[result.action] : '';
+    }
+    const key = result.status && result.status !== 'ok' ? result.status : 'failed';
+    return BIGMAP_SLG_TEXT[key];
+}
+
 export interface IBigMapServerBuild {
     readonly instanceId: number;
     readonly buildingId: number;
@@ -118,7 +170,7 @@ export function normalizeBigMapBuildInfo(value: unknown): IBigMapServerBuildInfo
 }
 
 /** 策划表 `baseBuilding.basebuildPositon` 的起始值（1001 起，共 23 个「初始位置 id」）。 */
-export const BIGMAP_SERVER_POSITION_BASE = 1001;
+const BIGMAP_SERVER_POSITION_BASE = 1001;
 
 /**
  *服务端 `position` → 客户端格索引。

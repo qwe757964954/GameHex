@@ -159,6 +159,9 @@ function createHud(
         Label: class {}, Sprite: class {}, SpriteFrame: class {}, ScrollView: class {}, UITransform: class {},
         Color: class { constructor(public r: number, public g: number, public b: number, public a: number) {} },
         tween: fakeTween,
+        // 开局「对战开始」横幅走 spine（`ZCUISpineBannerFx` 用 `sp.Skeleton` 挂组件）。
+        // 这里只求 require 期不炸：本组用例不演那条横幅（骨架恒 null ⇒ `playBattleStartEffect` 直接返回）。
+        sp: { Skeleton: class {}, SkeletonData: class {} },
     };
     // 纯逻辑模块跑工程真源（`cc` 才走桩）—— 见 loadPureModule 的警告：
     // 旧写法 `require: () => cc` 会让格距常量变 undefined，`mapToViewX/Y` 全是 NaN。
@@ -187,6 +190,15 @@ function createHud(
         './ZCGameViewUtil': view,
         './ZCGameHudEvents': events,
         '../../../framework/event/EventMgr': managerModule,
+        // 开局横幅（2026-11-25 需求）：组件组装在 `ZCUISpineBannerFx`，口径在 `ZCUISpineBannerStyle`
+        // 与 `ZCBattleStartStyle`。本组用例只验 HUD 的其它行为，横幅一律给空壳。
+        './ZCUISpineBannerFx': {
+            createZCUISpineBannerNode: () => ({ root: new FakeNode('UISpineBanner'), skeleton: { clearTracks() {} } }),
+            destroyZCUISpineBanner: () => {},
+            isZCUISpineBannerAlive: () => true,
+        },
+        '../model/ZCUISpineBannerStyle': loadPureModule('assets/script/app/zcds/model/ZCUISpineBannerStyle.ts'),
+        '../model/ZCBattleStartStyle': loadPureModule('assets/script/app/zcds/model/ZCBattleStartStyle.ts'),
     };
     const source = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
     const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true } }).outputText;

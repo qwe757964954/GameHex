@@ -19,6 +19,7 @@ export const BUNDLE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
         'units',
         'ui/game',
         'image/effects',
+        'image/barracks',
         'image/map-resource',
         'image/spawn-region',
         'image/gameui',
@@ -56,6 +57,8 @@ export const BUNDLE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
         'icons/militia',
         // 新手引导立绘：762×1107 的单张大图，刻意不进 `image/role`（那目录有 auto-atlas，会被图集缩糊）
         'image/guide',
+        // 装备锻造（强化 / 升级）蓝湖切图：17 张 720 宽 ui 图，独立 2048 图集 + 背景单图。
+        'image/role_forge',
     ],
 };
 

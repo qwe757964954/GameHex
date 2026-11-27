@@ -4,6 +4,7 @@
  * 本轮只落地「角色主界面 + 背包三页签（宝石 / 装备 / 道具）」；
  * 左侧导航（武将 / 民兵 / 共鸣 / 近卫 / 属性预览 / 宝物 / 主公技）只登记，不做。
  */
+import type { GameRequestStatus } from '../net/RequestGuard';
 
 /** 角色主界面左侧导航 id（与老端 FGUI 按钮一一对应）。 */
 export const ROLE_NAV_IDS = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -47,10 +48,15 @@ export interface IRoleBagEntry {
     readonly name: string;
     /** 描述 / 属性描述（无则空串）。 */
     readonly desc: string;
-    /** 品质（1–8，决定品质框）。 */
+    /** 展示品质（1–7 普通…神话，决定品质框）；装备的 `curQuality` 是品质档，已在仓库换算。 */
     readonly quality: number;
     /** 品阶（装备 `CmdEquipItem.rank`，显示 `{rank}GRADE_RANK`；其余为 0 = 不显示）。 */
     readonly rank: number;
+    /**
+     * 单件分解返还的精炼石数量（仅装备有意义，见 `EquipDecomposeTable.equipDecomposeGain`）。
+     * 其他类型缺省 / 0 = 不可分解。
+     */
+    readonly decompose?: number;
     /** 数量（装备为 1）。 */
     readonly count: number;
     /** 是否装备 / 镶嵌中。 */
@@ -63,10 +69,48 @@ export interface IRoleBagEntry {
 export const ROLE_EQUIP_PART_COUNT = 6;
 export const ROLE_GEM_SOCKET_COUNT = 5;
 
+/**
+ * 装备锻造页签：`Strengthen` = 强化分页，`Upgrade` = 升品 / 洗炼分页。
+ *
+ * 规则 302：`as const` 对象 + 同名派生类型，不用 `enum`（样板见 `main/ChestTypes`）。
+ */
+export const EquipEvolveTab = {
+    Strengthen: 'strengthen',
+    Upgrade: 'upgrade',
+} as const;
+export type EquipEvolveTab = (typeof EquipEvolveTab)[keyof typeof EquipEvolveTab];
+
 export interface IRoleGemEntry extends IRoleBagEntry {
     readonly kind: 'gem';
     readonly gemId: string;
     readonly equipId: number;
+    /** 属性类型（`gemAttribute.type`；0 = 配置缺失），推荐箭头与同类灰罩按它比较。 */
+    readonly attrType?: number;
+    /** 生效技能 id（`gemAttribute.skillId`；0 = 非技能宝石），详情弹窗据此显示「生效技能」。 */
+    readonly skillId?: number;
+    /** 同部位装备上已存在「同属性类型 + 同品质」宝石的灰罩（老端 `TabGem.mask`）。 */
+    readonly masked: boolean;
+}
+
+/**
+ * 一条锻造消耗的结构化事实（展示 `owned/need`，图标取物品表 `icon`）。
+ *
+ * 与 {@link IRoleEquipGrowth.levelCost} 等字符串并列：字符串供确认弹窗拼接文案，
+ * 本结构供锻造页渲染「持有/需求 + 颜色」；两者同源，改口径时一起改。
+ */
+export interface IRoleEquipCostFact {
+    readonly name: string;
+    readonly need: number;
+    readonly owned: number;
+    /** 图标资源路径（相对 resources 根，如 `icons/resource/图标_铜币`）。 */
+    readonly iconPath: string;
+}
+
+/** 升品行的一条属性（`name` 含尾冒号，`cur/next` 已带 `+` / `%` 后缀）。 */
+export interface IRoleEquipEffectRow {
+    readonly name: string;
+    readonly cur: string;
+    readonly next: string;
 }
 
 export interface IRoleEquipGrowth {
@@ -92,6 +136,16 @@ export interface IRoleEquipGrowth {
     readonly levelCost: readonly string[];
     readonly qualityCost: string | null;
     readonly washCost: string | null;
+    /** 当前品阶的稀有度名（`equipRank.rarityName`，如「平凡」）。 */
+    readonly rarityName: string;
+    /** 下一品阶的稀有度名；已满品阶为 `null`。 */
+    readonly nextRarityName: string | null;
+    /** 升品行数据（`effects` 的「名称 + 当前 → 下一」拆列版本）。 */
+    readonly effectRows: readonly IRoleEquipEffectRow[];
+    /** 强化消耗（金币 / 图纸），按 `levelCost` 的顺序。 */
+    readonly levelCostFacts: readonly IRoleEquipCostFact[];
+    readonly qualityCostFact: IRoleEquipCostFact | null;
+    readonly washCostFact: IRoleEquipCostFact | null;
 }
 
 export interface IRoleEquipPlan {
@@ -158,6 +212,35 @@ export interface IRoleSnapshot {
     readonly bagCounts: Readonly<Record<RoleBagTabId, number>>;
 }
 
+/**
+ * 装备锻造红点：**单个部位**能不能强化 / 升品 / 洗炼。
+ *
+ * 判定口径见 `RoleEquipRedDotTable`；角色页「装备」页签、锻造入口、装备栏 6 格、
+ * 锻造弹窗内的页签与按钮、底栏角色入口全部读这一份，避免各界面各算一套。
+ */
+export interface IEquipPartRedDots {
+    /** 部位 1..6。 */
+    readonly partId: number;
+    /** 可强化（金币 + 强化道具足够、未满级）。 */
+    readonly strengthen: boolean;
+    /** 可升品（升品材料足够、未满品）。 */
+    readonly upgrade: boolean;
+    /** 可洗炼（已开放 `libCount >= 2` 且材料足够）。 */
+    readonly wash: boolean;
+    /** 三项任一为真。 */
+    readonly any: boolean;
+}
+
+/** 装备锻造红点：6 个部位 + 整页汇总。 */
+export interface IEquipRedDots {
+    /** 下标 0..5 = 部位 1..6（恒 6 项，空位全 false）。 */
+    readonly parts: readonly IEquipPartRedDots[];
+    readonly strengthen: boolean;
+    readonly upgrade: boolean;
+    readonly wash: boolean;
+    readonly any: boolean;
+}
+
 // ============================================================
 // 装备格（供「个人信息」PlayerInfoRepository 复用）
 // ============================================================
@@ -173,4 +256,32 @@ export interface IEquipPartInfo {
     readonly quality: number;
     /** 该装备上的宝石数量；界面只画数量。 */
     readonly gemCount: number;
+}
+
+/**
+ * 装备分解请求结果（`RoleRepository.decomposeEquips()`）。
+ *
+ * `removedIds` 以服务端回包为准 —— 服务端可能只接受其中一部分；
+ * `rewards` 是 `CmdEquipDecomposeRspMsg.tlCmdGoods`，为空时界面不应假设「没有奖励」，
+ * 先按成功提示。
+ */
+export interface IRoleDecomposeResult {
+    readonly status: GameRequestStatus;
+    /** 服务端确认已移除的装备 uniqueId（十进制字符串）。 */
+    readonly removedIds: readonly string[];
+    /** 分解获得的物品。 */
+    readonly rewards: readonly CmdGoods[];
+}
+
+/**
+ * 批量分解的执行选项。
+ *
+ * 当前协议 `CmdEquipDecomposeReqMsg.tlUniqueIds` 是 repeated，但**服务端未必实现批量**：
+ * 默认先按老端整包发一次；回包缺件或服务端只接受单件时，剩余装备逐件补发。
+ * `sequential` 用于后端明确只支持单件、想跳过整包等待的场景。
+ */
+export interface IRoleDecomposeOptions {
+    readonly mode?: 'batch' | 'sequential';
+    /** 每完成一件（或整包返回）回调一次；`completed` = 已确认移除件数，`total` = 本次提交总件数。 */
+    readonly onProgress?: (completed: number, total: number) => void;
 }

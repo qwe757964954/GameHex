@@ -1,4 +1,5 @@
 import { _decorator, Button, Color, Component, Label, Node, RichText, Sprite, SpriteFrame, sp } from 'cc';
+import { RedDot } from '../common/RedDot';
 import { backgroundArtForType, MONTHCARD_ART } from './MonthCardGiftArt';
 import {
     MONTHCARD_BOUGHT_TAG_POS,
@@ -94,8 +95,8 @@ export class MonthCardGiftEntry extends Component {
     @property({ type: Node, tooltip: 'BtnReward：领取按钮' })
     btnReward: Node = null;
 
-    @property({ type: Node, tooltip: 'BtnReward/RedDot：领取红点' })
-    redDot: Node = null;
+    @property({ type: RedDot, tooltip: 'BtnReward/RedDot：领取红点（工程通用红点）' })
+    redDot: RedDot = null;
 
     @property({ type: Node, tooltip: 'GainBubble：立即获得气泡' })
     gainBubble: Node = null!;
@@ -232,7 +233,7 @@ export class MonthCardGiftEntry extends Component {
 
         const claimable = view.phase === 'claimable';
         this.btnReward.active = claimable;
-        this.redDot.active = claimable;
+        this.redDot.setRedDot(claimable);
 
         if (claimable) {
             this.btnBuy.active = false;

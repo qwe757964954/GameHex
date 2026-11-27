@@ -202,6 +202,13 @@ export class GuideDialogView extends Component {
     private animationStartedAt = 0;
     @property([Node]) focusMasks: Node[] = [];
     private focusMaskSprites: Sprite[] = [];
+    /**
+     * 四块遮罩上的 Button（压暗的同时也是「孔外点击区」）。
+     *
+     * `holeThrough` 步要**留着压暗、关掉点击**：`Button` 与 `Sprite` 是两个组件，
+     * 停用前者只是不再注册触摸监听（事件随之漏到下层），半透明黑照样画。
+     */
+    private maskButtons: (Button | null)[] = [];
     private focusKey = '';
     private focusTarget: IGuideFocusTarget | null = null;
     private focusTransform: UITransform | null = null;
@@ -247,7 +254,7 @@ export class GuideDialogView extends Component {
     private portraitSuppressed = false;
     /** 立绘当前站哪一侧：1 = 右侧（默认），-1 = 左侧（孔占了右边时让位）。 */
     private portraitSide: 1 | -1 = 1;
-    /** 当前步的遮罩类型 —— 立绘遮挡只在 `hole` 步判（`full` / `none` 一律站着）。 */
+    /** 当前步的遮罩类型 —— 立绘遮挡只在「挖孔」形态（`hole` / `holeThrough`）判。 */
     private currentMaskType: GuideMaskType = 'full';
 
     protected onLoad(): void {
@@ -266,6 +273,7 @@ export class GuideDialogView extends Component {
         // prefab 里没有 UIOpacity 就补一个：描边呼吸只改这个值，不重建 Graphics 几何。
         this.ringOpacity = this.focusRing.getComponent(UIOpacity) ?? this.focusRing.addComponent(UIOpacity);
         this.focusMaskSprites = this.focusMasks.map(node => node.getComponent(Sprite));
+        this.maskButtons = this.focusMasks.map(node => node.getComponent(Button));
         this.maskTransforms = this.focusMasks.map(node => node.getComponent(UITransform));
         this.schedule(this.resolveFocus, 0.25);
         this.blockerNode.on(Button.EventType.CLICK, this.onTap, this);
@@ -291,6 +299,8 @@ export class GuideDialogView extends Component {
      * 三条约束同时成立才动：
      * ① 只认 `maskType === 'none'` 的步 —— `full` / `hole` 的收起路径是遮罩与 Blocker，
      *    在那些步上再加一只手会把「点对话条推进台词」变成一碰就关；
+     *    挖孔穿透步（`holeThrough`，8-1）同样不在这里收：它点别处的语义是**让给下面的界面**
+     *    （切页 / 点别的入口），不是「关掉台词」；
      * ② 点的是**对话条以外**的地方 —— 落在对话条上就交给 `onTap` 正常逐句推进；
      * ③ 本层真的在显示、而且这一步的台词还没收。
      *
@@ -325,19 +335,36 @@ export class GuideDialogView extends Component {
     }
 
     /**
-     * 遮罩样式：**只改 alpha**。颜色、白图、尺寸全在 prefab 里（走 MCP），代码不重复配。
+     * 遮罩样式：**只改 alpha 与「吃不吃饭点击」**。颜色、白图、尺寸全在 prefab 里（走 MCP），
+     * 代码不重复配。
      *
      * 为什么这部分进不了 prefab：`maskType` 是运行时数据（每步不同），同一个 `Dim`
      * 在 full 步要 60%、hole 步要 40% —— 静态资源撑不住这种切换。
      * `none`（弱引导）直接 0：连压暗都不要，节点显隐交给 `placeFocusRing` 统一管。
+     * `holeThrough` 的 alpha 跟 `hole` 一样（挖孔高亮的形式不变），差别只在下面那句 Button。
      */
     private applyMaskStyle(maskType: GuideMaskType): void {
         const dim = this.dimSprite;
         const color = dim.color.clone();
-        color.a = maskType === 'none' ? 0 : maskType === 'hole' ? HOLE_MASK_ALPHA : FULL_MASK_ALPHA;
+        color.a = maskType === 'none' ? 0 : maskType === 'hole' || maskType === 'holeThrough' ? HOLE_MASK_ALPHA : FULL_MASK_ALPHA;
         dim.color = color;
         for (const sprite of this.focusMaskSprites) sprite.color = color;
+        // 🔴 挖孔穿透（8-1）：压暗照画，但孔外**不吃点击**。
+        //
+        // 四块遮罩原本兼任「孔外点击区」（都绑了 CLICK → onTap，见 `onLoad`），孔外点哪
+        // 都等于点对话条。8-1 要玩家自己去点底栏的任务入口，同时点错了也得能切到别的页
+        // （用户 2026-11-25），所以这一步把 Button 停用 —— 停用后它不再注册触摸监听，
+        // 命中直接漏给下层；Sprite 不动，挖孔与压暗一模一样。
+        const blocksOutside = maskType !== 'holeThrough';
+        for (const button of this.maskButtons) {
+            if (button) button.enabled = blocksOutside;
+        }
         this.layoutBlocker();
+    }
+
+    /** 这一步是不是「挖孔」形态（孔要参与立绘让位）。`holeThrough` 的孔与 `hole` 完全一致。 */
+    private usesFocusHole(): boolean {
+        return this.currentMaskType === 'hole' || this.currentMaskType === 'holeThrough';
     }
 
     /** 只按配置的焦点标识定位；没有焦点的对话步骤不显示操作手指。 */
@@ -489,6 +516,8 @@ export class GuideDialogView extends Component {
         }
         // 弱引导（`none`）：**不压暗、不挡点击、不弹气泡文案**，只留光圈 + 手指。
         // 这几步等的是玩家在世界里点地块，压暗会把手感做坏，气泡又和手指说的是同一件事。
+        // 另一档弱引导 `holeThrough`（8-1）**不在这里**：它压暗、挖孔、气泡全留（视觉同 `hole`），
+        // 只把「孔外吃点击」这一项放开（见 `applyMaskStyle` 的 Button 开关）。
         const noMask = this.currentMaskType === 'none';
         const noHint = HINT_HIDDEN_PREFIXES.some((prefix) => this.focusKey.startsWith(prefix));
         const changed = this.focusRing.active !== visible;
@@ -999,8 +1028,8 @@ export class GuideDialogView extends Component {
         // 但 6-3（升级按钮）的孔在**右下**、立绘在对话框上方靠右，两者根本不重叠 —— 那条口径
         // 白丢了「升级卡牌」这一整段的 NPC 形象（用户截图：立绘位置空着，只有气泡和手指）。
         // 真判据是**几何相交**：`placeFocusRing` 每帧按孔与立绘矩形判一次（见 `syncPortraitSuppression`），
-        // 挡住才让开。`full` / `none` 步根本不压孔（前者暗层本来就把世界压住了，后者连暗层都没有），
-        // 站着不动。
+        // 挡住才让开。`full` / `none` 步不参与（前者暗层本来就把世界压住了，后者连暗层都没有），
+        // 站着不动；`hole` 与 `holeThrough` 都参与 —— 两者的孔完全一样。
         const loaded = portrait ? this.frames.get(portrait.asset) ?? null : null;
 
         if (!portrait || !loaded) {
@@ -1069,12 +1098,13 @@ export class GuideDialogView extends Component {
      * 什么时候不参与判定：
      * · 孔没解析出来（`focusVisible === false`）—— 屏幕上没有孔可挡；
      * · `full` / `none` 步 —— 前者暗层已经把世界压住、后者连暗层都没有，立绘站着是设计要的。
+     *   `holeThrough` **参与**判定：它是挖孔形态，孔的位置与 `hole` 一模一样，挡住了照样要让开。
      *
      * ⚠️ 必须每帧算：孔跟着地图滚动 / 卡牌列表翻动变，`render` 时算一次不够。
      */
     private syncPortraitSuppression(focusVisible: boolean, halfWidth: number, halfHeight: number): void {
         if (!this.portraitShown) return;
-        if (!focusVisible || this.currentMaskType !== 'hole') {
+        if (!focusVisible || !this.usesFocusHole()) {
             this.applyPortraitPlacement(1, false);
             return;
         }

@@ -246,7 +246,7 @@ test('C5 主界面用到的入口聚合出的表达式里，变量名都不能�
 const OPEN_JSON_STUB_ALLOWLIST: readonly string[] = [
     // 玩法 / 模块尚未在新工程落地（`RD_CLIENT_VARS` 第二组「未做」）
     'RDAdvisor', 'RDArmy', 'RDChallengeRewards', 'RDCity', 'RDCoinStore',
-    'RDDailyShare', 'RDEquipLevelUp', 'RDFightRewards', 'RDGemStore', 'RDGeneral',
+    'RDDailyShare', 'RDFightRewards', 'RDGemStore', 'RDGeneral',
     'RDGuards', 'RDLeaderSkill', 'RDLiLian', 'RDMiltia', 'RDOSRank', 'RDTabWorkShop',
     // 玩法已做、但取数口径未定（理由见 `RdTypes.RD_CLIENT_VARS` 注释）
     'RDChat', // 卡在聊天「已读」标记（`markRead()` 无调用方 ⇒ `readTimeOf()` 恒 0）

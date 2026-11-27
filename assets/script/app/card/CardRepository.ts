@@ -6,7 +6,7 @@ import { itemDetailRepository } from '../itemdetail/ItemDetailRepository';
 import { readRoleRow } from '../main/MainRoleRow';
 import { GameNet } from '../net/GameNet';
 import { toCount } from '../net/RequestGuard';
-import type { ZCDeckBonuses, ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckBonuses, ZCDeckCard } from './CardLineupTypes';
 import { getPlayerDeck, setCardRarityMeta } from '../zcds/model/ZCCombatCatalog';
 import { CARD_ART_TABLES, parseCardArtConfig, type ICardArtConfig } from './CardArtConfig';
 import { cardArtProvider, type ICardDetailArt } from './CardArtProvider';

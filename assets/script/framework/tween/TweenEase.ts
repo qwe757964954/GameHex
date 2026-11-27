@@ -7,7 +7,7 @@
 export type TTweenEase = (t: number, b: number, c: number, d: number)=>number
 
 
-export let TweenEase = {
+let TweenEase = {
     /*
     * t: current time（当前时间）；
     * b: beginning value（初始值）；

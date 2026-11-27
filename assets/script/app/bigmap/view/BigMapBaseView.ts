@@ -339,12 +339,11 @@ export class BigMapBaseView extends Component {
             //建造中也要用这座建筑自己的图（2026-11-11 用户口径：那张通用脚手架概念图可以去掉）。
             // 建造中的格拿不到 `buildingId`：`projectBigMapServerBase` 只把 `state !== 1` 的建筑
             //放进 `base.buildings`，在建的那座在 `queues` 里 ⇒ 从队列按 `anchorHexId` 反查。
-            //实在查不到（旧存档 / 本地态）才退回脚手架图，别让格子空着。
+            //实在查不到（旧存档 / 本地态）就留空 —— 2026-11-26 随 `concept/sprites` 删库去掉了脚手架兜底。
             const iconBuildingId = cell.buildingId !== 0
                 ? cell.buildingId : data.queueBuildingIds.get(cell.hexId) ?? 0;
             const frame = this.art?.buildings.get(iconBuildingId)
-                ?? (cell.buildingId === data.mainBuildingId ? this.art?.home : null)
-                ?? (cell.slot === 'constructing' ? this.art?.construction : null);
+                ?? (cell.buildingId === data.mainBuildingId ? this.art?.home : null);
             //建筑高度撑满一格（主城略高一点，压住视觉重心）；
             //水平居中、底部略沉 `-height * 0.04` —— 正方图直接居中会在等距视角下发飘。
             const iconHeight = this.fitPlotIcon(slot.icon, frame,

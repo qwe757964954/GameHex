@@ -1,7 +1,7 @@
 import { cardArtConfig } from './helpers/card-art-config';
 import type { ICardDetailArt } from '../assets/script/app/card/CardArtProvider';
 import type { CardDetailPresentation } from '../assets/script/app/card/CardDetailPresenter';
-import type { SpriteFrame } from 'cc';
+import type { Prefab, SpriteFrame } from 'cc';
 import type { ICardMaterialIcon } from '../assets/script/app/card/CardPresentations';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -9,7 +9,7 @@ import { CardUpgradeController } from '../assets/script/app/card/CardUpgradeCont
 import { CardUpgradeModel } from '../assets/script/app/card/CardUpgradeModel';
 import { LineupBoardController } from '../assets/script/app/card/LineupBoardController';
 import { LineupBoardModel } from '../assets/script/app/card/LineupBoardModel';
-import { CardPopupEvent } from '../assets/script/app/card/CardPopupEvents';
+import { CardPopupEvent, type CardUpgradeOutput, type LineupBoardOutput } from '../assets/script/app/card/CardPopupEvents';
 import { CardLineupEvent } from '../assets/script/app/card/CardLineupEvents';
 import { CardLineupController } from '../assets/script/app/card/CardLineupController';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
@@ -120,7 +120,7 @@ function upgradeFixture(upgraded = false, initialLevel = 0) {
     const owner = {}, states: any[] = [], results: any[] = [], applied: any[] = [], skills: any[] = [];
     const failures: unknown[] = [];
     const upgradedContents: any[] = [], heroLoads: string[] = [];
-    const heroPrefab = { name: 'unit-prefab' };
+    const heroPrefab = { name: 'unit-prefab' } as Prefab;
     let calls = 0, loads = 0, releases = 0, loading = 0, removed = 0;
     const pending = deferred<UpgradeHeroResult>();
     const repository = { loadDetailArt: async (_card: ZCDeckCard | null): Promise<ICardDetailArt> => ({ hero: null, diamond: null, classTag: null }), loadUpgradeStatus: async (_id: string, level: number) => { loads++; return upgradeStatus(level); }, loadArtConfig: async () => cardArtConfig,
@@ -133,32 +133,38 @@ function upgradeFixture(upgraded = false, initialLevel = 0) {
     const dataCard = upgraded
         ? { ...card('1'), unitPrefabPath: 'skel/豌豆射手/豌豆射手', rarity: 'green' } as ZCDeckCard
         : card('1');
-    const controller = new CardUpgradeController(createControllerContext(), {
-        owner,
+    const controller = new CardUpgradeController(createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => {
+                assert.equal(caller, controller);
+                removed++;
+            },
+        },
+    }), {
         model: new CardUpgradeModel({ card: dataCard, cardId: '1', level: initialLevel }),
         repository,
-        failed: error => failures.push(error),
-        view: {
-            render: state => { states.push(state); },
-        },
-        loading: {
-            beginLoading: () => { loading++; return () => { releases++; }; }
-        },
-        requests: {
-            removeCaller: () => { removed++; }
-        },
-        popups: {
-            openSkills: value => skills.push(value),
-            ...(upgraded ? { openUpgraded: value => upgradedContents.push(value) } : {}),
-        },
         ...(upgraded ? {
-            upgradedArt: {
-                loadChrome: async () => ({ background: {} as any, frame: null }),
-                loadClassIcon: async () => null,
-                loadHeroPrefab: async (path: string) => { heroLoads.push(path); return heroPrefab as any; },
+            loadUpgradedArt: async (card, _cardClass, scope) => {
+                assert.equal(scope, controller.scope);
+                heroLoads.push(card.unitPrefabPath);
+                return { chrome: { background: {} as SpriteFrame, frame: null }, classIcon: null, heroPrefab };
             },
         } : {}),
     });
+    EventMgr.instance.on(CardPopupEvent.UpgradeOutput, (output: CardUpgradeOutput, source) => {
+        if (source !== controller) return;
+        switch (output.kind) {
+            case 'render': states.push(output.state); break;
+            case 'failed': failures.push(output.error); break;
+            case 'openSkills': skills.push(output.data); break;
+            case 'openUpgraded': upgradedContents.push(output.data); break;
+            case 'loading':
+                if (output.level === null) releases++;
+                else loading++;
+                break;
+        }
+    }, owner);
     EventMgr.instance.on(CardLineupEvent.HeroUpgraded, value => results.push(value), owner);
     const intent = (kind = 'submit') => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind, skillId: 100101 });
     return { owner, controller, repository, states, results, applied, skills, pending, intent, failures, upgradedContents, heroLoads, heroPrefab,
@@ -294,7 +300,10 @@ test('upgrade isolates intents, gates duplicate submits and publishes confirmed 
 });
 test('upgrade disposal releases loading immediately and ignores late response and cache/event/skill side effects', async () => {
     const h = upgradeFixture(); await h.controller.start(); h.intent(); const count = h.states.length;
-    h.controller.dispose(); h.controller.dispose(); assert.equal(h.releases, 1);
+    h.controller.dispose();
+    h.controller.dispose();
+    assert.equal(h.releases, 1);
+    assert.equal(h.removed, 1);
     h.pending.resolve({ kind: 'success', heroId: 1, level: 7 }); await tick(); h.intent('skills');
     assert.equal(h.states.length, count); assert.equal(h.results.length, 0); assert.equal(h.applied.length, 0); assert.equal(h.skills.length, 0);
     assert.equal(h.loads, 1); assert.equal(h.removed, 1); h.finish();
@@ -303,8 +312,9 @@ test('升级成功弹窗加载当前兵种骨骼 prefab，交给视图播放 idl
     const h = upgradeFixture(true);
     try {
         await h.controller.start();
-        h.intent(); h.pending.resolve({ kind: 'success', heroId: 1, level: 1 }); await tick(); await tick();
+        h.intent();
         assert.deepEqual(h.heroLoads, ['skel/豌豆射手/豌豆射手']);
+        h.pending.resolve({ kind: 'success', heroId: 1, level: 1 }); await tick(); await tick();
         assert.equal(h.upgradedContents.length, 1);
         assert.equal(h.upgradedContents[0].heroPrefab, h.heroPrefab);
     } finally { h.finish(); }
@@ -322,34 +332,49 @@ const boardData = (): LineupBoardData => ({ art: cardArtConfig, deck: [card('1')
     formations: [{ formationId: 1, heroIds: [1], selected: true }, { formationId: 2, heroIds: [2], selected: false }] });
 function boardFixture(closeAfterSave = false) {
     const owner = {}, states: any[] = [], events: any[] = [], submissions: any[] = [], tips: string[] = [];
+    const failures: unknown[] = [];
     const selects: { formationId: number }[] = [];
     let removed = 0, closed = 0;
     const pending = deferred<FormationSaveResult>();
     const repository = { loadBoard: async () => boardData(), saveFormation: async (id: number, heroIds: readonly number[], caller: object) => {
         assert.equal(caller, controller); submissions.push({ id, heroIds }); return pending.promise; },
     selectFormation: async (formationId: number) => { selects.push({ formationId }); return true; } };
-    const controller = new LineupBoardController(createControllerContext(), {
-        owner,
+    const controller = new LineupBoardController(createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => {
+                assert.equal(caller, controller);
+                removed++;
+            },
+        },
+    }), {
         model: new LineupBoardModel(2, 0),
         repository,
         autoLoadDecks: true,
         closeAfterSave,
-        failed() {},
-        view: {
-            render: state => { states.push(state); },
-            // 与生产链路一致：view.close → PopupManager.close → composition.dispose → controller.dispose。
-            close: () => { closed++; controller.dispose(); }
-        },
-        feedback: {
-            tip: value => tips.push(value)
-        },
-        requests: {
-            removeCaller: () => { removed++; }
-        },
     });
+    EventMgr.instance.on(CardPopupEvent.BoardOutput, (output: LineupBoardOutput, source: object) => {
+        if (source !== controller) return;
+        switch (output.kind) {
+            case 'render':
+                states.push(output.state);
+                break;
+            case 'tip':
+                tips.push(output.text);
+                break;
+            case 'close':
+                // 与生产链路一致：view.close → PopupManager.close → composition.dispose → controller.dispose。
+                closed++;
+                controller.dispose();
+                break;
+            case 'failed':
+                failures.push(output.error);
+                break;
+        }
+    }, owner);
     EventMgr.instance.on(CardLineupEvent.DeckSaved, value => events.push(value), owner);
     const intent = (kind: string, data = {}) => EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind, ...data });
-    return { controller, repository, pending, states, events, submissions, tips, selects, intent,
+    return { controller, repository, pending, states, events, submissions, tips, failures, selects, intent,
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); }, get removed() { return removed; }, get closed() { return closed; } };
 }
 test('board owns independent preset drafts, toggles and reset; foreign intents are ignored', async () => {
@@ -529,7 +554,6 @@ test('upgrade and formation results refresh the live lineup controller; disposed
     let loads = 0;
     const formationRefreshes: boolean[] = [];
     const lineup = new CardLineupController(createControllerContext(), {
-        owner: {},
         autoLoadDecks: true,
         fallbackLevel: 1,
         repository: { loadArtConfig: async () => cardArtConfig, loadLineupSnapshot: () => null, loadLineup: async (_autoLoad, refreshFormations) => {
@@ -539,11 +563,6 @@ test('upgrade and formation results refresh the live lineup controller; disposed
                 formationsKnown: true, bonuses: { activeBonds: [], unitHpMultiplier: 1, unitAttackMultiplier: 1,
                     moveSpeedMultiplier: 1, towerAttackMultiplier: 1, incomeBonus: 0, spawnIntervalMultiplier: 1 } };
         } },
-        failed(error) { throw error; },
-        popups: {
-            openEditor() {},
-            openUpgrade() {}
-        },
     });
     const upgrade = upgradeFixture(), board = boardFixture();
     try {
@@ -607,6 +626,45 @@ test('closeAfterSave only closes an unchanged submitted draft', async () => {
             h.pending.resolve({ kind: 'success', formation: { formationId: 1, heroIds: [1], selected: true } }); await tick();
             assert.equal(h.closed, edit ? 0 : 1);
         } finally { h.finish(); }
+    }
+});
+
+test('board controller emits render output synchronously and reports load failure via BoardOutput without leaking after dispose', async () => {
+    const h = boardFixture();
+    const observer = {};
+    let renderCalls = 0;
+    EventMgr.instance.on(CardPopupEvent.BoardOutput, (output: LineupBoardOutput, source: object) => {
+        if (source === h.controller && output.kind === 'render') {
+            renderCalls++;
+            void Promise.reject(new Error('slow render failed')).catch(() => {});
+        }
+    }, observer);
+    try {
+        h.repository.loadBoard = async () => fullBoardData();
+        await h.controller.start();
+        h.intent('preset', { index: 1 });
+        await tick();
+        assert.ok(renderCalls >= 2);
+        assert.deepEqual(h.selects, [{ formationId: 2 }]);
+        assert.equal(h.failures.length, 0);
+    } finally {
+        EventMgr.instance.offTarget(observer);
+        h.finish();
+    }
+
+    const failed = boardFixture();
+    const boom = new Error('load boom');
+    try {
+        failed.repository.loadBoard = async () => { throw boom; };
+        await failed.controller.start();
+        assert.deepEqual(failed.failures, [boom]);
+        assert.equal(failed.tips.length, 1);
+        const tipCount = failed.tips.length;
+        failed.controller.dispose();
+        failed.intent('reset');
+        assert.equal(failed.tips.length, tipCount);
+    } finally {
+        failed.finish();
     }
 });
 
@@ -758,4 +816,22 @@ test('升级到满级仍显示本次属性增量和暴击奖励', async () => {
     } finally {
         h.finish();
     }
+});
+
+test('submit 期间 render 同步触发 dispose 时不发 loading 且不发升级请求', async () => {
+    const h = upgradeFixture();
+    try {
+        await h.controller.start();
+        EventMgr.instance.on(CardPopupEvent.UpgradeOutput, (output: CardUpgradeOutput, source) => {
+            if (source === h.controller && output.kind === 'render' && output.state.phase === 'submitting') {
+                h.controller.dispose();
+            }
+        }, h.owner);
+        h.intent();
+        await tick();
+        assert.equal(h.loading, 0);
+        assert.equal(h.releases, 0);
+        assert.equal(h.calls, 0);
+        assert.equal(h.removed, 1);
+    } finally { h.finish(); }
 });

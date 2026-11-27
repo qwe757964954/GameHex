@@ -56,6 +56,16 @@ function readRows(relative: string): Array<Record<string, any>> {
     );
 }
 
+/** prefab 根节点 UITransform 的 `_contentSize`（= 帧图画布）。*/
+function rootContentSize(prefabPath: string): { width: number; height: number } {
+    const entries = JSON.parse(
+        readFileSync(join(ROOT, assetPath(`${prefabPath}.prefab`)), 'utf8'),
+    ) as Array<Record<string, any>>;
+    const transform = entries.find((entry) => entry.__type__ === 'cc.UITransform');
+    assert.ok(transform, `${prefabPath} 缺 UITransform`);
+    return transform!._contentSize as { width: number; height: number };
+}
+
 /** prefab 根节点（唯一那层 `cc.Node`）的 `_lscale.x`。*/
 function rootScale(prefabPath: string): number {
     const entries = JSON.parse(
@@ -91,14 +101,17 @@ test('② 只落在这两张卡上：30231 两份产物都指向它，pvpCard �
     assert.deepEqual(owners, [68016, 68022], '30231 的使用者必须是磁电菇 + 雷蕉');
 });
 
-test('③ 杰克藕那份也缩 50%：烘焙 0.4 × 0.5 = 屏上 0.2（与上条是两份独立美术）', () => {
-    assert.equal(zcCombatEffectNodeScaleOf(JIEKEOU_IMPACT), REQUIRED_SCALE, 'facade 倍率');
-    assert.equal(zcEffectNodeScaleOf(JIEKEOU_IMPACT), REQUIRED_SCALE, '目录倍率');
+test('③ 杰克藕那份：贴图已按屏上尺寸重烘（62×80），prefab 与目录倍率都归 1', () => {
+    //  2026-11-26：旧值是 prefab 0.4 × 目录 0.5 = 屏上 0.2。现在两层倍率都去掉，
+    //  尺寸落在贴图上（458×495 裁掉空白 → 308×401 内容 → 重烘 62×80）。
+    assert.equal(zcCombatEffectNodeScaleOf(JIEKEOU_IMPACT), 1, '宿主不再挂倍率');
+    assert.equal(zcEffectNodeScaleOf(JIEKEOU_IMPACT), 1, '目录不再挂倍率');
     const baked = rootScale(JIEKEOU_IMPACT);
-    assert.ok(Math.abs(baked - 0.4) < 1e-6, `美术烘焙应仍是 0.4，实际 ${baked}`);
-    assert.ok(Math.abs(baked * REQUIRED_SCALE - 0.2) < 1e-6, '屏上终值应是 0.2');
-    //  两条倍率都是 0.5，但**烘焙基准不同** ⇒ 屏上不是一个尺寸。别把两条合并成一个键。
-    assert.ok(Math.abs(rootScale(IMPACT) - baked) > 1e-6, '两份美术的烘焙值本来就不同');
+    assert.ok(Math.abs(baked - 1) < 1e-6, `美术烘焙应归 1，实际 ${baked}`);
+    const size = rootContentSize(JIEKEOU_IMPACT);
+    assert.deepEqual([size.width, size.height], [62, 80], '画布 = 帧图 = 屏上尺寸');
+    //  别把两条合并成一个键：它们是两份独立美术（雷弹命中仍是 0.7 × 0.5 = 0.35）。
+    assert.ok(Math.abs(rootScale(IMPACT) - baked) > 1e-6, '两份美术的烘焙值不同');
 });
 
 test('④ 杰克藕那条只挂在 30717 上，且 pvpCard 里只有 68008 用它', () => {

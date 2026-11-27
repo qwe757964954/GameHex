@@ -10,11 +10,12 @@ import type { ZCFloatText, ZCSnapshot, ZCUnitState } from '../assets/script/app/
 import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import {
-    ZCAttackResolutionSystem, type IZCAttackResolutionContext, type IZCChargeDashOptions,
-} from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+    ZCAttackResolutionSystem, type IZCAttackResolutionContext, type IZCChargeDashOptions } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 import { zcCombatEffectAnchorOf } from '../assets/script/app/zcds/view/ZCCombatEffectPlacement';
+import { zcCombatEffectFacingDegrees, zcCombatEffectFlightOf } from '../assets/script/app/zcds/model/ZCCombatEffectFlight';
 import { zcCombatEffectNodeScaleOf } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../assets/script/core/hex/HexGridLayout';
 import {
@@ -23,7 +24,7 @@ import {
     dashGuardStatusId, dashVulnerableStatusId,
     zcChargeEffectPaths, zcIsChargeBehavior,
 } from '../assets/script/app/zcds/model/ZCDashFx';
-import { singleStrikeStunStatusId } from '../assets/script/app/zcds/model/ZCSingleStrikeFx';
+import { singleStrikeStunStatusId } from '../assets/script/app/zcds/model/ZCEffectTuning';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -44,8 +45,9 @@ import { assetPath } from './helpers/asset-paths';
  *     「打不出去不消费 CD」刻意相反。
  *  3. **`damageTakenPct` 一个字段两个方向**：102703 的破甲是正值（受伤提高），
  *     102303 的自减伤是负值（受伤降低）。写反一处就是「自保变成自残」，且不报错。
- *  4. **`轻骑兵_冲锋` 的锚点必须是 `midpoint`**：视图没有「沿路径平移」这条通道，
- *     只写 `from`（起冲点）会变成「原地挥一下然后瞬移」。
+ *  4. **冲锋的表现**：第 15 批时是「`轻骑兵_冲锋` 残影贴在线段中点」（视图没有沿路径平移的通道）；
+ *     2026-11-25 第 49 批换成【战士通用剑气】后改走 `flight` 通道 —— 位置按 `from → to` 逐帧
+ *     插值、转角 = 弹道 + 180°，**不再**用 `midpoint` 锚点（详见 `ZCDashFx` 里那段注释）。
  */
 
 const TABLE_NAMES = [
@@ -143,7 +145,7 @@ test('101204 菌盾冲锋：三档倍数/护盾/冷却与设计案一致', () =>
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(rows.length, 3);
     assert.deepEqual(rows.map((row) => Number(row.modifierId)), [94012041, 94012042, 94012043]);
-    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36], '技能 4 = 12/24/36');
+    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [7, 24, 36], '技能 4 = 7/24/36');
     for (const [index, row] of rows.entries()) {
         assert.equal(row.unitId, '68012');
         assert.equal(row.pvpSkillId, 30271, '键 = 本卡普攻 skillId');
@@ -164,7 +166,7 @@ test('102303 冲锋 / 102703 尖刺冲锋：三档与设计案一致，III 级�
         const rows = readRows('pvpSkillPlan').filter((row) => Number(row.skillChainId) === chain)
             .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
         assert.equal(rows.length, 3, `${chain} 应有三档`);
-        assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [9, 18, 27], '技能 3 = 9/18/27');
+        assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [5, 18, 27], '技能 3 = 5/18/27');
         for (const [index, row] of rows.entries()) {
             assert.equal(row.unitId, unitId);
             assert.equal(row.pvpSkillId, pvpSkillId);
@@ -288,7 +290,7 @@ test('charge_shield / legacy_dash 必须双登记 + 两个 prefab 都进加载�
         },
     );
     assert.ok(withDash.effectPaths.includes(ZC_DASH_EFFECT_PREFAB_PATH),
-        '轻骑兵_冲锋此前没有技能在用 ⇒ 漏收就是「照常结算、屏幕上不播」');
+        '战士通用剑气不在任何别的车道里 ⇒ 漏收就是「照常结算、屏幕上不播」');
     assert.ok(withDash.effectPaths.includes(ZC_DASH_GUARD_PREFAB_PATH), '102303 III 级的护盾表现也要进清单');
     const without = buildZCVisualResourcePlan(
         [unit('68001')], { skillPlans: [plan('68001', 'random_strike')], textOverrides: new Map() });
@@ -305,15 +307,24 @@ test('chargeReadyAt / dashReadyAt 必须登记进快照白名单（不还原会�
     assert.match(types, /dashReadyAt\?: number/);
 });
 
-test('表现：残影锚点是线段中点、两个路径倍率都在表里', () => {
-    //  视图没有「沿路径平移」这条通道（`ZCCombatEffectView` 只按锚点定位一次），
-    //  所以冲锋只能画在路的中间；只写 `from` 的话锚点退化成起点。
-    assert.equal(zcCombatEffectAnchorOf(ZC_DASH_EFFECT_PREFAB_PATH), 'midpoint');
+test('表现：剑气沿弹道飞（第 49 批起不再用中点锚点）、朝向 = 弹道 + 180°', () => {
+    //  第 49 批：残影换成【战士通用剑气】，走 `flight` 通道 —— 视图按 `from → to` 插值并转角。
+    //  `anchor` 对这一条**已经不生效**（飞行分支在锚点逻辑之前就 return），所以目录里回落到默认值；
+    //  这里断言它是默认值，就是防止有人把旧的 `midpoint` 又抄回来（会让人以为它还在贴中点）。
+    assert.equal(zcCombatEffectAnchorOf(ZC_DASH_EFFECT_PREFAB_PATH), 'caster',
+        '飞行分支不吃锚点；若这里变成 midpoint，说明目录又被写回残影口径');
     assert.equal(zcCombatEffectAnchorOf(ZC_DASH_GUARD_PREFAB_PATH), 'caster', '护盾贴在落点的自己身上');
-    //  300×140 的武将技画布缩到行程的约 2 倍；100×100 的护盾按设计原话缩 55%。
-    assert.ok(Math.abs(zcCombatEffectNodeScaleOf(ZC_DASH_EFFECT_PREFAB_PATH) - 0.4) < 1e-9);
+    //  朝向：美术凸面朝 −X ⇒ 偏移 180°。四个方向的期望角 = 弹道角 + 180（顺时针回绕到 [0,360)）。
+    const flight = zcCombatEffectFlightOf(ZC_DASH_EFFECT_PREFAB_PATH);
+    assert.ok(flight, '战士通用剑气必须登记 flight，否则它「只转不飞」');
+    assert.equal(flight!.facingOffsetDegrees, 180, '美术凸面朝 -X（示例图红箭头 = 飞行方向）');
+    for (const heading of [0, 90, 180, -90]) {
+        assert.equal(zcCombatEffectFacingDegrees(heading, flight), heading + 180, `弹道 ${heading}° 的转角`);
+    }
+    //  尺寸烘焙在 prefab（子节点 `_lscale = 0.55`），目录不再叠倍率；护盾仍是设计原话的 55%。
+    assert.equal(zcCombatEffectNodeScaleOf(ZC_DASH_EFFECT_PREFAB_PATH), 1, '尺寸只认 prefab，别在目录再乘一次');
     assert.ok(Math.abs(zcCombatEffectNodeScaleOf(ZC_DASH_GUARD_PREFAB_PATH) - 0.55) < 1e-9);
-    //  两条 prefab 的时长口径不同：残影是**静态单帧**（时长由设计给的 0.3s 定），
+    //  两条 prefab 的时长口径不同：剑气是**单帧**（时长由设计给的 0.3s 定），
     //  护盾是**17 帧序列**（时长必须按帧数走完，截短会播一半就消失）。
     assert.ok(Math.abs(ZC_DASH_EFFECT_SECONDS - 0.3) < 1e-9);
     assert.ok(Math.abs(ZC_DASH_GUARD_SECONDS - 17 / 12) < 1e-9);
@@ -414,7 +425,7 @@ test('冲锋按「点到线段距离」收人：路上三个都吃，线外的�
     const state = makeState(units);
     const applied: Array<{ unitId: string; id: string }> = [];
     const damaged: number[] = [];
-    const hits = ZCAttackResolutionSystem.castChargeDash(
+    const hits = ZCSkillResolutionSystem.castChargeDash(
         state, caster, dashContext(units, applied, damaged), options());
 
     assert.equal(hits, 3, '撞到的人数');
@@ -430,7 +441,7 @@ test('命中 0 人也照样给护盾 / 挂减伤（人已经冲出去了）', ()
     const state = makeState(units);
     const applied: Array<{ unitId: string; id: string }> = [];
     const guardId = dashGuardStatusId(25, 3);
-    const hits = ZCAttackResolutionSystem.castChargeDash(state, caster, dashContext(units, applied),
+    const hits = ZCSkillResolutionSystem.castChargeDash(state, caster, dashContext(units, applied),
         options({ shieldRatio: 0.12, shieldSeconds: 3, guardStatusId: guardId, guardSeconds: 3 }));
 
     assert.equal(hits, 0);
@@ -461,7 +472,7 @@ test('伤害取一份：路上所有人吃同一个数，暴击按最近那个�
             values.push(damage);
             return (raw as unknown as (t: ZCUnitState, d: number, s?: unknown) => ZCFloatText)(target, damage, source);
         };
-    ZCAttackResolutionSystem.castChargeDash(state, caster, context, options());
+    ZCSkillResolutionSystem.castChargeDash(state, caster, context, options());
     assert.equal(values.length, 2);
     assert.equal(new Set(values).size, 1, 'AoE 一律单值，逐目标各算会让同一发里飘出「这个暴击、那个不暴击」');
 });
@@ -540,7 +551,7 @@ test('菌盾冲锋：首次只挂 CD、到点才冲；朝锁定目标、1 格；
     const fx = tester.state.combatEvents.filter((event) => event.effectPrefabPath === ZC_DASH_EFFECT_PREFAB_PATH);
     assert.equal(fx.length, 1);
     assert.equal(fx[0].fromX, 0, 'from = 起冲点（挪人之前取）');
-    assert.ok(Math.abs(fx[0].toX - CELL_WORLD) < 1e-9, 'to = 落点（锚点取中点才画在路中间）');
+    assert.ok(Math.abs(fx[0].toX - CELL_WORLD) < 1e-9, 'to = 落点（剑气按 from→to 插值飞过去）');
     assert.ok(Math.abs(Number(fx[0].durationSeconds) - ZC_DASH_EFFECT_SECONDS) < 1e-9);
     //  自护盾交给攻击系统（`castChargeDash`）：参数按档位传下去。
     assert.equal(tester.dashOptions.length, 1);
@@ -613,7 +624,7 @@ test('冲锋 102303 III 级：落地注册减伤（负值）+ 补一条刀盾兵
     (tester.context as unknown as Record<string, unknown>).castChargeDash =
         (unit: ZCUnitState, opts: IZCChargeDashOptions) => {
             forwarded = opts;
-            return ZCAttackResolutionSystem.castChargeDash(
+            return ZCSkillResolutionSystem.castChargeDash(
                 tester.state, unit, dashContext(tester.state.units, tester.applied), opts);
         };
     tester.state.units.push(makeUnit(9, ZCOwner.Enemy, 10, 0, '68028'));

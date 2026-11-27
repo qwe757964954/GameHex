@@ -17,9 +17,12 @@ export type GuideTriggerType = 'firstLogin' | 'prevDone';
  * 遮罩形态：
  * · `full` 全屏半透明（点哪都算点对话条）；
  * · `hole` 挖空高亮焦点（孔内交给原控件）；
- * · `none` **无遮罩**（弱引导）：不压暗、不挡点击、不弹气泡文案，只留光圈与手指动画。
+ * · `none` **无遮罩**（弱引导）：不压暗、不挡点击、不弹气泡文案，只留光圈与手指动画；
+ * · `holeThrough` **挖孔穿透**（弱引导）：压暗 + 挖孔 + 光圈 + 手指**全部照旧**（视觉同 `hole`），
+ *   只有孔外那层压暗不再吃点击 —— 玩家能直接点到底下的底栏 / 地块。
+ *   用于 `8-1` 收尾：要让玩家**自己**去点任务入口，点错了也得让他切页，不能把整屏锁死。
  */
-export type GuideMaskType = 'full' | 'hole' | 'none';
+export type GuideMaskType = 'full' | 'hole' | 'none' | 'holeThrough';
 
 /** 要求的玩家操作；空串 = 该步不要求操作（纯展示）。 */
 export type GuideRequireAction = 'click' | 'drag' | '';
@@ -83,7 +86,7 @@ function parseStep(value: unknown): GuideStep | null {
         guideId: toCount(raw.guideId, 1),
         flowName: typeof raw.flowName === 'string' ? raw.flowName : '',
         triggerType: raw.triggerType === 'firstLogin' ? 'firstLogin' : 'prevDone',
-        maskType: raw.maskType === 'none' ? 'none' : raw.maskType === 'hole' ? 'hole' : 'full',
+        maskType: toMaskType(raw.maskType),
         focusNode: typeof raw.focusNode === 'string' ? raw.focusNode : '',
         requireAction: toAction(raw.requireAction),
         dialogId: typeof raw.dialogId === 'string' ? raw.dialogId : '',
@@ -94,6 +97,14 @@ function parseStep(value: unknown): GuideStep | null {
         rewards: parseRewards(raw.rewardJson),
         nextStep: typeof raw.nextStep === 'string' && raw.nextStep ? raw.nextStep : GUIDE_STEP_END,
     };
+}
+
+/**
+ * 遮罩形态解析：表里写错 / 写了新值旧包不认识时一律退回 `full`，
+ * 宁可多压一层也**不能**静默变成「不挡点击」（那会让强制引导被玩家点穿）。
+ */
+function toMaskType(value: unknown): GuideMaskType {
+    return value === 'none' || value === 'hole' || value === 'holeThrough' ? value : 'full';
 }
 
 function toAction(value: unknown): GuideRequireAction {

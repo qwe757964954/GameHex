@@ -1,7 +1,7 @@
 import { EngineMain } from "../../engine/EngineMain";
 
 let tmLogsss: Map<string, Log> = new Map()
-export const LOG_MAIN_NAME = "%c log"
+const LOG_MAIN_NAME = "%c log"
 export class Log {
     public static inst: Log = new Log(LOG_MAIN_NAME);
     public static tmLogsss: Map<string, Log> = tmLogsss

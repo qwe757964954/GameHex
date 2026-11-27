@@ -60,11 +60,6 @@ import {
 
 const { ccclass, property } = _decorator;
 
-/** 页面固定文案（设计稿）。 */
-export const HERO_OBTAIN_TEXTS = {
-    hint: '点击屏幕继续',
-} as const;
-
 /** 设计稿里英雄立绘高 426 —— Spine 归一化的可见高按它算。 */
 const HERO_VISIBLE_HEIGHT = 426;
 

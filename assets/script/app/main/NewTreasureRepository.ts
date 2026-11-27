@@ -1,8 +1,7 @@
 import { RequestMsg } from '../../framework/net/RequestMsg';
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import {
-    ITEM_TABLE,
-    ROLE_PROPERTY_TABLE,
     resBarCellOfRefId,
     resBarIconSpritePath,
     type IItemRefRow,

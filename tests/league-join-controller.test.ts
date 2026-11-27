@@ -2,8 +2,9 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { LeagueJoinController } from '../assets/script/app/league/LeagueJoinController';
-import { LeagueJoinEvent, type ILeagueJoinIntent, type ILeagueJoinView } from '../assets/script/app/league/LeagueJoinEvents';
+import { LeagueJoinEvent, type ILeagueJoinIntent, type LeagueJoinOutput } from '../assets/script/app/league/LeagueJoinEvents';
 import { LeagueTabController } from '../assets/script/app/league/LeagueTabController';
+import { LeagueTabEvent, type LeagueTabOutput } from '../assets/script/app/league/LeagueTabEvents';
 import type { ILeagueRepository } from '../assets/script/app/league/LeagueRepository';
 import type { ILeagueUnionRow, ILeagueUnionView } from '../assets/script/app/league/LeagueTable';
 import {
@@ -73,20 +74,30 @@ function fixture() {
         }),
     } satisfies Pick<ILeagueRepository, 'load' | 'requestList' | 'search' | 'cachedSearch' | 'join'>;
 
-    const controller = new LeagueJoinController(createControllerContext(), {
-        owner,
+    const controller = new LeagueJoinController(createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => cancelled.push(caller),
+        },
+    }), {
         repository,
-        view: { render: rows => views.push([...rows]) },
-        feedback: {
-            tip: text => tips.push(text),
-            notifyJoined: () => joined.push(true),
-        },
-        popups: {
-            openCreate: () => openedCreate.push(true),
-            openUnion: view => openedUnion.push(view),
-        },
-        requests: { removeCaller: caller => cancelled.push(caller) },
     });
+    const outputOwner = {};
+    EventMgr.instance.on(LeagueJoinEvent.Output, (output: LeagueJoinOutput, source: object) => {
+        if (source !== controller) return;
+        switch (output.kind) {
+            case 'render': views.push([...output.rows]); return;
+            case 'tip': tips.push(output.text); return;
+            case 'joined': joined.push(true); return;
+            case 'openCreate': openedCreate.push(true); return;
+            case 'openUnion': openedUnion.push(output.union); return;
+        }
+    }, outputOwner);
+    const originalDispose = controller.dispose.bind(controller);
+    controller.dispose = () => {
+        EventMgr.instance.offTarget(outputOwner);
+        originalDispose();
+    };
     controller.start();
 
     const emit = (intent: ILeagueJoinIntent) => EventMgr.instance.emit(LeagueJoinEvent.Intent, intent);
@@ -234,40 +245,39 @@ test('失败结果同样保留缓存列表并提示失败', async () => {
     }
 });
 
-test('容器控制器重铺 / 关闭时先释放旧的加入页控制器', async () => {
-    const view: ILeagueJoinView = { render() {} };
-    const disposed: object[] = [];
-    let creates = 0;
-    let page: ILeagueJoinView | null = view;
+test('容器控制器按入盟变化输出页面切换事件并过滤重复刷新与销毁后结果', async () => {
+    let joined = false;
+    const pages: boolean[] = [];
+    const outputOwner = {};
     const controller = new LeagueTabController(createControllerContext(), {
-        owner: {},
-        failed: error => { throw error; },
-        repository: { load: async () => ({ joined: false }) },
-        view: { showPage: () => page },
-        join: {
-            create: () => {
-                creates += 1;
-                return {
-                    start() {},
-                    dispose() { disposed.push(view); },
-                } as unknown as LeagueJoinController;
-            },
-        },
+        repository: { load: async () => ({ joined }) },
     });
-    controller.start();
-    await flush();
-    assert.equal(creates, 1, '铺出加入页后创建一个 Join 控制器');
+    EventMgr.instance.on(LeagueTabEvent.Output, (output: LeagueTabOutput, source: object) => {
+        if (source !== controller) return;
+        if (output.kind === 'failed') throw output.error;
+        pages.push(output.joined);
+    }, outputOwner);
+    try {
+        controller.start();
+        await flush();
+        assert.deepEqual(pages, [false], '首屏发射入盟状态');
 
-    await controller.refresh(true);
-    assert.equal(disposed.length, 1, '重铺前先释放旧控制器');
-    assert.equal(creates, 2, '重铺后按新页创建新控制器');
+        await controller.refresh(false);
+        assert.deepEqual(pages, [false], '未入盟状态未变化时跳过重复重铺');
 
-    page = null;
-    await controller.refresh(true);
-    assert.equal(disposed.length, 2, '切到已入盟页时释放加入页控制器');
-    assert.equal(creates, 2, '没有加入页就不创建控制器');
+        await controller.refresh(true);
+        assert.deepEqual(pages, [false, false], '强制刷新重新输出当前页');
 
-    controller.dispose();
-    assert.equal(disposed.length, 2, '已释放过的控制器不重复释放');
+        joined = true;
+        await controller.refresh(false);
+        assert.deepEqual(pages, [false, false, true], '入盟变化时切换到已入盟页');
+
+        controller.dispose();
+        await controller.refresh(true);
+        assert.deepEqual(pages, [false, false, true], '销毁后不再输出切换事件');
+    } finally {
+        EventMgr.instance.offTarget(outputOwner);
+        controller.dispose();
+    }
 });
 

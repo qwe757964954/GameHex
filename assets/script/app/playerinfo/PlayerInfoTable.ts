@@ -25,16 +25,6 @@ import { PLAYER_INFO_TEXTS } from './PlayerInfoTexts';
  */
 const NAME_ILLEGAL_PATTERN = /[^A-Za-z0-9_\-\u4e00-\u9fa5]+/g;
 
-/**
- * 昵称长度上限。
- *
- * ⚠️ **老端没有做长度限制**（`checkText` 只过滤字符），长度由服务端校验兜底。
- * 本工程给 `cc.EditBox._maxLength` 一个上限 —— 不是为了替服务端校验，而是
- * `cc.EditBox` 的 `_maxLength` 默认 20 会允许完全不合法的长度；取 12 与「中文名 12 个字」
- * 的常见口径一致，超长时服务端仍会拒（那时走 `renameFailed` 提示）。
- */
-export const PLAYER_NAME_MAX_LENGTH = 12;
-
 /** 按老端正则过滤昵称输入。空输入 → `''`。 */
 export function sanitizePlayerName(raw: unknown): string {
     if (typeof raw !== 'string' || raw.length === 0) return '';

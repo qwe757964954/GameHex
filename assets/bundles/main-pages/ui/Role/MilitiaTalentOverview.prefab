@@ -2325,14 +2325,14 @@
     "popupLayer": 0,
     "closeOnBlank": true,
     "contentNodes": [],
-    "attrListNode": {
-      "__id__": 54
+    "attrList": {
+      "__id__": 65
     },
-    "descListNode": {
-      "__id__": 80
+    "descList": {
+      "__id__": 91
     },
     "closeButton": {
-      "__id__": 15
+      "__id__": 24
     },
     "_id": ""
   },

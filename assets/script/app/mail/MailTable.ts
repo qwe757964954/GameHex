@@ -23,8 +23,8 @@ export const MAIL_STATE_READ = 1;
 export const MAIL_STATE_TAKEN = 2;
 
 /** `gameConfig` 表里两个键（FGUI 文案的 `{day}` / `{count}` 占位来源）。 */
-export const MAIL_CONFIG_MAX_NUM = 'maxMailNum';
-export const MAIL_CONFIG_VALID_DAYS = 'mailValid';
+const MAIL_CONFIG_MAX_NUM = 'maxMailNum';
+const MAIL_CONFIG_VALID_DAYS = 'mailValid';
 /** 表读不到时的兜底（与 `gameConfig` 现值一致：50 封 / 40 天）。 */
 export const MAIL_MAX_NUM_DEFAULT = 50;
 export const MAIL_VALID_DAYS_DEFAULT = 40;
@@ -360,6 +360,8 @@ export interface IMailRowView {
     readonly state: number;
     /** 右侧状态文本（未读 / 已领取时为空串）。 */
     readonly stateText: string;
+    /** 还可领取（`!take`）—— v2 行内「领取」按钮的显隐依据。 */
+    readonly takeable: boolean;
 }
 
 /**
@@ -388,5 +390,6 @@ export function buildMailRowView(
         timeText: mailTimeText(row.sendTime, nowMs, texts),
         state,
         stateText: state === MAIL_STATE_READ ? texts.readText : '',
+        takeable: !row.take,
     };
 }

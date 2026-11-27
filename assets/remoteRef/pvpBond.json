@@ -1,81 +1,81 @@
 {
 "k":[
+"condition",
+"effect",
+"effectType",
+"effectValue",
 "id",
 "name",
-"condition",
-"threshold",
-"effect",
-"trait",
 "target",
-"effectType",
-"effectValue"
+"threshold",
+"trait"
 ],
 "v":[
 [
+"阵营标签=花果",
+"单位生命 +8%",
+"unitHp",
+0.08,
 "huaguo-2",
 "花果同心",
-"阵营标签=花果",
-2,
-"单位生命 +8%",
-"camp",
 "花果",
-"unitHp",
-0.08
+2,
+"camp"
 ],
 [
+"阵营标签=蘑菇",
+"单位攻击 +8%",
+"unitAttack",
+0.08,
 "mogu-2",
 "蘑菇军团",
-"阵营标签=蘑菇",
-2,
-"单位攻击 +8%",
-"camp",
 "蘑菇",
-"unitAttack",
-0.08
+2,
+"camp"
 ],
 [
+"阵营标签=盆栽",
+"防御塔攻击 +12%",
+"towerAttack",
+0.12,
 "penzai-2",
 "盆栽堡垒",
-"阵营标签=盆栽",
-2,
-"防御塔攻击 +12%",
-"camp",
 "盆栽",
-"towerAttack",
-0.12
+2,
+"camp"
 ],
 [
+"阵营标签=僵尸",
+"产兵间隔倍率 -10%",
+"spawnInterval",
+-0.1,
 "jiangshi-2",
 "僵尸狂潮",
-"阵营标签=僵尸",
-2,
-"产兵间隔倍率 -10%",
-"camp",
 "僵尸",
-"spawnInterval",
-0
+2,
+"camp"
 ],
 [
+"攻击标签=战士",
+"单位移动速度 +8%",
+"moveSpeed",
+0.08,
 "warrior-2",
 "破阵先锋",
-"攻击标签=战士",
-2,
-"单位移动速度 +8%",
-"attack",
 "战士",
-"moveSpeed",
-0.08
+2,
+"attack"
 ],
 [
+"任一相同攻击标签",
+"基础金币收入 +1/秒",
+"income",
+1,
 "attack-3",
 "万箭齐发",
-"任一相同攻击标签",
-3,
-"基础金币收入 +1/秒",
-"attack",
 "any",
-"income",
-1
+3,
+"attack"
 ]
 ],
 "c":1

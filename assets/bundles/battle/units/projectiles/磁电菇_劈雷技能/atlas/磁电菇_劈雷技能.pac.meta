@@ -19,9 +19,9 @@
     "quality": 80,
     "contourBleed": true,
     "paddingBleed": true,
-    "filterUnused": false,
-    "removeTextureInBundle": false,
-    "removeImageInBundle": false,
+    "filterUnused": true,
+    "removeTextureInBundle": true,
+    "removeImageInBundle": true,
     "compressSettings": {
       "useCompressTexture": false,
       "compressType": "default",

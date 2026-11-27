@@ -54,7 +54,7 @@ import {
     RequestMailTakeReward,
 } from './RequestMailMsg';
 
-import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
+import { GAME_CONFIG_TABLE, ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 一次界面刷新要的全部数据。 */
 export interface IMailSnapshot {
@@ -132,7 +132,7 @@ export class RuntimeMailRepository implements IMailRepository {
 
     async load(caller?: object): Promise<IMailSnapshot> {
         const [configRows, itemRows, propRows] = await Promise.all([
-            readTable('gameConfig'),
+            readTable(GAME_CONFIG_TABLE),
             readTable(ITEM_TABLE),
             readTable(ROLE_PROPERTY_TABLE),
         ]);

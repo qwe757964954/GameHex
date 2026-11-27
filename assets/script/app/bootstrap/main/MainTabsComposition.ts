@@ -3,7 +3,7 @@ import { ControllerBase, type IControllerContext } from '../../../framework/cont
 import { VIEW_LIFECYCLE, type IViewLifecycle } from '../../../framework/ui/ViewLifecycle';
 import { MainTabController } from '../../main/MainTabController';
 import { MainTab, MainTabHost } from '../../main/MainTabHost';
-import { MainTabEvent } from '../../main/MainTabEvents';
+import { MainTabEvent, type MainTabOutput } from '../../main/MainTabEvents';
 import { MainPageComposition } from './MainPageComposition';
 import { MainChestRewardCoordinator } from './MainChestRewardCoordinator';
 import { BigMapEntry } from '../../bigmap/application/BigMapEntry';
@@ -30,6 +30,7 @@ export class MainTabsComposition extends ControllerBase {
         this.chestRewards = this.createChestRewards();
         this.listen(VIEW_LIFECYCLE, this.onLifecycle);
         this.listen(MainTabEvent.Warmup, this.onWarmup);
+        this.listen(MainTabEvent.Output, this.onTabOutput);
     }
     private createChestRewards(): MainChestRewardCoordinator | null {
         if (typeof MainChestRewardCoordinator !== 'function') return null;
@@ -38,11 +39,6 @@ export class MainTabsComposition extends ControllerBase {
     private createController(): MainTabController<Prefab> {
         return new MainTabController(this.context, {
             assetType: Prefab,
-            failed: (tab, error) => console.warn(`[MainTabsComposition] 页面加载失败：${tab}`, error),
-            view: {
-                showPage: prefab => this.showPage(prefab),
-                renderNav: tab => this.host.renderNav(tab)
-            },
             world: {
                 openWorld: () => BigMapEntry.shared().open(this.context.configs, { navigation: this.host.navBar, onClose: () => this.tabs.worldClosed() }),
                 closeWorld: () => BigMapEntry.shared().close(),
@@ -59,6 +55,20 @@ export class MainTabsComposition extends ControllerBase {
                 reportClick: tab => { void reportGameViewClick(tab === MainTab.World ? GAME_VIEW_MARK.World : GAME_VIEW_MARK.Other, this.host); }
             },
         });
+    }
+    private onTabOutput(output: MainTabOutput<Prefab>, source: object): void {
+        if (this.isDisposed || source !== this.tabs) return;
+        switch (output.kind) {
+            case 'showPage':
+                this.showPage(output.page);
+                return;
+            case 'renderNav':
+                this.host.renderNav(output.tab);
+                return;
+            case 'failed':
+                console.warn(`[MainTabsComposition] 页面加载失败：${output.tab}`, output.error);
+                return;
+        }
     }
     /** 与页面 prefab 加载重叠；请求与图片复用既有会话缓存，不等待模型或网络才备图。 */
     private prefetchHero(): void {

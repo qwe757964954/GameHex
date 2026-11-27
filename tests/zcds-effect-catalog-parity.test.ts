@@ -54,6 +54,7 @@ interface IMissileBaseline {
     arcOffset: number;
     speed?: number;
     count?: number;
+    warmup?: boolean;
 }
 
 interface IBaseline {
@@ -93,6 +94,58 @@ const POST_MIGRATION_PATHS: Readonly<Record<string, {
 }>> = {
     // 2026-11-23 第 42 批：仙桃行者重击柱。
     'units/projectiles/仙桃行者_重击技能/仙桃行者_重击技能': { anchor: 'target', layer: 'top' },
+    // 2026-11-25 第 45 批：机甲菇 68015「武器绞杀」的扇形挥击。锚点在施法者（`caster`），
+    // 方向靠 `facingDegrees: 0` 转到目标；层置顶才不会被站在扇形里的角色挡住。
+    'units/projectiles/机甲菇_武器绞杀/机甲菇_武器绞杀': { anchor: 'caster', layer: 'top' },
+    // 2026-11-25 第 45 批：技能范围白环（戈壁狂箭 / 冰山陨落 / 篮球火共用）。
+    // 它是画在地上的圈 ⇒ 保持 `ground`。尺寸只走事件级 `effectScale`。
+    'units/projectiles/技能范围_白环/技能范围_白环': { anchor: 'caster', layer: 'ground' },
+    // 2026-11-25 第 46 批：运动霸 68033「天外飞石」砸落。落点是判定圆心，锚点走默认 `caster`
+    // （事件 `from == to`，锚点取哪个都一样）；置顶才读得出「砸在他们头上」。
+    'units/projectiles/运动霸_砸落技能/运动霸_砸落技能': { anchor: 'caster', layer: 'top' },
+    // 2026-11-25 第 47 批：通用治疗光环（Spine `eff_buff_heal`）。锚在被治疗者身上（`area` 原地播）。
+    // 置顶：光环比角色小一圈，压地面层会被站在圈里的角色挡住。
+    'units/projectiles/通用治疗特效/通用治疗特效': { anchor: 'caster', layer: 'top' },
+    // 2026-11-25 第 49 批：战士通用剑气（冲锋三卡共用）。走 `flight` 通道 ⇒ 位置按 from→to
+    // 插值，`anchor` 不参与（回落默认 `caster`，别当成「贴在施法者身上」）；
+    // 层显式 `top`：剑气从角色身前掠过时要压在角色之上（与 melee 的默认层一致）。
+    'units/projectiles/战士通用剑气/战士通用剑气': { anchor: 'caster', layer: 'top' },
+    // 2026-11-25 第 51 批：冰法师通用子弹（急冻瓜 68024 的【急冻光线】弹体 / 【冰山陨落】落地一击）。
+    // 走 `flight` 通道 ⇒ `anchor` 不参与（回落 `caster`，别理解成「贴在施法者身上」）；
+    // 置顶才不会被站在弹道上飞过的角色挡住。
+    'units/projectiles/冰法师通用子弹/冰法师通用子弹': { anchor: 'caster', layer: 'top' },
+    // 同批的命中爆炸：原地一次性播（13 帧 1.083s），同样置顶。
+    'units/projectiles/冰法师通用子弹命中/冰法师通用子弹命中': { anchor: 'caster', layer: 'top' },
+    // 2026-11-26 第 57 批：卡牌常用子弹（七张卡各一颗，统一格式）。
+    // 全部走 `projectile` / `area` 的飞行通道 ⇒ `anchor` 不参与（回落 `caster`，
+    // 别理解成「贴在施法者身上」）；层置顶才不会被站在弹道上的角色挡住。
+    // 🔴 这七条都**不写 nodeScale**（缩放烘在 prefab 的 `body`），所以也不在下面的尺寸基线里。
+    'units/projectiles/卡牌常用子弹物件/豌豆游侠_子弹': { anchor: 'caster', layer: 'top' },
+    'units/projectiles/卡牌常用子弹物件/毒箭菇_子弹': { anchor: 'caster', layer: 'top' },
+    'units/projectiles/卡牌常用子弹物件/杰克藕_子弹': { anchor: 'caster', layer: 'top' },
+    'units/projectiles/卡牌常用子弹物件/大嘴花_子弹': { anchor: 'caster', layer: 'top' },
+    'units/projectiles/卡牌常用子弹物件/仙桃行者_子弹': { anchor: 'caster', layer: 'top' },
+    'units/projectiles/卡牌常用子弹物件/玉林好汉_子弹': { anchor: 'caster', layer: 'top' },
+    'units/projectiles/卡牌常用子弹物件/诅咒菇_子弹': { anchor: 'caster', layer: 'top' },
+};
+
+/**
+ * 迁移**之后**新登记进「导弹表」的条目（与 `POST_MIGRATION_PATHS` 同口径，不进基线文件）。
+ *
+ * 基线快照不再追加，增量只列在这里；④ 会把「基线 + 增量」与目录逐键比。
+ */
+const POST_MIGRATION_MISSILES: Readonly<Record<string, IMissileBaseline>> = {
+    // 2026-11-25 第 51 批：急冻瓜 68024 的「急冻光线」。
+    // 它原来**没有弹体**（`applyRandomStrike` 拿不到 spec 就走「目标原地闪一下 + 立刻结算」），
+    // 本批要求「普通子弹飞行时箭头方向朝向目标」⇒ 真的飞，才登记成 missile。
+    // · `arcOffset: 0` 直线飞；· 不给 `count`（`strikeCount = 3` 要三个目标各一发）；
+    // · `warmup: false` —— 两颗 prefab 合计 ~8MB 只服务一张卡，按阵容收，不进首包预热。
+    '68024': {
+        missilePrefabPath: 'units/projectiles/冰法师通用子弹/冰法师通用子弹',
+        impactPrefabPath: 'units/projectiles/冰法师通用子弹命中/冰法师通用子弹命中',
+        arcOffset: 0,
+        warmup: false,
+    },
 };
 
 const ROOT = join(__dirname, '..');
@@ -165,12 +218,13 @@ test('③ 飞行 / 朝向 / 淡出 / 染色逐键 parity', () => {
 });
 
 test('④ 导弹表与资源路径逐键 parity', () => {
-    assert.deepEqual(ZC_EFFECT_MISSILE_BY_UNIT, BASELINE.missile);
-    for (const [unitId, expected] of Object.entries(BASELINE.missile)) {
+    const expectedMissiles = { ...BASELINE.missile, ...POST_MIGRATION_MISSILES };
+    assert.deepEqual(ZC_EFFECT_MISSILE_BY_UNIT, expectedMissiles);
+    for (const [unitId, expected] of Object.entries(expectedMissiles)) {
         assert.deepEqual(zcEffectMissileOf(unitId), expected, `目录导弹 ${unitId}`);
         assert.deepEqual(zcMissileFxOf(unitId), expected, `facade 导弹 ${unitId}`);
     }
-    const expectedPaths = [...new Set(Object.values(BASELINE.missile).flatMap((fx) => [
+    const expectedPaths = [...new Set(Object.values(expectedMissiles).flatMap((fx) => [
         fx.missilePrefabPath,
         fx.impactPrefabPath,
     ]))].sort();

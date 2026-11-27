@@ -36,7 +36,8 @@ async function loadTreasure(infos: readonly ITreasureInfo[], nowSeconds: number)
     } }).outputText;
     runInNewContext(code, { exports, console, Date: { now: () => nowMs }, require: (name: string) => {
         if (name === './ChestTypes') return chestTypes;
-        if (name === '../common/ResTypes') return { ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty',
+        if (name === '../../core/config/TableNames') return { ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty' };
+        if (name === '../common/ResTypes') return {
             resBarCellOfRefId: () => null, resBarIconSpritePath: () => '' };
         if (name === '../net/RequestGuard') return requestGuard;
         if (name === '../net/Timeouts') return { READ_TIMEOUT_MS_SLOW: 3000, WRITE_TIMEOUT_MS: 5000 };
@@ -522,6 +523,6 @@ test('异步宝箱奖励经全页签协调器接开箱页，不再落普通奖�
     assert.match(coordinator, /this\.listen\(CHEST_REWARDS_EVENT, this\.onTreasureRewards\)/);
     const handler = coordinator.slice(coordinator.indexOf('    private onTreasureRewards('), coordinator.indexOf('    private onChestRevealed('));
     assert.match(handler, /if \(!event\.goods\.length\) return;/);
-    assert.match(handler, /TerritoryChestOpenPage\.open\(\{ userData: \{ goods: event\.goods \} \}\)/);
-    assert.match(handler, /if \(this\.isDisposed\) popup\?\.close\(\)/);
+    assert.match(handler, /TerritoryChestOpenPage\.open\(\{[\s\S]*?scope:\s*this\.scope,[\s\S]*?userData:\s*\{\s*goods:\s*event\.goods\s*\}/);
+    assert.doesNotMatch(handler, /if\s*\(this\.isDisposed\)\s*popup\?\.close/);
 });

@@ -1,3 +1,4 @@
+import { ZCTileSystem } from './ZCTileSystem';
 import { cardTypeToBuilding, findCatalogCard, rarityRank, type ZCDeckCard } from '../ZCCombatCatalog';
 import type { ZCBuildingType, ZCHexState, ZCSnapshot } from '../ZCGameTypes';
 import type { ZCOwner } from '../ZCMapConfig';
@@ -12,6 +13,7 @@ import { ZCEconomySystem } from './ZCEconomySystem';
 import type { IZCModelServices } from './ZCModelServices';
 
 export interface IZCDevelopmentContext extends Pick<IZCModelServices, 'rules' | 'unitCount' | 'spawnUnit'> {
+    readonly ownerBuildingLevels?: ZCMatchConfig['ownerBuildingLevels'];
     goldOf(owner: ZCOwner): number;
     setGold(owner: ZCOwner, amount: number): void;
     /**
@@ -44,23 +46,16 @@ export class ZCDevelopmentSystem {
         const granted = this.grantNeutralResourceReward(state, owner, hex, context);
         if (granted) hex.neutralResourceId = null;
         const tileType = hex.tileType || tileTypeFromLegacyHex(hex);
-        if (granted && isZCNeutralResourceBuilding(granted)
-            && grantNeutralBuilding(state, owner, hex, granted, context)) {
-            hex.developmentResolved = true;
-            hex.state = 'developed';
-            return { card: null, building: hex.building, tier: hex.tier, tileType, pityTriggered: false };
+        ZCTileSystem.finishDevelopment(hex, context.rules.wallMaxHp, config.ownerBuildingLevels?.[owner]?.wall);
+        if (granted) {
+            grantNeutralBuilding(state, owner, hex, granted);
+            return { card: null, building: hex.building === 'none' ? null : hex.building, tier: hex.tier, tileType, pityTriggered: false };
         }
         const result = forcedCard
             ? { card: forcedCard, pityTriggered: false, nextAllRandomNonGoldDraws: state.allRandomNonGoldDraws[owner] }
             : drawPvpTile(deck, tileType, state.allRandomNonGoldDraws[owner], random, config.tiles, config.goldPity,
                 context.drawRulesOf?.(owner) ?? null);
         state.allRandomNonGoldDraws[owner] = result.nextAllRandomNonGoldDraws;
-        hex.developmentResolved = true;
-        hex.wallMaxHp = context.rules.wallMaxHp;
-        hex.wallHp = hex.wallMaxHp;
-        const wallLevel = config.ownerBuildingLevels?.[owner]?.wall;
-        if (wallLevel !== undefined) hex.wallLevel = wallLevel;
-        hex.wallBreachedEdge = null;
         const card = result.card;
         const building = card ? cardTypeToBuilding(card.type) : null;
         if (!card || !building) {
@@ -111,29 +106,36 @@ export class ZCDevelopmentSystem {
     static claimAdjacentNeutralResources(state: ZCSnapshot, map: ZCMatchMap,
         owners: readonly ZCOwner[], context: IZCDevelopmentContext,
         onClaim: (hexId: number, itemId: number) => void): void {
+        const pending: { hex: ZCHexState; claimant: ZCOwner }[] = [];
+        const canClaim = (hex: ZCHexState) => hex.neutralResourceId && !hex.developmentResolved
+            && map.hexes[hex.id]?.playable && !neutralResourceItemOf(hex.neutralResourceId)?.feature;
         for (const hex of state.hexes) {
-            if (neutralResourceItemOf(hex.neutralResourceId)?.feature) continue;
-            if (!hex.neutralResourceId || hex.developmentResolved) continue;
-            const config = map.hexes[hex.id];
-            if (!config?.playable) continue;
-            const claimant = owners.find((owner) => config.neighbors.some((neighborId) => {
-                const neighbor = state.hexes[neighborId];
+            if (!canClaim(hex)) continue;
+            const claimant = owners.find(owner => map.hexes[hex.id].neighbors.some(id => {
+                const neighbor = state.hexes[id];
                 return neighbor?.owner === owner && neighbor.developmentResolved;
             }));
-            if (!claimant) continue;
+            if (claimant) pending.push({ hex, claimant });
+        }
+        // 领取本身也算铺到邻格。先处理直接相邻的点，再沿本次领到的资源继续结算。
+        for (let index = 0; index < pending.length; index++) {
+            const { hex, claimant } = pending[index];
+            if (!hex.neutralResourceId) continue;
             hex.owner = claimant;
-            hex.developmentResolved = true;
-            hex.state = 'developed';
-            hex.wallMaxHp = context.rules.wallMaxHp;
-            hex.wallHp = hex.wallMaxHp;
-            hex.wallBreachedEdge = null;
+            hex.captureOwner = null;
+            hex.captureSeconds = 0;
             const itemId = hex.neutralResourceId;
             const item = this.grantNeutralResourceReward(state, claimant, hex, context);
             // 组合项是「金矿 / 兵营」时，领到即在该格立起那座建筑（属性按领取方养成，未拥有按 1 级）。
-            if (item) grantNeutralBuilding(state, claimant, hex, item, context);
+            if (item) grantNeutralBuilding(state, claimant, hex, item);
+            ZCTileSystem.finishDevelopment(hex, context.rules.wallMaxHp, context.ownerBuildingLevels?.[claimant]?.wall);
             // 清空标记同时充当一次性守卫，并让资源图标消失。
             hex.neutralResourceId = null;
             onClaim(hex.id, itemId);
+            for (const id of map.hexes[hex.id].neighbors) {
+                const neighbor = state.hexes[id];
+                if (canClaim(neighbor)) pending.push({ hex: neighbor, claimant });
+            }
         }
     }
 
@@ -168,14 +170,14 @@ export class ZCDevelopmentSystem {
 
 /**
  * 把「金矿 / 兵营」组合项原地立成建筑。资源点不经过抽卡，品级固定 1 级。
- * @returns 是否真的立起（卡被删或类型对不上时为 false）
 */
 function grantNeutralBuilding(
-    state: ZCSnapshot, owner: ZCOwner, hex: ZCHexState, item: ZCNeutralResourceItem, context: IZCDevelopmentContext,
-): boolean {
+    state: ZCSnapshot, owner: ZCOwner, hex: ZCHexState, item: ZCNeutralResourceItem,
+): void {
+    if (!isZCNeutralResourceBuilding(item)) return;
     const card = item.cardId ? findCatalogCard(item.cardId) : null;
     const building = card ? cardTypeToBuilding(card.type) : null;
-    if (!card || !building) return false;
+    if (!card || !building) return;
     const tier = 1;
     hex.building = building;
     hex.tier = tier;
@@ -184,11 +186,7 @@ function grantNeutralBuilding(
     hex.hp = hex.maxHp;
     hex.constructionTotalSeconds = Math.max(0, card.buildSeconds || 0);
     hex.constructionRemainingSeconds = hex.constructionTotalSeconds;
-    hex.wallMaxHp = context.rules.wallMaxHp;
-    hex.wallHp = hex.wallMaxHp;
-    hex.wallBreachedEdge = null;
     // 产金 / 产兵时钟归零：从领取这一刻开始计时，与抽卡建出来的建筑同口径。
     state.spawnClocks[ZCEconomySystem.cycleKey(hex)] = 0;
     state.builtTypeCounts[owner][card.type] += 1;
-    return true;
 }

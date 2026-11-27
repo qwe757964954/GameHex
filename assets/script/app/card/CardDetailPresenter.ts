@@ -94,7 +94,7 @@ export function buildDetailStats(
  * 技能链按卡表顺序出格，最多 5 格。
  * 每张卡只有 4 个技能，不补空占位；查不到的 id 仍占一格，由视图画成锁定态。
  */
-export const DETAIL_CHAIN_SLOTS = 5;
+const DETAIL_CHAIN_SLOTS = 5;
 
 export function buildDetailChain(
     table: ZCArmySkillTable,

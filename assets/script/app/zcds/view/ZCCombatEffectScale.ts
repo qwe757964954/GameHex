@@ -1,6 +1,7 @@
 /** 受击闪白与技能特效节点缩放计算 */
 
-import { zcEffectNodeScaleOf } from '../model/ZCEffectCatalog';
+import { zcEffectNodeScaleOf, zcEffectWobbleOf } from '../model/ZCEffectCatalog';
+import { zcBulletWobbleScaleXY, type IZCBulletWobble } from '../model/ZCBulletWobble';
 
 export const ZC_HIT_FX_FALLBACK_SCALE = 1;
 
@@ -26,6 +27,26 @@ export function zcCombatEffectNodeScaleOf(
     effectPrefabPath: string | null | undefined,
 ): number {
     return zcEffectNodeScaleOf(effectPrefabPath);
+}
+
+/**
+ * 弹体飞行抖动（2026-11-26 第 57 批）：这条特效登记过抖动才返回配置。
+ *
+ * 视图侧只需要「有没有」——具体倍率走 {@link zcCombatEffectWobbleScaleOf}，
+ * 两者分开是为了让「查找」每帧只做一次 map 命中、「求值」是纯算术。
+ */
+export function zcCombatEffectWobbleOf(
+    effectPrefabPath: string | null | undefined,
+): IZCBulletWobble | null {
+    return zcEffectWobbleOf(effectPrefabPath);
+}
+
+/** 抖动在某一时刻的逐轴倍率；没登记抖动 / 非法入参 ⇒ `[1, 1]`。*/
+export function zcCombatEffectWobbleScaleOf(
+    wobble: IZCBulletWobble | null | undefined,
+    elapsedSeconds: number,
+): readonly [number, number] {
+    return zcBulletWobbleScaleXY(wobble, elapsedSeconds);
 }
 
 /** 入场缩放系数（ease-out quad）。growSeconds 无效时返回满尺寸 1，防止一直停在 growFrom */

@@ -1,0 +1,3168 @@
+{
+  "note": "存量常量违规基线（净额快照，无行号）。重算：node tools/verify/constant-guard.mjs baseline",
+  "version": 2,
+  "files": {
+    "assets/script/app/activity/ActivityJumpTable.ts": 2,
+    "assets/script/app/activity/LayerActivityArt.ts": 4,
+    "assets/script/app/activity/LayerActivityLayout.ts": 27,
+    "assets/script/app/activity/LayerActivityRepository.ts": 1,
+    "assets/script/app/activity/LayerActivityTable.ts": 4,
+    "assets/script/app/activity/LayerActivityTexts.ts": 1,
+    "assets/script/app/ArtPaths.ts": 59,
+    "assets/script/app/battle/BattleResultService.ts": 1,
+    "assets/script/app/battle/BattleResultTable.ts": 1,
+    "assets/script/app/battle/BattleStartModel.ts": 10,
+    "assets/script/app/battle/BattleStartService.ts": 4,
+    "assets/script/app/battle/BattleStatisticsModel.ts": 2,
+    "assets/script/app/battle/PvpInfoService.ts": 1,
+    "assets/script/app/battletoken/BattleTokenArt.ts": 10,
+    "assets/script/app/battletoken/BattleTokenRepository.ts": 3,
+    "assets/script/app/battletoken/BattleTokenTable.ts": 19,
+    "assets/script/app/battletoken/BattleTokenTexts.ts": 1,
+    "assets/script/app/bigmap/application/BigMapArtCatalog.ts": 23,
+    "assets/script/app/bigmap/application/BigMapCampRepository.ts": 1,
+    "assets/script/app/bigmap/application/BigMapController.ts": 3,
+    "assets/script/app/bigmap/application/BigMapEvents.ts": 4,
+    "assets/script/app/bigmap/application/BigMapLayoutLoader.ts": 1,
+    "assets/script/app/bigmap/application/BigMapSaveKeys.ts": 1,
+    "assets/script/app/bigmap/model/BigMapBattle.ts": 4,
+    "assets/script/app/bigmap/model/BigMapCampInfo.ts": 1,
+    "assets/script/app/bigmap/model/BigMapCampMove.ts": 2,
+    "assets/script/app/bigmap/model/BigMapCampRoleInfo.ts": 2,
+    "assets/script/app/bigmap/model/BigMapCitySchedule.ts": 2,
+    "assets/script/app/bigmap/model/BigMapConfig.ts": 1,
+    "assets/script/app/bigmap/model/BigMapLayout.ts": 3,
+    "assets/script/app/bigmap/model/BigMapSaveData.ts": 1,
+    "assets/script/app/bigmap/model/BigMapServerState.ts": 2,
+    "assets/script/app/bigmap/model/BigMapTypes.ts": 2,
+    "assets/script/app/bigmap/model/BigMapWorld.ts": 1,
+    "assets/script/app/bigmap/view/BigMapBasePresentation.ts": 6,
+    "assets/script/app/bigmap/view/BigMapCityPopup.ts": 3,
+    "assets/script/app/bigmap/view/BigMapPresentationText.ts": 1,
+    "assets/script/app/bigmap/view/BigMapSkin.ts": 3,
+    "assets/script/app/bigmap/view/BigMapTheme.ts": 10,
+    "assets/script/app/bigmap/view/BigMapTopHudTypes.ts": 2,
+    "assets/script/app/bigmap/view/BigMapWorldLayout.ts": 12,
+    "assets/script/app/card/CardArtConfig.ts": 2,
+    "assets/script/app/card/CardArtProvider.ts": 1,
+    "assets/script/app/card/CardDetailCritDamage.ts": 1,
+    "assets/script/app/card/CardDetailPresenter.ts": 1,
+    "assets/script/app/card/CardLevelAttr.ts": 1,
+    "assets/script/app/card/CardLineupEvents.ts": 2,
+    "assets/script/app/card/CardLineupTexts.ts": 1,
+    "assets/script/app/card/CardLineupTypes.ts": 2,
+    "assets/script/app/card/CardPopupEvents.ts": 1,
+    "assets/script/app/card/CardRepository.ts": 1,
+    "assets/script/app/card/CardSkillDescMarkup.ts": 2,
+    "assets/script/app/card/CardUpgradedPage.ts": 1,
+    "assets/script/app/card/CardUpgradedTimeline.ts": 17,
+    "assets/script/app/card/FormationService.ts": 3,
+    "assets/script/app/card/HeroObtainData.ts": 1,
+    "assets/script/app/card/LineupSnapshot.ts": 3,
+    "assets/script/app/card/model/HeroObtainLayout.ts": 2,
+    "assets/script/app/card/model/UnitGrowthModifier.ts": 2,
+    "assets/script/app/card/view/HeroObtainPage.ts": 1,
+    "assets/script/app/celebration/CelebrationArt.ts": 16,
+    "assets/script/app/celebration/CelebrationRepository.ts": 2,
+    "assets/script/app/celebration/CelebrationTable.ts": 2,
+    "assets/script/app/celebration/CelebrationTexts.ts": 1,
+    "assets/script/app/celebration/OSArtStrip.ts": 2,
+    "assets/script/app/celebration/OSRankPage.ts": 2,
+    "assets/script/app/celebration/OSRankRankDetailPage.ts": 1,
+    "assets/script/app/chat/ChatArt.ts": 32,
+    "assets/script/app/chat/ChatRepository.ts": 3,
+    "assets/script/app/chat/ChatTable.ts": 5,
+    "assets/script/app/chat/ChatTexts.ts": 2,
+    "assets/script/app/common/GemReward.ts": 3,
+    "assets/script/app/common/MapMarkerBadge.ts": 11,
+    "assets/script/app/common/QualityFrameArt.ts": 3,
+    "assets/script/app/common/RedDotArt.ts": 6,
+    "assets/script/app/common/RedDotState.ts": 5,
+    "assets/script/app/common/ResTypes.ts": 8,
+    "assets/script/app/common/RewardIcon.ts": 2,
+    "assets/script/app/common/RewardItemEvents.ts": 2,
+    "assets/script/app/common/UiUpgradeFxTable.ts": 3,
+    "assets/script/app/firstRecharge/FirstRechargeRepository.ts": 1,
+    "assets/script/app/firstRecharge/FirstRechargeTable.ts": 2,
+    "assets/script/app/firstRecharge/FirstRechargeTexts.ts": 1,
+    "assets/script/app/firstRecharge/FirstRechargeTrigger.ts": 3,
+    "assets/script/app/friend/FriendArt.ts": 34,
+    "assets/script/app/friend/FriendRepository.ts": 2,
+    "assets/script/app/friend/FriendTable.ts": 4,
+    "assets/script/app/friend/FriendTexts.ts": 47,
+    "assets/script/app/gift/GiftArt.ts": 4,
+    "assets/script/app/gift/GiftRepository.ts": 1,
+    "assets/script/app/gift/GiftTable.ts": 8,
+    "assets/script/app/gift/GiftTexts.ts": 2,
+    "assets/script/app/gift/RechargeActivityRepository.ts": 1,
+    "assets/script/app/gift/RechargeActivityTable.ts": 2,
+    "assets/script/app/gift/RechargeDailyRepository.ts": 1,
+    "assets/script/app/gift/RechargeDailyTable.ts": 1,
+    "assets/script/app/guide/application/GuideEvents.ts": 3,
+    "assets/script/app/guide/application/GuideGateway.ts": 1,
+    "assets/script/app/guide/application/GuideLoader.ts": 2,
+    "assets/script/app/guide/GuideTexts.ts": 1,
+    "assets/script/app/guide/model/GuideDialogConfig.ts": 1,
+    "assets/script/app/guide/model/GuidePresentation.ts": 1,
+    "assets/script/app/guide/model/GuideSaveStore.ts": 2,
+    "assets/script/app/guide/model/GuideStepConfig.ts": 1,
+    "assets/script/app/guide/model/GuideSyncOutbox.ts": 1,
+    "assets/script/app/hang/HangArt.ts": 17,
+    "assets/script/app/hang/HangEntryButton.ts": 2,
+    "assets/script/app/hang/HangPage.ts": 1,
+    "assets/script/app/hang/HangRepository.ts": 5,
+    "assets/script/app/hang/HangTable.ts": 17,
+    "assets/script/app/hang/HangTexts.ts": 1,
+    "assets/script/app/HeadArtModel.ts": 2,
+    "assets/script/app/itemdetail/ItemDetailArt.ts": 6,
+    "assets/script/app/itemdetail/ItemDetailArtLoader.ts": 1,
+    "assets/script/app/itemdetail/ItemDetailRepository.ts": 1,
+    "assets/script/app/itemdetail/ItemDetailTable.ts": 6,
+    "assets/script/app/itemdetail/ItemDetailTexts.ts": 1,
+    "assets/script/app/itemdetail/ItemInfoTable.ts": 5,
+    "assets/script/app/league/LeagueAd.ts": 1,
+    "assets/script/app/league/LeagueArt.ts": 161,
+    "assets/script/app/league/LeagueCreateEvents.ts": 1,
+    "assets/script/app/league/LeagueDiscountPage.ts": 1,
+    "assets/script/app/league/LeagueDonateEvents.ts": 1,
+    "assets/script/app/league/LeagueEditEvents.ts": 1,
+    "assets/script/app/league/LeagueJoinEvents.ts": 1,
+    "assets/script/app/league/LeagueNorthTab.ts": 1,
+    "assets/script/app/league/LeagueRepository.ts": 3,
+    "assets/script/app/league/LeagueRewardEvents.ts": 1,
+    "assets/script/app/league/LeagueTabEvents.ts": 1,
+    "assets/script/app/league/LeagueTable.ts": 36,
+    "assets/script/app/league/LeagueTaskRow.ts": 1,
+    "assets/script/app/league/LeagueTexts.ts": 124,
+    "assets/script/app/league/RequestLeagueMsg.ts": 3,
+    "assets/script/app/limitTimeAct/LimitTimeActRepository.ts": 1,
+    "assets/script/app/limitTimeAct/LimitTimeActTable.ts": 1,
+    "assets/script/app/limitTimeAct/LimitTimeActTexts.ts": 1,
+    "assets/script/app/limitTimeAct/LimitTimeActTypes.ts": 3,
+    "assets/script/app/loading/LaunchProgressUI.ts": 1,
+    "assets/script/app/loading/PostLoginContract.ts": 1,
+    "assets/script/app/loading/PostLoginEvents.ts": 1,
+    "assets/script/app/login/LoginEvents.ts": 1,
+    "assets/script/app/login/LoginProtocol.ts": 3,
+    "assets/script/app/mail/MailArt.ts": 10,
+    "assets/script/app/mail/MailRepository.ts": 3,
+    "assets/script/app/mail/MailTable.ts": 14,
+    "assets/script/app/mail/MailTexts.ts": 27,
+    "assets/script/app/main/ChestDropFlight.ts": 10,
+    "assets/script/app/main/ChestEntryGate.ts": 3,
+    "assets/script/app/main/ChestEvents.ts": 1,
+    "assets/script/app/main/ChestTypes.ts": 6,
+    "assets/script/app/main/GameViewClickService.ts": 2,
+    "assets/script/app/main/HeroFragmentBadge.ts": 1,
+    "assets/script/app/main/MainEntranceTypes.ts": 3,
+    "assets/script/app/main/MainEntranceVisible.ts": 1,
+    "assets/script/app/main/MainHudMotion.ts": 1,
+    "assets/script/app/main/MainLoadingEvents.ts": 1,
+    "assets/script/app/main/MainResBarFeedback.ts": 20,
+    "assets/script/app/main/MainResBarTypes.ts": 1,
+    "assets/script/app/main/MainTabEvents.ts": 1,
+    "assets/script/app/main/MainTabItems.ts": 1,
+    "assets/script/app/main/QuickFindGate.ts": 1,
+    "assets/script/app/maintask/MainTaskArt.ts": 3,
+    "assets/script/app/maintask/MainTaskRepository.ts": 1,
+    "assets/script/app/maintask/MainTaskTable.ts": 3,
+    "assets/script/app/maintask/MainTaskTexts.ts": 2,
+    "assets/script/app/matching/MatchingResourcePlan.ts": 1,
+    "assets/script/app/matching/MatchPool.ts": 1,
+    "assets/script/app/matching/MatchReveal.ts": 5,
+    "assets/script/app/matching/MatchSlots.ts": 2,
+    "assets/script/app/matching/MatchTypes.ts": 3,
+    "assets/script/app/monthcard/MonthCardGiftArt.ts": 3,
+    "assets/script/app/monthcard/MonthCardGiftLayout.ts": 19,
+    "assets/script/app/monthcard/MonthCardGiftRepository.ts": 1,
+    "assets/script/app/monthcard/MonthCardGiftTable.ts": 10,
+    "assets/script/app/monthcard/MonthCardGiftTexts.ts": 1,
+    "assets/script/app/net/Timeouts.ts": 4,
+    "assets/script/app/playerinfo/PlayerInfoArt.ts": 4,
+    "assets/script/app/playerinfo/PlayerInfoRepository.ts": 1,
+    "assets/script/app/playerinfo/PlayerInfoTable.ts": 4,
+    "assets/script/app/playerinfo/PlayerInfoTexts.ts": 1,
+    "assets/script/app/rd/RdServerVar.ts": 1,
+    "assets/script/app/rd/RdTypes.ts": 7,
+    "assets/script/app/rd/RdVars.ts": 1,
+    "assets/script/app/ResConst.ts": 8,
+    "assets/script/app/role/EquipDecomposeTable.ts": 2,
+    "assets/script/app/role/MilitiaRepository.ts": 1,
+    "assets/script/app/role/MilitiaTypes.ts": 2,
+    "assets/script/app/role/RoleArt.ts": 7,
+    "assets/script/app/role/RoleArtLoader.ts": 1,
+    "assets/script/app/role/RoleComposeView.ts": 1,
+    "assets/script/app/role/RoleEquipRedDotTable.ts": 2,
+    "assets/script/app/role/RoleEvents.ts": 1,
+    "assets/script/app/role/RolePowerTable.ts": 3,
+    "assets/script/app/role/RoleRepository.ts": 1,
+    "assets/script/app/role/RoleTable.ts": 5,
+    "assets/script/app/role/RoleTexts.ts": 2,
+    "assets/script/app/role/RoleTypes.ts": 4,
+    "assets/script/app/sevenDay/SevenDayArt.ts": 1,
+    "assets/script/app/sevenDay/SevenDayRepository.ts": 1,
+    "assets/script/app/sevenDay/SevenDayTable.ts": 7,
+    "assets/script/app/sevenDay/SevenDayTexts.ts": 1,
+    "assets/script/app/showReward/ShowRewardArt.ts": 4,
+    "assets/script/app/showReward/ShowRewardTable.ts": 4,
+    "assets/script/app/showReward/ShowRewardTexts.ts": 2,
+    "assets/script/app/store/StoreAd.ts": 3,
+    "assets/script/app/store/StoreCostTable.ts": 1,
+    "assets/script/app/store/StoreEvents.ts": 1,
+    "assets/script/app/store/StoreRepository.ts": 4,
+    "assets/script/app/store/StoreShopTable.ts": 7,
+    "assets/script/app/store/StoreTable.ts": 26,
+    "assets/script/app/store/StoreTexts.ts": 3,
+    "assets/script/app/territory/application/TerritoryEvents.ts": 3,
+    "assets/script/app/territory/application/TerritoryModel.ts": 1,
+    "assets/script/app/territory/application/TerritoryTexts.ts": 11,
+    "assets/script/app/territory/application/TerritoryViewState.ts": 1,
+    "assets/script/app/territory/model/ChapterSelectRows.ts": 1,
+    "assets/script/app/territory/model/TerritoryBattleApproach.ts": 9,
+    "assets/script/app/territory/model/TerritoryBattleIntro.ts": 25,
+    "assets/script/app/territory/model/TerritoryBattleStatus.ts": 1,
+    "assets/script/app/territory/model/TerritoryCampaignConfig.ts": 3,
+    "assets/script/app/territory/model/TerritoryCellBitSet.ts": 2,
+    "assets/script/app/territory/model/TerritoryChapterSwitch.ts": 6,
+    "assets/script/app/territory/model/TerritoryChestAnimation.ts": 17,
+    "assets/script/app/territory/model/TerritoryChestBubble.ts": 11,
+    "assets/script/app/territory/model/TerritoryChestHint.ts": 4,
+    "assets/script/app/territory/model/TerritoryChestOpenLayout.ts": 5,
+    "assets/script/app/territory/model/TerritoryChestTier.ts": 5,
+    "assets/script/app/territory/model/TerritoryCloud.ts": 28,
+    "assets/script/app/territory/model/TerritoryConditionBadge.ts": 3,
+    "assets/script/app/territory/model/TerritoryHeroReward.ts": 9,
+    "assets/script/app/territory/model/TerritoryHexRecolor.ts": 8,
+    "assets/script/app/territory/model/TerritoryHexSpawn.ts": 14,
+    "assets/script/app/territory/model/TerritoryIdleReward.ts": 4,
+    "assets/script/app/territory/model/TerritoryLevelBubble.ts": 21,
+    "assets/script/app/territory/model/TerritoryMapConfig.ts": 5,
+    "assets/script/app/territory/model/TerritoryMapLayout.ts": 8,
+    "assets/script/app/territory/model/TerritoryMonsterBoxFx.ts": 1,
+    "assets/script/app/territory/model/TerritoryMonsterBoxRoll.ts": 1,
+    "assets/script/app/territory/model/TerritoryMonsterBoxSpec.ts": 4,
+    "assets/script/app/territory/model/TerritoryMonsterPatrol.ts": 5,
+    "assets/script/app/territory/model/TerritoryPreviewCinema.ts": 1,
+    "assets/script/app/territory/model/TerritoryRequestStatus.ts": 1,
+    "assets/script/app/territory/model/TerritoryResourceGain.ts": 33,
+    "assets/script/app/territory/model/TerritorySilverChestOpen.ts": 2,
+    "assets/script/app/territory/model/TerritoryTapFeedback.ts": 9,
+    "assets/script/app/territory/model/TerritoryUnlockTransition.ts": 3,
+    "assets/script/app/territory/view/TerritoryChestOpenArt.ts": 4,
+    "assets/script/app/territory/view/TerritoryCloudView.ts": 10,
+    "assets/script/app/territory/view/TerritoryGainBurst.ts": 2,
+    "assets/script/app/territory/view/TerritoryHexFlip.ts": 1,
+    "assets/script/app/territory/view/TerritoryHexRecolor.ts": 2,
+    "assets/script/app/territory/view/TerritoryMapView.ts": 3,
+    "assets/script/app/territory/view/TerritoryStationView.ts": 7,
+    "assets/script/app/territory/view/TerritoryTheme.ts": 2,
+    "assets/script/app/zcds/application/ZCBattleController.ts": 1,
+    "assets/script/app/zcds/application/ZCBattleEvents.ts": 1,
+    "assets/script/app/zcds/application/ZCGameEntry.ts": 1,
+    "assets/script/app/zcds/application/ZCRuntimePrecompiler.ts": 1,
+    "assets/script/app/zcds/model/systems/ZCAttackResolutionSystem.ts": 1,
+    "assets/script/app/zcds/model/systems/ZCCombatSystem.ts": 1,
+    "assets/script/app/zcds/model/systems/ZCDamageResolutionSystem.ts": 1,
+    "assets/script/app/zcds/model/ZCBattlePresentationQueue.ts": 18,
+    "assets/script/app/zcds/model/ZCBattleStartStyle.ts": 4,
+    "assets/script/app/zcds/model/ZCBlinkCastFx.ts": 3,
+    "assets/script/app/zcds/model/ZCBoltStrikeFx.ts": 4,
+    "assets/script/app/zcds/model/ZCBossWarningStyle.ts": 3,
+    "assets/script/app/zcds/model/ZCBurstFx.ts": 5,
+    "assets/script/app/zcds/model/ZCChainLightningFx.ts": 15,
+    "assets/script/app/zcds/model/ZCCharacterDrawOrder.ts": 3,
+    "assets/script/app/zcds/model/ZCCombatCatalog.ts": 9,
+    "assets/script/app/zcds/model/ZCDamageStats.ts": 1,
+    "assets/script/app/zcds/model/ZCDashFx.ts": 7,
+    "assets/script/app/zcds/model/ZCEffectCatalog.ts": 9,
+    "assets/script/app/zcds/model/ZCEffectTuning.ts": 4,
+    "assets/script/app/zcds/model/ZCFanSweepFx.ts": 3,
+    "assets/script/app/zcds/model/ZCFireZoneFx.ts": 3,
+    "assets/script/app/zcds/model/ZCGameModel.ts": 7,
+    "assets/script/app/zcds/model/ZCGameResourcePlan.ts": 4,
+    "assets/script/app/zcds/model/ZCGameTypes.ts": 8,
+    "assets/script/app/zcds/model/ZCGuideConfig.ts": 4,
+    "assets/script/app/zcds/model/ZCHexTopGeometry.ts": 2,
+    "assets/script/app/zcds/model/ZCImpactEffectFx.ts": 2,
+    "assets/script/app/zcds/model/ZCMapConfig.ts": 30,
+    "assets/script/app/zcds/model/ZCMapGeometry.ts": 1,
+    "assets/script/app/zcds/model/ZCModifierRuntime.ts": 1,
+    "assets/script/app/zcds/model/ZCMonsterPresentation.ts": 10,
+    "assets/script/app/zcds/model/ZCNeutralBurst.ts": 5,
+    "assets/script/app/zcds/model/ZCNeutralResourceGroup.ts": 3,
+    "assets/script/app/zcds/model/ZCProjectileDropStyle.ts": 13,
+    "assets/script/app/zcds/model/ZCPvpTableParser.ts": 1,
+    "assets/script/app/zcds/model/ZCPvpTileRules.ts": 4,
+    "assets/script/app/zcds/model/ZCQuakeFx.ts": 3,
+    "assets/script/app/zcds/model/ZCRankBoard.ts": 3,
+    "assets/script/app/zcds/model/ZCRayBeamFx.ts": 4,
+    "assets/script/app/zcds/model/ZCRuntimeConfigStore.ts": 1,
+    "assets/script/app/zcds/model/ZCSelfAuraFx.ts": 4,
+    "assets/script/app/zcds/model/ZCSettlementOutcomeStyle.ts": 3,
+    "assets/script/app/zcds/model/ZCSettlementStyle.ts": 1,
+    "assets/script/app/zcds/model/ZCSingleStrikeFx.ts": 3,
+    "assets/script/app/zcds/model/ZCSkillAnnounceStyle.ts": 15,
+    "assets/script/app/zcds/model/ZCSkillRangeRingFx.ts": 2,
+    "assets/script/app/zcds/model/ZCSkillRuntime.ts": 1,
+    "assets/script/app/zcds/model/ZCSpawnSelection.ts": 5,
+    "assets/script/app/zcds/model/ZCSplashShotFx.ts": 4,
+    "assets/script/app/zcds/model/ZCStatSchema.ts": 9,
+    "assets/script/app/zcds/model/ZCStatusEffect.ts": 4,
+    "assets/script/app/zcds/model/ZCStormFx.ts": 2,
+    "assets/script/app/zcds/model/ZCTestKapaiModel.ts": 1,
+    "assets/script/app/zcds/model/ZCTrapFx.ts": 7,
+    "assets/script/app/zcds/model/ZCUISpineBannerStyle.ts": 1,
+    "assets/script/app/zcds/model/ZCUnitCastAction.ts": 2,
+    "assets/script/app/zcds/model/ZCWindBarrageFx.ts": 13,
+    "assets/script/app/zcds/ui/RunAwayQualityArt.ts": 2,
+    "assets/script/app/zcds/view/ZCBeamEffect.ts": 1,
+    "assets/script/app/zcds/view/ZCCardRevealView.ts": 1,
+    "assets/script/app/zcds/view/ZCCombatEffectScale.ts": 1,
+    "assets/script/app/zcds/view/ZCGameHUDView.ts": 7,
+    "assets/script/app/zcds/view/ZCGameKillBannerView.ts": 5,
+    "assets/script/app/zcds/view/ZCGameLegendBannerView.ts": 4,
+    "assets/script/app/zcds/view/ZCGameViewUtil.ts": 48,
+    "assets/script/app/zcds/view/ZCHexView.ts": 1,
+    "assets/script/app/zcds/view/ZCHudBossPanel.ts": 1,
+    "assets/script/app/zcds/view/ZCNeutralRewardFx.ts": 14,
+    "assets/script/app/zcds/view/ZCOutlineLayer.ts": 5,
+    "assets/script/app/zcds/view/ZCSpawnSelectionView.ts": 2,
+    "assets/script/app/zcds/view/ZCTheme.ts": 5,
+    "assets/script/app/zcds/view/ZCUnitView.ts": 2,
+    "assets/script/app/zcds/view/ZCWallGeometry.ts": 1,
+    "assets/script/app/zcds/ZCDCLogSwitch.ts": 7,
+    "assets/script/app/zcds/ZCGame.ts": 1,
+    "assets/script/app/zcds/ZCMissileSkillDiagnostics.ts": 2,
+    "assets/script/app/zcds/ZCSkillCastDiagnostics.ts": 1,
+    "assets/script/core/asset/BundleCatalog.ts": 5,
+    "assets/script/core/config/TableNames.ts": 8,
+    "assets/script/core/hex/HexFlipPresentation.ts": 24,
+    "assets/script/core/hex/HexGridLayout.ts": 12,
+    "assets/script/core/hex/ShakePresentation.ts": 4,
+    "assets/script/core/layout/FguiLayout.ts": 2,
+    "assets/script/core/time/TimeMs.ts": 5,
+    "assets/script/core/update/HotUpdateTypes.ts": 2,
+    "assets/script/framework/audio/AudioMgr.ts": 2,
+    "assets/script/framework/audio/AudioSettingTable.ts": 6,
+    "assets/script/framework/log/Log.ts": 1,
+    "assets/script/framework/tween/TweenEase.ts": 1,
+    "assets/script/framework/ui/PopupBase.ts": 1,
+    "assets/script/framework/ui/PopupDef.ts": 3,
+    "assets/script/framework/ui/UIMotion.ts": 8,
+    "assets/script/framework/ui/UIResources.ts": 1,
+    "assets/script/framework/ui/ViewLifecycle.ts": 1,
+    "assets/script/platform/hotupdate/HotUpdateConfigLoader.ts": 1,
+    "assets/script/platform/hotupdate/NativeHotUpdateHost.ts": 2
+  },
+  "groups": {
+    "C1": {
+      "assets/script/app/ResConst.ts": [
+        "HIT_SFX_PATH",
+        "UI_ROOT_PREFAB_PATH"
+      ],
+      "assets/script/app/card/view/HeroObtainPage.ts": [
+        "HERO_OBTAIN_TEXTS"
+      ],
+      "assets/script/app/chat/ChatArt.ts": [
+        "CHAT_ART_AT_BTN",
+        "CHAT_ART_BQ_BTN",
+        "CHAT_ART_CLOSE_02",
+        "CHAT_SHARED_CLOSE_NAME",
+        "CHAT_SHARED_CLOSE_ROOT",
+        "CHAT_SHARED_HEAD_FRAME_ROOT"
+      ],
+      "assets/script/app/common/RedDotArt.ts": [
+        "RED_DOT_SPINE_SIZE"
+      ],
+      "assets/script/app/friend/FriendArt.ts": [
+        "FRIEND_ART_TAB_OVER",
+        "FRIEND_SHARED_CHECK_NAME",
+        "FRIEND_SHARED_CLOSE_NAME",
+        "FRIEND_SHARED_CLOSE_ROOT",
+        "FRIEND_SHARED_RED_DOT_NAME",
+        "FRIEND_SHARED_RED_DOT_ROOT"
+      ],
+      "assets/script/app/mail/MailArt.ts": [
+        "MAIL_SHARED_BTN_DARK",
+        "MAIL_SHARED_BTN_GOLD",
+        "MAIL_SHARED_PANEL_BG"
+      ],
+      "assets/script/app/mail/MailTexts.ts": [
+        "MAIL_BTN_CLAIM"
+      ],
+      "assets/script/app/main/MainEntranceTypes.ts": [
+        "MAX_VISIBLE_ENTRANCE"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftTable.ts": [
+        "MONTHCARD_RENEW_LABEL",
+        "MONTHCARD_ROLE_PROPERTY_MAX_RES_ID",
+        "MONTHCARD_TIP_DAILY_NOT_TAKEN"
+      ],
+      "assets/script/app/playerinfo/PlayerInfoArt.ts": [
+        "PI_ART_DIR",
+        "PI_ART_NAMES",
+        "PI_ART_SLICED",
+        "PI_ART_TILED"
+      ],
+      "assets/script/app/playerinfo/PlayerInfoTable.ts": [
+        "PLAYER_NAME_MAX_LENGTH"
+      ],
+      "assets/script/app/role/RoleArt.ts": [
+        "RL_ART_TILED"
+      ],
+      "assets/script/app/role/RoleTable.ts": [
+        "ROLE_BAG_TAB_NAMES"
+      ],
+      "assets/script/app/showReward/ShowRewardArt.ts": [
+        "SR_ART_DIR"
+      ],
+      "assets/script/app/store/StoreRepository.ts": [
+        "STORE_READ_TIMEOUT_MS",
+        "STORE_WRITE_TIMEOUT_MS"
+      ],
+      "assets/script/app/territory/model/TerritoryHexSpawn.ts": [
+        "TERRITORY_HEX_SPAWN_VICTORY_FROM_SCALE",
+        "TERRITORY_HEX_SPAWN_VICTORY_OPACITY_PORTION",
+        "TERRITORY_HEX_SPAWN_VICTORY_PEAK_PORTION",
+        "TERRITORY_HEX_SPAWN_VICTORY_PEAK_SCALE",
+        "TERRITORY_HEX_SPAWN_VICTORY_STAGGER_SECONDS"
+      ],
+      "assets/script/app/zcds/model/ZCChainLightningFx.ts": [
+        "ZC_CHAIN_STEP_SECONDS"
+      ],
+      "assets/script/app/zcds/model/ZCRayBeamFx.ts": [
+        "ZC_RAY_BEAM_SPOT_PREFAB_PATH"
+      ],
+      "assets/script/app/zcds/model/ZCWindBarrageFx.ts": [
+        "ZC_BARRAGE_SCREEN_PER_LOGIC",
+        "ZC_WIND_HURRICANE_TOUCH_SECONDS"
+      ],
+      "assets/script/app/zcds/view/ZCGameViewUtil.ts": [
+        "ZC_LAND_TOP_HALF_HEIGHT",
+        "ZC_LAND_TOP_HALF_WIDTH"
+      ],
+      "assets/script/core/hex/HexFlipPresentation.ts": [
+        "HEX_FLIP_GROUND_GLOW_RADIUS"
+      ],
+      "assets/script/framework/ui/PopupDef.ts": [
+        "POPUP_LAYER_NAMES"
+      ]
+    },
+    "C10": {
+      "assets/script/app/mail/MailTable.ts": [
+        "MAIL_STATE_TAKEN"
+      ],
+      "assets/script/app/mail/MailTexts.ts": [
+        "MAIL_STATE_READ",
+        "MAIL_STATE_TAKEN"
+      ]
+    },
+    "C11": {
+      "assets/script/app/HeadArtModel.ts": [
+        "EMPTY_HEAD_ART",
+        "EMPTY_ICON_ART"
+      ],
+      "assets/script/app/activity/LayerActivityLayout.ts": [
+        "ACTIVITY_CANVAS_HEIGHT",
+        "ACTIVITY_CANVAS_WIDTH",
+        "ACTIVITY_LIST_SIZE",
+        "ACTIVITY_MEDAL_POS",
+        "ACTIVITY_MEDAL_SIZE",
+        "ACTIVITY_PREVIEW_ANCHOR_GAP",
+        "ACTIVITY_PREVIEW_CELL_GAP",
+        "ACTIVITY_PREVIEW_CELL_SIZE",
+        "ACTIVITY_PREVIEW_NUM_FONT_SIZE",
+        "ACTIVITY_PREVIEW_NUM_POS",
+        "ACTIVITY_PREVIEW_NUM_SCALE",
+        "ACTIVITY_PREVIEW_PADDING_X",
+        "ACTIVITY_STRIP_HEIGHT",
+        "ACTIVITY_STRIP_POS",
+        "ACTIVITY_STRIP_WIDTH",
+        "ACTIVITY_TITLE_LABEL_SIZE",
+        "ACTIVITY_TITLE_SIZE"
+      ],
+      "assets/script/app/activity/LayerActivityTable.ts": [
+        "ACTIVITY_STATE_FINISH",
+        "ACTIVITY_STATE_REWARDED",
+        "DAY_CHALLENGE_ACT_TYPE"
+      ],
+      "assets/script/app/battle/BattleStartModel.ts": [
+        "ZC_BATTLE_UNIT_TYPE",
+        "ZC_CHAPTER_BATTLE_SUB_CELL"
+      ],
+      "assets/script/app/battle/BattleStartService.ts": [
+        "BATTLE_START_TIMEOUT_MS"
+      ],
+      "assets/script/app/battle/BattleStatisticsModel.ts": [
+        "ZC_BATTLE_STAT_DAMAGE_KEY",
+        "ZC_BATTLE_STAT_EVENT_TYPE"
+      ],
+      "assets/script/app/battletoken/BattleTokenArt.ts": [
+        "BT_ART_SLICED",
+        "BT_PAGE_ART",
+        "BT_SHARED_BACK",
+        "BT_SHARED_BOTTOM_BAR",
+        "BT_SPRITE_SLICED"
+      ],
+      "assets/script/app/battletoken/BattleTokenRepository.ts": [
+        "BT_READ_TIMEOUT_MS",
+        "BT_WRITE_TIMEOUT_MS"
+      ],
+      "assets/script/app/battletoken/BattleTokenTable.ts": [
+        "BT_MAX_LEVEL_EXP",
+        "BT_PLAN_ADVANCED",
+        "BT_PLAN_FREE",
+        "BT_PLAN_NORMAL",
+        "BT_QIPAO_H",
+        "BT_SUPPORTED_TYPES",
+        "BT_TYPE_LOTTERY1",
+        "BT_TYPE_PASS",
+        "BT_TYPE_SIGN_IN"
+      ],
+      "assets/script/app/bigmap/application/BigMapArtCatalog.ts": [
+        "BIGMAP_COMMON_ART_ROOT",
+        "BIGMAP_CONCEPT_ROOT",
+        "BIGMAP_MAIN_CITY_ART_ROOT",
+        "BIGMAP_MAIN_HUD_ART_ROOT",
+        "BIGMAP_STAMINA_ART"
+      ],
+      "assets/script/app/bigmap/application/BigMapController.ts": [
+        "BIGMAP_SEARCH_MONSTER_EMPTY",
+        "BIGMAP_VISIBLE_REFRESH_INTERVAL_MS"
+      ],
+      "assets/script/app/bigmap/model/BigMapCampRoleInfo.ts": [
+        "BIGMAP_ROLE_EVENT_TYPE"
+      ],
+      "assets/script/app/bigmap/model/BigMapCitySchedule.ts": [
+        "DEFAULT_BIGMAP_CITY_SCHEDULE"
+      ],
+      "assets/script/app/bigmap/model/BigMapLayout.ts": [
+        "BIGMAP_EDITOR_TO_VIEW_SCALE"
+      ],
+      "assets/script/app/bigmap/model/BigMapServerState.ts": [
+        "BIGMAP_SLG_TEXT"
+      ],
+      "assets/script/app/bigmap/model/BigMapWorld.ts": [
+        "DEFAULT_BIGMAP_WORLD_SEED"
+      ],
+      "assets/script/app/bigmap/view/BigMapBasePresentation.ts": [
+        "BIGMAP_BASE_FACE_HEIGHT",
+        "BIGMAP_BASE_FACE_WIDTH"
+      ],
+      "assets/script/app/bigmap/view/BigMapSkin.ts": [
+        "BIGMAP_HUD_COLORS"
+      ],
+      "assets/script/app/bigmap/view/BigMapTopHudTypes.ts": [
+        "BIGMAP_TOP_RES_TYPES"
+      ],
+      "assets/script/app/bigmap/view/BigMapWorldLayout.ts": [
+        "BIGMAP_MARKER_BADGE_HEIGHT",
+        "BIGMAP_MARKER_BADGE_WIDTH",
+        "BIGMAP_MARKER_BADGE_Y"
+      ],
+      "assets/script/app/card/CardArtConfig.ts": [
+        "REQUIRED_CARD_ART_KEYS"
+      ],
+      "assets/script/app/card/CardDetailCritDamage.ts": [
+        "LINEUP_CRIT_CHAIN_ID"
+      ],
+      "assets/script/app/card/CardSkillDescMarkup.ts": [
+        "DEFAULT_SKILL_DESC_COLORS",
+        "SKILL_DESC_BOOST_VERBS"
+      ],
+      "assets/script/app/card/CardUpgradedPage.ts": [
+        "FX_DROP_PX"
+      ],
+      "assets/script/app/card/CardUpgradedTimeline.ts": [
+        "ENTRANCE_BLOCK_COUNT",
+        "ENTRANCE_DURATION",
+        "ENTRANCE_TRAVEL",
+        "FX_DURATION",
+        "LEVEL_POP_SCALE",
+        "PROGRESS_GROW",
+        "PROGRESS_HOLD",
+        "PROGRESS_POP_SCALE",
+        "PROGRESS_RESET",
+        "SHINE_DURATION",
+        "SHINE_SWEEP_EASE"
+      ],
+      "assets/script/app/card/FormationService.ts": [
+        "FORMATION_SAVE_TIMEOUT_MS"
+      ],
+      "assets/script/app/card/LineupSnapshot.ts": [
+        "LINEUP_SNAPSHOT_KEY",
+        "LINEUP_SNAPSHOT_MAX_AGE_MS",
+        "LINEUP_SNAPSHOT_VERSION"
+      ],
+      "assets/script/app/card/model/HeroObtainLayout.ts": [
+        "HERO_OBTAIN_RAYS_SPIN_SECONDS",
+        "HERO_OBTAIN_TIMELINE"
+      ],
+      "assets/script/app/celebration/CelebrationArt.ts": [
+        "OS_ART_ALL_KEYS",
+        "OS_ART_NAMES",
+        "OS_ART_SLICED",
+        "OS_ART_TILED"
+      ],
+      "assets/script/app/celebration/CelebrationTable.ts": [
+        "CL_COUNTDOWN_LEAD_MS"
+      ],
+      "assets/script/app/celebration/OSRankPage.ts": [
+        "CL_DEFAULT_TAB"
+      ],
+      "assets/script/app/chat/ChatArt.ts": [
+        "CHAT_ART_BLACK_BOX",
+        "CHAT_ART_BUBBLE_BG",
+        "CHAT_ART_DIRS",
+        "CHAT_ART_INPUT_BG",
+        "CHAT_ART_SLICED",
+        "CHAT_EMOJI_PREFIX",
+        "CHAT_HEAD_ART",
+        "CHAT_SHARED_HEAD_BOX_NAME",
+        "CHAT_SHARED_HEAD_BOX_ROOT",
+        "CHAT_SHARED_POPUP_BG_NAME",
+        "CHAT_SHARED_POPUP_BG_ROOT",
+        "CHAT_SHARED_SEND_NAME",
+        "CHAT_SPRITE_SIMPLE",
+        "CHAT_SPRITE_SLICED",
+        "CHAT_TINT_GRAY",
+        "CHAT_TINT_NORMAL"
+      ],
+      "assets/script/app/chat/ChatRepository.ts": [
+        "CHAT_READ_TIMEOUT_MS",
+        "CHAT_WRITE_TIMEOUT_MS"
+      ],
+      "assets/script/app/chat/ChatTable.ts": [
+        "CHAT_CHANNEL_ORDER"
+      ],
+      "assets/script/app/chat/ChatTexts.ts": [
+        "CHAT_TITLE"
+      ],
+      "assets/script/app/common/RedDotArt.ts": [
+        "RED_DOT_ART_KEYS",
+        "RED_DOT_ART_ROOT"
+      ],
+      "assets/script/app/common/RedDotState.ts": [
+        "RED_DOT_TYPE_NEW",
+        "RED_DOT_TYPE_PAGES"
+      ],
+      "assets/script/app/common/RewardIcon.ts": [
+        "ITEM_ICON_ALIASES"
+      ],
+      "assets/script/app/firstRecharge/FirstRechargeTable.ts": [
+        "FIRST_RECHARGE_ALWAYS_VISIBLE_TIERS",
+        "FIRST_RECHARGE_DAYS"
+      ],
+      "assets/script/app/firstRecharge/FirstRechargeTrigger.ts": [
+        "FIRST_RECHARGE_CHALLENGE_LEVEL_THRESHOLD",
+        "GUANKA_INSTANCE_TYPE_NORMAL"
+      ],
+      "assets/script/app/friend/FriendArt.ts": [
+        "FRIEND_ART_HEAD_FRAME_ROOT",
+        "FRIEND_ART_LV_TAG_ROOT",
+        "FRIEND_ART_PANEL_BG",
+        "FRIEND_ART_PANEL_BG_ROOT",
+        "FRIEND_ART_SLICED",
+        "FRIEND_ART_TAB_OFF",
+        "FRIEND_ART_TITLE_BG",
+        "FRIEND_ART_TITLE_BG_ROOT",
+        "FRIEND_BUTTON_ART",
+        "FRIEND_ROW_ART",
+        "FRIEND_SPRITE_SIMPLE",
+        "FRIEND_SPRITE_SLICED",
+        "FRIEND_TINT_GRAY",
+        "FRIEND_TINT_NORMAL"
+      ],
+      "assets/script/app/friend/FriendRepository.ts": [
+        "FRIEND_WRITE_TIMEOUT_MS"
+      ],
+      "assets/script/app/friend/FriendTable.ts": [
+        "FRIEND_CONFIG_DEFAULTS",
+        "FRIEND_CONFIG_KEYS",
+        "FRIEND_TAB_COUNT"
+      ],
+      "assets/script/app/friend/FriendTexts.ts": [
+        "FRIEND_BTN_SEARCH",
+        "FRIEND_END_NUM_TEMPLATE",
+        "FRIEND_ONLINE_TEXT",
+        "FRIEND_POWER_PREFIX"
+      ],
+      "assets/script/app/gift/GiftArt.ts": [
+        "GIFT_RES_ICON_ART"
+      ],
+      "assets/script/app/gift/GiftTable.ts": [
+        "GIFT_SUB_TAB_ORDER",
+        "GIFT_TYPE_DAILY",
+        "GIFT_TYPE_MONTH",
+        "GIFT_TYPE_ONCE",
+        "GIFT_TYPE_WEEK"
+      ],
+      "assets/script/app/gift/RechargeDailyTable.ts": [
+        "RECHARGE_DAILY_STATE"
+      ],
+      "assets/script/app/guide/application/GuideEvents.ts": [
+        "GUIDE_BATTLE_SETTLED_CONDS"
+      ],
+      "assets/script/app/guide/model/GuideSaveStore.ts": [
+        "GUIDE_SAVE_KEY_PREFIX",
+        "GUIDE_SAVE_VERSION"
+      ],
+      "assets/script/app/guide/model/GuideSyncOutbox.ts": [
+        "GUIDE_OUTBOX_KEY_PREFIX"
+      ],
+      "assets/script/app/hang/HangArt.ts": [
+        "HJ_ART_NAMES",
+        "HJ_ART_ROOT",
+        "HJ_ART_SLICED",
+        "HJ_COST_ICON_NAME",
+        "HJ_SHARED_BTN_DARK",
+        "HJ_SHARED_BTN_GOLD",
+        "HJ_SHARED_BTN_SWEEP",
+        "HJ_SHARED_CLOSE",
+        "HJ_SHARED_PANEL_BG",
+        "HJ_SHARED_PANEL_TITLE",
+        "HJ_SHARED_RED_DOT",
+        "HJ_SHARED_RED_DOT_NEW",
+        "HJ_SHARED_RED_DOT_NUM",
+        "HJ_SPRITE_SLICED"
+      ],
+      "assets/script/app/hang/HangEntryButton.ts": [
+        "HJ_ENTRY_SHAKE_DEG",
+        "HJ_ENTRY_SHAKE_SEGMENT_SECONDS"
+      ],
+      "assets/script/app/hang/HangRepository.ts": [
+        "HJ_AD_TYPE_SWEEP",
+        "HJ_JUMP_TYPE_HANG",
+        "HJ_READ_TIMEOUT_MS"
+      ],
+      "assets/script/app/hang/HangTable.ts": [
+        "HJ_CFG_SWEEP_FREE_TIMES",
+        "HJ_END_RES_ID",
+        "HJ_FALLBACK_INCOME_LEVEL",
+        "HJ_FALLBACK_SWEEP_FREE_TIMES",
+        "HJ_INSTANCE_TYPE_NORMAL",
+        "HJ_INTERACT_TYPE_AFK_BLDG",
+        "HJ_MAX_IDLE_MS",
+        "HJ_MIN_CHALLENGE_LEVEL",
+        "HJ_MIN_CLAIM_MS",
+        "HJ_PERFECT_STAR",
+        "HJ_STAR_BITS"
+      ],
+      "assets/script/app/itemdetail/ItemDetailArt.ts": [
+        "ID_ART_DIR",
+        "ID_ART_SLICED",
+        "ID_ART_TILED",
+        "ID_TITLE_KEYS",
+        "QUALITY_FRAME_ART_DIR"
+      ],
+      "assets/script/app/itemdetail/ItemDetailTable.ts": [
+        "BASE_CARD_ITEM_IDS",
+        "CARD_ITEM_FRAME_STEP_MAX",
+        "CARD_ITEM_FRAME_STEP_SHIFT",
+        "QUALITY_FRAME_COUNT",
+        "QUALITY_NAME_FALLBACK"
+      ],
+      "assets/script/app/itemdetail/ItemInfoTable.ts": [
+        "ITEM_INFO_PANEL_HEIGHT",
+        "ITEM_INFO_PANEL_WIDTH"
+      ],
+      "assets/script/app/league/LeagueArt.ts": [
+        "LEAGUE_ART_AD_BAR",
+        "LEAGUE_ART_AD_BAR_ALPHA",
+        "LEAGUE_ART_AD_BTN",
+        "LEAGUE_ART_AD_VIDEO",
+        "LEAGUE_ART_APPLY_ROW_AGREE_BTN",
+        "LEAGUE_ART_APPLY_ROW_BG",
+        "LEAGUE_ART_APPLY_ROW_HEAD_FRAME",
+        "LEAGUE_ART_APPLY_ROW_LEVEL_BADGE",
+        "LEAGUE_ART_APPLY_ROW_POWER_BAR",
+        "LEAGUE_ART_APPLY_ROW_POWER_DECO",
+        "LEAGUE_ART_APPLY_ROW_REJECT_BTN",
+        "LEAGUE_ART_BACK",
+        "LEAGUE_ART_BARGAIN_BANNER",
+        "LEAGUE_ART_BARGAIN_BOARD",
+        "LEAGUE_ART_BARGAIN_BTN",
+        "LEAGUE_ART_BARGAIN_BUBBLE",
+        "LEAGUE_ART_BARGAIN_CLOUD",
+        "LEAGUE_ART_BG",
+        "LEAGUE_ART_BOTTOM_BAR",
+        "LEAGUE_ART_BTN_BLUE",
+        "LEAGUE_ART_BTN_BROWN",
+        "LEAGUE_ART_BTN_CANCEL",
+        "LEAGUE_ART_BTN_CREATE",
+        "LEAGUE_ART_BTN_JOIN",
+        "LEAGUE_ART_BTN_OK",
+        "LEAGUE_ART_BTN_QUICK_JOIN",
+        "LEAGUE_ART_BTN_RED",
+        "LEAGUE_ART_BTN_TITLE",
+        "LEAGUE_ART_CHECK_BG",
+        "LEAGUE_ART_CHECK_MARK",
+        "LEAGUE_ART_CHECK_MARK_ROOT",
+        "LEAGUE_ART_COPY",
+        "LEAGUE_ART_COST_BAR_ALPHA",
+        "LEAGUE_ART_COST_BAR_TINT",
+        "LEAGUE_ART_COST_BTN",
+        "LEAGUE_ART_CREATE_NAME_BG",
+        "LEAGUE_ART_DETAIL_FRAME",
+        "LEAGUE_ART_DONATE_ITEM_BG",
+        "LEAGUE_ART_HALL_BG",
+        "LEAGUE_ART_HALL_FRAME",
+        "LEAGUE_ART_HELP",
+        "LEAGUE_ART_INFO_BANNER_BG",
+        "LEAGUE_ART_INFO_BANNER_BG_ALPHA",
+        "LEAGUE_ART_INFO_BANNER_BG_TINT",
+        "LEAGUE_ART_INFO_BG",
+        "LEAGUE_ART_INPUT_BG",
+        "LEAGUE_ART_JOIN_BG",
+        "LEAGUE_ART_JOIN_BOARD",
+        "LEAGUE_ART_JOIN_FRAME",
+        "LEAGUE_ART_LEVEL_ROW_BG",
+        "LEAGUE_ART_LEVEL_ROW_CTX_BAR",
+        "LEAGUE_ART_LEVEL_ROW_CTX_BAR_ALPHA",
+        "LEAGUE_ART_LEVEL_ROW_CTX_BAR_TINT",
+        "LEAGUE_ART_LEVEL_ROW_TITLE_BAR",
+        "LEAGUE_ART_LEVEL_ROW_TITLE_BAR_ALPHA",
+        "LEAGUE_ART_MEMBER_HEAD_FRAME",
+        "LEAGUE_ART_MEMBER_LEVEL_BADGE",
+        "LEAGUE_ART_MEMBER_POWER_BAR",
+        "LEAGUE_ART_MGR_BTN",
+        "LEAGUE_ART_NORTH_ATTR_BG",
+        "LEAGUE_ART_NORTH_BACK",
+        "LEAGUE_ART_NORTH_BG",
+        "LEAGUE_ART_NORTH_BOARD",
+        "LEAGUE_ART_NORTH_BOARD_TITLE",
+        "LEAGUE_ART_NORTH_BOTTOM_BAR",
+        "LEAGUE_ART_NORTH_CHALLENGE_BTN",
+        "LEAGUE_ART_NORTH_DONE_TAG",
+        "LEAGUE_ART_NORTH_DRUM_BTN",
+        "LEAGUE_ART_NORTH_GOODS_FRAME",
+        "LEAGUE_ART_NORTH_HEAD_FRAME",
+        "LEAGUE_ART_NORTH_HELP",
+        "LEAGUE_ART_NORTH_INNER_FRAME",
+        "LEAGUE_ART_NORTH_PROGRESS_BG",
+        "LEAGUE_ART_NORTH_PROGRESS_FILL",
+        "LEAGUE_ART_NORTH_RANK_HEAD_BAR",
+        "LEAGUE_ART_NORTH_RANK_MINE_BG",
+        "LEAGUE_ART_NORTH_RANK_ROW_BG",
+        "LEAGUE_ART_NORTH_RANK_TAB_ICON",
+        "LEAGUE_ART_NORTH_REWARD_BTN",
+        "LEAGUE_ART_NORTH_REWARD_ROW_BAR",
+        "LEAGUE_ART_NORTH_REWARD_ROW_BAR_ALPHA",
+        "LEAGUE_ART_NORTH_REWARD_ROW_BG",
+        "LEAGUE_ART_NORTH_REWARD_TAB_ICON",
+        "LEAGUE_ART_NORTH_ROW_BG",
+        "LEAGUE_ART_NORTH_SWEEP_BTN",
+        "LEAGUE_ART_NORTH_TITLE_DECO",
+        "LEAGUE_ART_NOTICE_BG",
+        "LEAGUE_ART_NOTICE_BOX_BG",
+        "LEAGUE_ART_NOTICE_BOX_TITLE_BAR",
+        "LEAGUE_ART_OPS_BTN",
+        "LEAGUE_ART_PIC07",
+        "LEAGUE_ART_POPUP_CLOSE",
+        "LEAGUE_ART_POPUP_TITLE_BG",
+        "LEAGUE_ART_POPUP_TITLE_DECO",
+        "LEAGUE_ART_PROGRESS_BG",
+        "LEAGUE_ART_PROGRESS_FILL",
+        "LEAGUE_ART_SEARCH_BTN",
+        "LEAGUE_ART_SLICED",
+        "LEAGUE_ART_STORE_BUY_BTN",
+        "LEAGUE_ART_STORE_ROW_BG",
+        "LEAGUE_ART_STORE_ROW_TITLE_BAR",
+        "LEAGUE_ART_STORE_ROW_TITLE_BAR_ALPHA",
+        "LEAGUE_ART_TASK_AD_BADGE",
+        "LEAGUE_ART_TASK_AD_BTN",
+        "LEAGUE_ART_TASK_AD_TEXT_COLOR",
+        "LEAGUE_ART_TASK_AD_TEXT_STROKE",
+        "LEAGUE_ART_TASK_BOX_CAN_REWARD",
+        "LEAGUE_ART_TASK_BOX_CHECK",
+        "LEAGUE_ART_TASK_BOX_LOCKED",
+        "LEAGUE_ART_TASK_BOX_REWARDED",
+        "LEAGUE_ART_TASK_BOX_VALUE_COLOR",
+        "LEAGUE_ART_TASK_BOX_VALUE_STROKE",
+        "LEAGUE_ART_TASK_CIRCLE",
+        "LEAGUE_ART_TASK_COUNT_COLOR",
+        "LEAGUE_ART_TASK_COUNT_STROKE",
+        "LEAGUE_ART_TASK_DONE_TAG",
+        "LEAGUE_ART_TASK_GET_BTN",
+        "LEAGUE_ART_TASK_GO_BTN",
+        "LEAGUE_ART_TASK_HEAD_BG",
+        "LEAGUE_ART_TASK_HEAD_TINT",
+        "LEAGUE_ART_TASK_PROGRESS_BG",
+        "LEAGUE_ART_TASK_PROGRESS_FILL",
+        "LEAGUE_ART_TASK_PROGRESS_TEXT_COLOR",
+        "LEAGUE_ART_TASK_PROGRESS_TEXT_STROKE",
+        "LEAGUE_ART_TASK_REWARD_BG",
+        "LEAGUE_ART_TASK_REWARD_BG_TINT",
+        "LEAGUE_ART_TASK_ROW_BG",
+        "LEAGUE_ART_TASK_ROW_TITLE_BAR",
+        "LEAGUE_ART_TASK_ROW_TITLE_BAR_ALPHA",
+        "LEAGUE_BANNER_COLORS",
+        "LEAGUE_POPUP_BOARD_ROOT",
+        "LEAGUE_RESOURCE_ICON_ART_ROOT",
+        "LEAGUE_SHARED_CHECK_NAME",
+        "LEAGUE_SHARED_CHECK_ROOT",
+        "LEAGUE_SPRITE_SIMPLE",
+        "LEAGUE_SPRITE_SLICED"
+      ],
+      "assets/script/app/league/LeagueDiscountPage.ts": [
+        "LEAGUE_DISCOUNT_PAGE"
+      ],
+      "assets/script/app/league/LeagueRepository.ts": [
+        "LEAGUE_READ_TIMEOUT_MS",
+        "LEAGUE_WRITE_TIMEOUT_MS"
+      ],
+      "assets/script/app/league/LeagueTable.ts": [
+        "LEAGUE_CREATE_BANNER_COUNT",
+        "LEAGUE_CREATE_COST_CONFIG_KEY",
+        "LEAGUE_CREATE_COST_FALLBACK",
+        "LEAGUE_INFO_NODES",
+        "LEAGUE_NORTH_CONFIG_DEFAULTS",
+        "LEAGUE_NORTH_CONFIG_KEYS",
+        "LEAGUE_NORTH_REWARD_SUB_TYPE",
+        "LEAGUE_NORTH_REWARD_SUB_TYPES",
+        "LEAGUE_P4_CONFIG_DEFAULTS",
+        "LEAGUE_P4_CONFIG_KEYS",
+        "LEAGUE_QUICK_JOIN_LIMIT"
+      ],
+      "assets/script/app/league/LeagueTaskRow.ts": [
+        "LEAGUE_TASK_ROW_PROGRESS_FULL_WIDTH"
+      ],
+      "assets/script/app/league/LeagueTexts.ts": [
+        "LEAGUE_APPLY_ALL_AGREE",
+        "LEAGUE_APPLY_ALL_REJECT",
+        "LEAGUE_APPLY_ROW_AGREE",
+        "LEAGUE_APPLY_ROW_REJECT",
+        "LEAGUE_COST_HAS_SUFFIX",
+        "LEAGUE_DISCOUNT_BTN_BUY",
+        "LEAGUE_DISCOUNT_HINT",
+        "LEAGUE_DONATE_FREE_LABEL",
+        "LEAGUE_EDIT_CANCEL",
+        "LEAGUE_EDIT_SURE",
+        "LEAGUE_HALL_DEFAULT_NOTICE",
+        "LEAGUE_HALL_DETAIL_HEADERS",
+        "LEAGUE_HALL_MGR_LABEL",
+        "LEAGUE_INFO_DECLARATION_TITLE",
+        "LEAGUE_INFO_JOIN",
+        "LEAGUE_MGR_APPLY",
+        "LEAGUE_MGR_DECLARATION_TITLE",
+        "LEAGUE_MGR_NOTICE_TITLE",
+        "LEAGUE_MGR_QUICK_JOIN",
+        "LEAGUE_MGR_QUIT",
+        "LEAGUE_NORTH_BTN_CHALLENGE",
+        "LEAGUE_NORTH_BTN_DRUM",
+        "LEAGUE_NORTH_BTN_SWEEP",
+        "LEAGUE_NORTH_COL_COUNT",
+        "LEAGUE_NORTH_COL_DAMAGE",
+        "LEAGUE_NORTH_COL_LEAGUE",
+        "LEAGUE_NORTH_COL_PLAYER",
+        "LEAGUE_NORTH_COL_RANK",
+        "LEAGUE_NORTH_COL_REWARD",
+        "LEAGUE_NORTH_FIGHT_MISSING",
+        "LEAGUE_NORTH_HELP_MISSING",
+        "LEAGUE_NORTH_RANK_TITLE",
+        "LEAGUE_TASK_BTN_GET",
+        "LEAGUE_TASK_BTN_GO",
+        "LEAGUE_TASK_PERCENT_TEMPLATE",
+        "LEAGUE_TIP_LOADING"
+      ],
+      "assets/script/app/mail/MailArt.ts": [
+        "MAIL_ART_NAMES",
+        "MAIL_ART_ROOT",
+        "MAIL_ROW_BG_READ_NAME",
+        "MAIL_ROW_BG_UNREAD_NAME"
+      ],
+      "assets/script/app/mail/MailRepository.ts": [
+        "MAIL_READ_TIMEOUT_MS",
+        "MAIL_WRITE_TIMEOUT_MS"
+      ],
+      "assets/script/app/mail/MailTable.ts": [
+        "MAIL_MAX_NUM_DEFAULT",
+        "MAIL_REWARD_LIST_HEIGHT",
+        "MAIL_REWARD_LIST_WIDTH",
+        "MAIL_REWARD_SLOT_GAP",
+        "MAIL_REWARD_SLOT_SIZE",
+        "MAIL_VALID_DAYS_DEFAULT"
+      ],
+      "assets/script/app/mail/MailTexts.ts": [
+        "MAIL_TITLE"
+      ],
+      "assets/script/app/main/ChestDropFlight.ts": [
+        "CHEST_DROP_ARC_RATIO",
+        "CHEST_DROP_CONTROL_X_RATIO",
+        "CHEST_DROP_HIT_SECONDS",
+        "CHEST_DROP_TRAIL_ALPHA",
+        "CHEST_DROP_TRAIL_GAP",
+        "CHEST_DROP_TRAIL_LENGTH",
+        "CHEST_DROP_TRAIL_ROOT_HALF_WIDTH",
+        "CHEST_DROP_TRAIL_SEGMENTS"
+      ],
+      "assets/script/app/main/ChestEntryGate.ts": [
+        "CHEST_ENTRY_OPEN_REF_ID",
+        "CHEST_ENTRY_POP_OVERSHOOT"
+      ],
+      "assets/script/app/main/GameViewClickService.ts": [
+        "GAME_VIEW_CLICK_TIMEOUT_MS"
+      ],
+      "assets/script/app/main/MainResBarFeedback.ts": [
+        "RES_BAR_FLASH_SECONDS",
+        "RES_BAR_HIT_ICON_POP",
+        "RES_BAR_HIT_LABEL_POP",
+        "RES_BAR_HIT_SECONDS",
+        "RES_BAR_SPEND_BLINKS",
+        "RES_BAR_SPEND_BLINK_MIN_ALPHA",
+        "RES_BAR_SPEND_FLASH",
+        "RES_BAR_SPEND_FLASH_FADE_SECONDS",
+        "RES_BAR_SPEND_FLASH_RISE_SECONDS",
+        "RES_BAR_SPEND_FLASH_SECONDS",
+        "RES_BAR_SPEND_FLOAT_FADE_FROM",
+        "RES_BAR_SPEND_FLOAT_GAP",
+        "RES_BAR_SPEND_FLOAT_RISE",
+        "RES_BAR_SPEND_FLOAT_SECONDS",
+        "RES_BAR_SPEND_HOLD_SECONDS",
+        "RES_BAR_SPEND_ICON_POP",
+        "RES_BAR_SPEND_LABEL_POP",
+        "RES_BAR_SPEND_SECONDS"
+      ],
+      "assets/script/app/main/MainTabItems.ts": [
+        "MAIN_TAB_ITEMS"
+      ],
+      "assets/script/app/main/QuickFindGate.ts": [
+        "QUICK_FIND_OPEN_REF_ID"
+      ],
+      "assets/script/app/maintask/MainTaskArt.ts": [
+        "MT_ART_NAMES",
+        "MT_ART_SLICED",
+        "MT_ART_TILED"
+      ],
+      "assets/script/app/maintask/MainTaskTable.ts": [
+        "EMPTY_TASK_STATE",
+        "MAIN_TASK_HERO_TARGET_TYPE"
+      ],
+      "assets/script/app/matching/MatchReveal.ts": [
+        "MATCH_REVEAL_GAP_MAX_SECONDS",
+        "MATCH_REVEAL_GAP_MIN_SECONDS"
+      ],
+      "assets/script/app/matching/MatchSlots.ts": [
+        "MATCH_MAX_PARTICIPANTS",
+        "MATCH_MIN_PARTICIPANTS"
+      ],
+      "assets/script/app/matching/MatchingResourcePlan.ts": [
+        "DEFAULT_MATCH_AVATAR"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftLayout.ts": [
+        "MONTHCARD_DAY_LIST_SIZE",
+        "MONTHCARD_ENTRY_HEIGHT",
+        "MONTHCARD_ENTRY_STRIDE",
+        "MONTHCARD_ENTRY_WIDTH",
+        "MONTHCARD_LIST_HEIGHT",
+        "MONTHCARD_LIST_WIDTH",
+        "MONTHCARD_MAX_DAY_REWARD_SLOTS",
+        "MONTHCARD_MAX_PRIVILEGE_ROWS",
+        "MONTHCARD_PRIVILEGE_LIST_SIZE",
+        "MONTHCARD_PRIVILEGE_ROW_SIZE",
+        "MONTHCARD_SP_BBOX",
+        "MONTHCARD_SP_SCALE",
+        "MONTHCARD_SP_SIZE"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftTable.ts": [
+        "MONTHCARD_BOUGHT_TAG_DY",
+        "MONTHCARD_IMPORTED_CURRENCY_ART",
+        "MONTHCARD_LAYOUT_DY"
+      ],
+      "assets/script/app/rd/RdTypes.ts": [
+        "RD_REGISTERED_VAR_NAMES",
+        "RD_SERVER_TYPE"
+      ],
+      "assets/script/app/role/RoleArt.ts": [
+        "RL_ART_ALL_KEYS",
+        "RL_ICON_ROOT_PREFIX"
+      ],
+      "assets/script/app/role/RoleEquipRedDotTable.ts": [
+        "EQUIP_MAX_LEVEL"
+      ],
+      "assets/script/app/role/RolePowerTable.ts": [
+        "ATK_ATTR",
+        "EQUIP_ATK_ATTR"
+      ],
+      "assets/script/app/sevenDay/SevenDayTable.ts": [
+        "SEVEN_DAY_STATE_FINISH",
+        "SEVEN_DAY_STATE_REWARDED",
+        "SEVEN_DAY_STATE_UNDONE",
+        "SEVEN_DAY_TARGET_FIGHT",
+        "SEVEN_DAY_TASK_TYPE"
+      ],
+      "assets/script/app/showReward/ShowRewardArt.ts": [
+        "SR_ART_NAMES",
+        "SR_ART_SLICED",
+        "SR_ART_TILED"
+      ],
+      "assets/script/app/showReward/ShowRewardTable.ts": [
+        "SR_STAGGER_MS",
+        "SR_STAR_COUNT"
+      ],
+      "assets/script/app/showReward/ShowRewardTexts.ts": [
+        "SHOW_REWARD_SOUNDS"
+      ],
+      "assets/script/app/store/StoreAd.ts": [
+        "STORE_AD_TYPE_COMMON_BOX",
+        "STORE_AD_TYPE_SUPER_BOX"
+      ],
+      "assets/script/app/store/StoreCostTable.ts": [
+        "STORE_COST_ICON_GAP"
+      ],
+      "assets/script/app/store/StoreShopTable.ts": [
+        "STORE_QUALITY_FRAMES"
+      ],
+      "assets/script/app/store/StoreTable.ts": [
+        "STORE_ART_ARROW",
+        "STORE_ART_BG",
+        "STORE_ART_BTN_GOLD",
+        "STORE_ART_BTN_GREEN",
+        "STORE_ART_BTN_GREY",
+        "STORE_ART_CARD",
+        "STORE_ART_CHEST_HIGH",
+        "STORE_ART_CHEST_LOW",
+        "STORE_ART_DOT_OFF",
+        "STORE_ART_DOT_ON",
+        "STORE_ART_GIFT_CARD",
+        "STORE_ART_HELP",
+        "STORE_ART_ICON_VIDEO",
+        "STORE_ART_ICON_VIDEO_NEW",
+        "STORE_ART_ITEM_FRAME",
+        "STORE_ART_NPC",
+        "STORE_ART_PANEL",
+        "STORE_ART_PILL",
+        "STORE_ART_REBATE",
+        "STORE_ART_ROOT",
+        "STORE_ART_SLICED",
+        "STORE_ART_TAG",
+        "STORE_ART_TITLE",
+        "STORE_GRID_LINE_GAP",
+        "STORE_GRID_ROWS"
+      ],
+      "assets/script/app/territory/application/TerritoryModel.ts": [
+        "TERRITORY_WRITE_KIND"
+      ],
+      "assets/script/app/territory/model/TerritoryBattleApproach.ts": [
+        "TERRITORY_BATTLE_APPROACH_HOLD_UNTIL",
+        "TERRITORY_BATTLE_APPROACH_IN_SECONDS",
+        "TERRITORY_BATTLE_APPROACH_OUT_SECONDS",
+        "TERRITORY_BATTLE_APPROACH_ZOOM",
+        "TERRITORY_BATTLE_PRELUDE_APPROACH_TAIL_SECONDS",
+        "TERRITORY_BATTLE_PRELUDE_SPAWN_GRACE_SECONDS",
+        "TERRITORY_BATTLE_PRELUDE_SPAWN_MAX_SECONDS"
+      ],
+      "assets/script/app/territory/model/TerritoryBattleIntro.ts": [
+        "TERRITORY_BATTLE_INTRO_CELL_SCALE",
+        "TERRITORY_BATTLE_INTRO_COVER_ALPHA_MAX",
+        "TERRITORY_BATTLE_INTRO_COVER_ALPHA_MIN",
+        "TERRITORY_BATTLE_INTRO_COVER_ART_HEIGHT",
+        "TERRITORY_BATTLE_INTRO_COVER_ART_WIDTH",
+        "TERRITORY_BATTLE_INTRO_COVER_GAP_X",
+        "TERRITORY_BATTLE_INTRO_COVER_GAP_Y",
+        "TERRITORY_BATTLE_INTRO_COVER_SCALE_MAX",
+        "TERRITORY_BATTLE_INTRO_COVER_SCALE_MIN",
+        "TERRITORY_BATTLE_INTRO_COVER_STAGGER",
+        "TERRITORY_BATTLE_INTRO_OUT_SECONDS",
+        "TERRITORY_BATTLE_INTRO_UI_FADE_FROM",
+        "TERRITORY_BATTLE_INTRO_UI_PUSH_RATIO"
+      ],
+      "assets/script/app/territory/model/TerritoryCampaignConfig.ts": [
+        "TERRITORY_CARD_RARITY_KEYS"
+      ],
+      "assets/script/app/territory/model/TerritoryCellBitSet.ts": [
+        "MAX_BITSET_WORDS",
+        "MAX_EXACT_CELL_IN_NUMBER"
+      ],
+      "assets/script/app/territory/model/TerritoryChapterSwitch.ts": [
+        "TERRITORY_CHAPTER_SWITCH_COVER_SECONDS",
+        "TERRITORY_CHAPTER_SWITCH_LEAD_SECONDS",
+        "TERRITORY_CHAPTER_SWITCH_REVEAL_SECONDS",
+        "TERRITORY_CHAPTER_SWITCH_RISE_RATIO"
+      ],
+      "assets/script/app/territory/model/TerritoryChestAnimation.ts": [
+        "TERRITORY_CHEST_CAMERA_ZOOM_MEDIUM",
+        "TERRITORY_CHEST_CAMERA_ZOOM_STRONG",
+        "TERRITORY_CHEST_CAMERA_ZOOM_WEAK",
+        "TERRITORY_CHEST_FLY_SPREAD",
+        "TERRITORY_CHEST_FLY_STAGGER"
+      ],
+      "assets/script/app/territory/model/TerritoryChestBubble.ts": [
+        "TERRITORY_CHEST_BUBBLE_FONT_SIZE",
+        "TERRITORY_CHEST_BUBBLE_HEIGHT",
+        "TERRITORY_CHEST_BUBBLE_ICON_SIZE",
+        "TERRITORY_CHEST_BUBBLE_ICON_Y",
+        "TERRITORY_CHEST_BUBBLE_TEXT_COLOR",
+        "TERRITORY_CHEST_BUBBLE_TEXT_Y",
+        "TERRITORY_CHEST_BUBBLE_WIDTH"
+      ],
+      "assets/script/app/territory/model/TerritoryChestHint.ts": [
+        "TERRITORY_CHEST_HINT_HEIGHT",
+        "TERRITORY_CHEST_HINT_HOPS",
+        "TERRITORY_CHEST_HINT_HOP_DECAY"
+      ],
+      "assets/script/app/territory/model/TerritoryChestTier.ts": [
+        "TERRITORY_CHEST_MEDIUM_MAX",
+        "TERRITORY_CHEST_TIER_LABEL",
+        "TERRITORY_CHEST_WEAK_BELOW"
+      ],
+      "assets/script/app/territory/model/TerritoryCloud.ts": [
+        "TERRITORY_CLOUD_ART_HEIGHT",
+        "TERRITORY_CLOUD_ART_OFFSET_Y",
+        "TERRITORY_CLOUD_ART_WIDTH",
+        "TERRITORY_CLOUD_BODY_HEIGHT",
+        "TERRITORY_CLOUD_BODY_WIDTH",
+        "TERRITORY_CLOUD_DISSOLVE_BURST_SCALE",
+        "TERRITORY_CLOUD_DISSOLVE_CRUSH_SCALE",
+        "TERRITORY_CLOUD_DISSOLVE_FRAGMENT",
+        "TERRITORY_CLOUD_DISSOLVE_HOLD",
+        "TERRITORY_CLOUD_DISSOLVE_INTACT",
+        "TERRITORY_CLOUD_DISSOLVE_LIFT_PX",
+        "TERRITORY_CLOUD_DISSOLVE_PUNCH",
+        "TERRITORY_CLOUD_DISSOLVE_SECONDS",
+        "TERRITORY_CLOUD_DISSOLVE_SHADOW_GONE",
+        "TERRITORY_CLOUD_DISSOLVE_SHADOW_SCALE",
+        "TERRITORY_CLOUD_DOLLY_FIT_MARGIN",
+        "TERRITORY_CLOUD_DOLLY_IN_SECONDS",
+        "TERRITORY_CLOUD_DOLLY_OUT_SECONDS",
+        "TERRITORY_CLOUD_FILL_WAVE_SPREAD",
+        "TERRITORY_CLOUD_FILL_WAVE_STAGGER",
+        "TERRITORY_CLOUD_FULL_HEIGHT",
+        "TERRITORY_CLOUD_KEEP_OUT_PX"
+      ],
+      "assets/script/app/territory/model/TerritoryConditionBadge.ts": [
+        "TERRITORY_CONDITION_CHEST_GAP",
+        "TERRITORY_CONDITION_FACE_MIN_MARGIN"
+      ],
+      "assets/script/app/territory/model/TerritoryHeroReward.ts": [
+        "TERRITORY_HERO_BADGE_FADE_SECONDS",
+        "TERRITORY_HERO_BADGE_GROW_SECONDS",
+        "TERRITORY_HERO_BADGE_HOLD_SECONDS",
+        "TERRITORY_HERO_BADGE_SHINE_SECONDS",
+        "TERRITORY_HERO_FLIGHT_SECONDS",
+        "TERRITORY_HERO_FLIGHT_STAGGER"
+      ],
+      "assets/script/app/territory/model/TerritoryHexRecolor.ts": [
+        "TERRITORY_HEX_RECOLOR_IN_FROM_SCALE",
+        "TERRITORY_HEX_RECOLOR_IN_OPACITY_PORTION",
+        "TERRITORY_HEX_RECOLOR_IN_START",
+        "TERRITORY_HEX_RECOLOR_OUT_END",
+        "TERRITORY_HEX_RECOLOR_OUT_SCALE",
+        "TERRITORY_HEX_RECOLOR_STAGGER_MAX_SECONDS",
+        "TERRITORY_HEX_RECOLOR_STAGGER_SECONDS"
+      ],
+      "assets/script/app/territory/model/TerritoryHexSpawn.ts": [
+        "TERRITORY_HEX_SPAWN_FROM_SCALE",
+        "TERRITORY_HEX_SPAWN_OPACITY_PORTION",
+        "TERRITORY_HEX_SPAWN_SECONDS",
+        "TERRITORY_HEX_SPAWN_STAGGER_MAX_SECONDS",
+        "TERRITORY_HEX_SPAWN_STAGGER_SECONDS",
+        "TERRITORY_HEX_SPAWN_VICTORY_SECONDS",
+        "TERRITORY_HEX_SPAWN_VICTORY_STAGGER_MAX_SECONDS"
+      ],
+      "assets/script/app/territory/model/TerritoryLevelBubble.ts": [
+        "TERRITORY_PVP_BUBBLE_BODY_BOTTOM_ROW",
+        "TERRITORY_PVP_BUBBLE_BODY_CENTER_LIFT_Y",
+        "TERRITORY_PVP_BUBBLE_FRAME_HEIGHT",
+        "TERRITORY_PVP_BUBBLE_PORTRAIT_CANVAS",
+        "TERRITORY_PVP_BUBBLE_PORTRAIT_OFFSET_X",
+        "TERRITORY_PVP_BUBBLE_PORTRAIT_OFFSET_Y",
+        "TERRITORY_PVP_BUBBLE_PORTRAIT_PATH",
+        "TERRITORY_PVP_BUBBLE_PORTRAIT_Y",
+        "TERRITORY_PVP_BUBBLE_TAIL_ROWS"
+      ],
+      "assets/script/app/territory/model/TerritoryMapLayout.ts": [
+        "TERRITORY_MAP_TOP_BREATH",
+        "TERRITORY_MAP_TOP_FACE_RISE",
+        "TERRITORY_MAP_VIEW_LIFT"
+      ],
+      "assets/script/app/territory/model/TerritoryPreviewCinema.ts": [
+        "TERRITORY_PREVIEW_CINEMA"
+      ],
+      "assets/script/app/territory/model/TerritoryResourceGain.ts": [
+        "TERRITORY_GAIN_BURST_COUNT_MEDIUM",
+        "TERRITORY_GAIN_BURST_COUNT_SPARSE",
+        "TERRITORY_GAIN_BURST_DENSE_ABOVE",
+        "TERRITORY_GAIN_BURST_FADE_SECONDS",
+        "TERRITORY_GAIN_BURST_GRAVITY",
+        "TERRITORY_GAIN_BURST_GROW_SECONDS",
+        "TERRITORY_GAIN_BURST_GROW_START_SCALE",
+        "TERRITORY_GAIN_BURST_HALF_ANGLE_DEG",
+        "TERRITORY_GAIN_BURST_LIFE_JITTER",
+        "TERRITORY_GAIN_BURST_LIFE_SECONDS",
+        "TERRITORY_GAIN_BURST_SCALE_JITTER",
+        "TERRITORY_GAIN_BURST_SPARSE_BELOW",
+        "TERRITORY_GAIN_BURST_SPEED",
+        "TERRITORY_GAIN_BURST_SPEED_JITTER",
+        "TERRITORY_GAIN_BURST_SPIN_MAX_HZ",
+        "TERRITORY_GAIN_BURST_SPIN_MIN_HZ",
+        "TERRITORY_GAIN_BURST_STAGGER_SECONDS",
+        "TERRITORY_GAIN_BURST_SURFACE_FADE_SECONDS",
+        "TERRITORY_GAIN_BURST_TOTAL_SECONDS",
+        "TERRITORY_GAIN_ENTRANCE_RATIO",
+        "TERRITORY_GAIN_FROM_SCALE",
+        "TERRITORY_GAIN_ICON_TEXT_GAP_PX",
+        "TERRITORY_GAIN_POP_SCALE",
+        "TERRITORY_GAIN_READOUT_EXTRA_LIFT_PX",
+        "TERRITORY_GAIN_RISE_PX",
+        "TERRITORY_WALLET_RES_IDS",
+        "TERRITORY_WALLET_RES_KEY"
+      ],
+      "assets/script/app/territory/model/TerritorySilverChestOpen.ts": [
+        "TERRITORY_SILVER_CHEST_POP_PEAK"
+      ],
+      "assets/script/app/territory/model/TerritoryTapFeedback.ts": [
+        "TERRITORY_TAP_GLOW_FROM",
+        "TERRITORY_TAP_GLOW_TO",
+        "TERRITORY_TAP_PRESS_DOWN",
+        "TERRITORY_TAP_PRESS_SECONDS",
+        "TERRITORY_TAP_PRESS_UP",
+        "TERRITORY_TAP_RING_FROM",
+        "TERRITORY_TAP_RING_TO"
+      ],
+      "assets/script/app/territory/model/TerritoryUnlockTransition.ts": [
+        "TERRITORY_UNLOCK_LOCK_PEAK",
+        "TERRITORY_UNLOCK_PRICE_PEAK"
+      ],
+      "assets/script/app/territory/view/TerritoryChestOpenArt.ts": [
+        "CHEST_OPEN_FRAME_BLUE",
+        "CHEST_OPEN_FRAME_GREEN",
+        "CHEST_OPEN_FRAME_ORANGE",
+        "CHEST_OPEN_FRAME_PURPLE"
+      ],
+      "assets/script/app/territory/view/TerritoryCloudView.ts": [
+        "TERRITORY_CLOUD_BOTTOM_STRIP_NODE",
+        "TERRITORY_CLOUD_DISSOLVE_NODE",
+        "TERRITORY_CLOUD_FILL_NODE",
+        "TERRITORY_CLOUD_KEEP_OUT_NODE",
+        "TERRITORY_CLOUD_LAYER_NODE",
+        "TERRITORY_CLOUD_SHADOW_NODE"
+      ],
+      "assets/script/app/territory/view/TerritoryGainBurst.ts": [
+        "TERRITORY_GAIN_BURST_ICON_SIZE"
+      ],
+      "assets/script/app/territory/view/TerritoryMapView.ts": [
+        "TERRITORY_START_BUBBLE_TEXT"
+      ],
+      "assets/script/app/territory/view/TerritoryStationView.ts": [
+        "CONDITION_GAP",
+        "CONDITION_ICON_SCALE",
+        "CONDITION_ICON_WIDTH_FALLBACK",
+        "CONDITION_VALUE_SCALE",
+        "TERRITORY_BOTTOM_ANCHOR_BUILD_IDS",
+        "TERRITORY_BOTTOM_ANCHOR_DROP_PX"
+      ],
+      "assets/script/app/zcds/application/ZCRuntimePrecompiler.ts": [
+        "ZC_RUNTIME_TABLE_NAMES"
+      ],
+      "assets/script/app/zcds/model/ZCBattlePresentationQueue.ts": [
+        "ZC_CARD_AXIS_RATIO",
+        "ZC_CARD_START_RATIO",
+        "ZC_NEUTRAL_REWARD_TOTAL_SECONDS",
+        "ZC_SKILL_ANNOUNCE_HOLD_SECONDS"
+      ],
+      "assets/script/app/zcds/model/ZCBattleStartStyle.ts": [
+        "ZC_BATTLE_START_STATIC_ANIMATION"
+      ],
+      "assets/script/app/zcds/model/ZCChainLightningFx.ts": [
+        "ZC_CHAIN_BEHAVIOR_KEY",
+        "ZC_CHAIN_FADE_FLOOR",
+        "ZC_CHAIN_SCREEN_PER_WORLD",
+        "ZC_CHAIN_SEGMENT_COVER_WORLD_LENGTH",
+        "ZC_CHAIN_SEGMENT_LEADING_GAP_SCREEN_LENGTH",
+        "ZC_CHAIN_SEGMENT_LEADING_GAP_WORLD_LENGTH",
+        "ZC_CHAIN_SEGMENT_SCREEN_LENGTH",
+        "ZC_CHAIN_SEGMENT_VISIBLE_SCREEN_LENGTH",
+        "ZC_CHAIN_SEGMENT_WORLD_LENGTH"
+      ],
+      "assets/script/app/zcds/model/ZCCharacterDrawOrder.ts": [
+        "ZC_CHARACTER_TIER_AIR",
+        "ZC_CHARACTER_TIER_GROUND",
+        "ZC_CHARACTER_TIER_SUMMON"
+      ],
+      "assets/script/app/zcds/model/ZCDashFx.ts": [
+        "ZC_CHARGE_SHIELD_BEHAVIOR_KEY",
+        "ZC_LEGACY_DASH_BEHAVIOR_KEY"
+      ],
+      "assets/script/app/zcds/model/ZCEffectCatalog.ts": [
+        "ZC_EFFECT_MISSILE_BY_UNIT",
+        "ZC_EFFECT_SPECS"
+      ],
+      "assets/script/app/zcds/model/ZCGameModel.ts": [
+        "ZC_DEFENCE_SPAWN_INTERVAL_SECONDS",
+        "ZC_MAX_TICK_SECONDS",
+        "ZC_SIMULATION_STEP_SECONDS",
+        "ZC_UNIT_CAP"
+      ],
+      "assets/script/app/zcds/model/ZCGameResourcePlan.ts": [
+        "ZC_BATTLE_COMMON_PREFABS"
+      ],
+      "assets/script/app/zcds/model/ZCHexTopGeometry.ts": [
+        "ZC_HEX_TOP_EDGE_NORMALS"
+      ],
+      "assets/script/app/zcds/model/ZCImpactEffectFx.ts": [
+        "ZC_IMPACT_ANCHOR_MIDPOINT",
+        "ZC_IMPACT_ANCHOR_TARGET"
+      ],
+      "assets/script/app/zcds/model/ZCMapGeometry.ts": [
+        "ZC_HEX_COLUMN_PHASE"
+      ],
+      "assets/script/app/zcds/model/ZCMonsterPresentation.ts": [
+        "ZC_MONSTER_AWAKE_BLUE",
+        "ZC_MONSTER_AWAKE_GREEN",
+        "ZC_MONSTER_AWAKE_RED",
+        "ZC_MONSTER_FOCUS_SPINE_ART_LIFT",
+        "ZC_MONSTER_FOCUS_TOAST",
+        "ZC_MONSTER_SLEEP_ALPHA"
+      ],
+      "assets/script/app/zcds/model/ZCNeutralBurst.ts": [
+        "ZC_NEUTRAL_BURST_COUNT",
+        "ZC_NEUTRAL_BURST_GRAVITY",
+        "ZC_NEUTRAL_BURST_HALF_ANGLE_DEG",
+        "ZC_NEUTRAL_BURST_LABEL_SECONDS",
+        "ZC_NEUTRAL_BURST_SURFACE_FADE_SECONDS"
+      ],
+      "assets/script/app/zcds/model/ZCProjectileDropStyle.ts": [
+        "ZC_BULLET_DROP_HEIGHT_PX",
+        "ZC_BULLET_DROP_UNITS",
+        "ZC_BULLET_FLY_ARC_PX",
+        "ZC_BULLET_FLY_MAX_SECONDS",
+        "ZC_BULLET_FLY_MIN_SECONDS",
+        "ZC_BULLET_FLY_UNITS",
+        "ZC_BULLET_RAIN_ARC_SPREAD",
+        "ZC_BULLET_RAIN_MAX_SECONDS",
+        "ZC_BULLET_RAIN_MIN_SECONDS",
+        "ZC_BULLET_RAIN_SPEED"
+      ],
+      "assets/script/app/zcds/model/ZCPvpTableParser.ts": [
+        "GAME_END_PREFAB_SIZE_LIMIT"
+      ],
+      "assets/script/app/zcds/model/ZCPvpTileRules.ts": [
+        "ZC_PVP_RARITY_KEYS",
+        "ZC_PVP_TILE_SET_SIZE"
+      ],
+      "assets/script/app/zcds/model/ZCQuakeFx.ts": [
+        "ZC_EMPOWERED_FX_OVERRIDES"
+      ],
+      "assets/script/app/zcds/model/ZCRankBoard.ts": [
+        "RANK_FALLBACK_NAMES",
+        "RANK_SEAT_ORDER"
+      ],
+      "assets/script/app/zcds/model/ZCRayBeamFx.ts": [
+        "ZC_RAY_BEAM_REFERENCE_HALF_LENGTH"
+      ],
+      "assets/script/app/zcds/model/ZCSettlementOutcomeStyle.ts": [
+        "ZC_OUTCOME_LOSE_ANIMATION",
+        "ZC_OUTCOME_WIN_ANIMATION"
+      ],
+      "assets/script/app/zcds/model/ZCSkillAnnounceStyle.ts": [
+        "ZC_SKILL_ANNOUNCE_BLOCK_HEIGHT",
+        "ZC_SKILL_ANNOUNCE_FADE_RATIO",
+        "ZC_SKILL_ANNOUNCE_FALLBACK_SECONDS",
+        "ZC_SKILL_ANNOUNCE_NAME_GAP",
+        "ZC_SKILL_ANNOUNCE_NAME_SIZE",
+        "ZC_SKILL_ANNOUNCE_OUTLINE_WIDTH",
+        "ZC_SKILL_ANNOUNCE_POP_FROM",
+        "ZC_SKILL_ANNOUNCE_SPINE_SCALE"
+      ],
+      "assets/script/app/zcds/model/ZCSkillRangeRingFx.ts": [
+        "ZC_SKILL_RANGE_RING_PREFAB_PATH",
+        "ZC_SKILL_RANGE_RING_REFERENCE_RADIUS"
+      ],
+      "assets/script/app/zcds/model/ZCTrapFx.ts": [
+        "ZC_TRAP_BEHAVIOR_KEY",
+        "ZC_TRAP_EXPIRE_PREFAB_BY_UNIT",
+        "ZC_TRAP_EXPIRE_PREFAB_PATH"
+      ],
+      "assets/script/app/zcds/model/ZCUISpineBannerStyle.ts": [
+        "ZC_UI_BANNER_WIDTH"
+      ],
+      "assets/script/app/zcds/model/ZCWindBarrageFx.ts": [
+        "ZC_BARRAGE_BEHAVIOR_KEY",
+        "ZC_WIND_BOLT_BEHAVIOR_KEY"
+      ],
+      "assets/script/app/zcds/view/ZCBeamEffect.ts": [
+        "ZC_BEAM_MIN_LENGTH"
+      ],
+      "assets/script/app/zcds/view/ZCCardRevealView.ts": [
+        "ZC_CARD_REVEAL_UI_SCALE"
+      ],
+      "assets/script/app/zcds/view/ZCCombatEffectScale.ts": [
+        "ZC_HIT_FX_FALLBACK_SCALE"
+      ],
+      "assets/script/app/zcds/view/ZCGameHUDView.ts": [
+        "ZC_GOLD_DENY_LIFT_PIXELS",
+        "ZC_GOLD_DENY_POP_SCALE",
+        "ZC_MAP_HOME_CENTER_OFFSET_Y"
+      ],
+      "assets/script/app/zcds/view/ZCGameKillBannerView.ts": [
+        "KILL_BANNER_SLANT_DEGREES"
+      ],
+      "assets/script/app/zcds/view/ZCGameLegendBannerView.ts": [
+        "LEGEND_ROLE_BOTTOM_Y",
+        "LEGEND_ROLE_DROP_Y",
+        "LEGEND_ROLE_GENERATE_SECONDS",
+        "LEGEND_ROLE_TARGET_HEIGHT"
+      ],
+      "assets/script/app/zcds/view/ZCGameViewUtil.ts": [
+        "FLOAT_TEXT_GOLD_DROP_SPAN",
+        "FLOAT_TEXT_GOLD_FADE_START",
+        "FLOAT_TEXT_GOLD_HOLD_SPAN",
+        "FLOAT_TEXT_GOLD_POP",
+        "FLOAT_TEXT_GOLD_RISE_PX",
+        "HEALTH_BAR_VISIBLE_SECONDS",
+        "POP_DIP_AT",
+        "POP_DIP_SCALE",
+        "POP_PEAK_AT",
+        "ZC_CLAIM_WAVE_ACCEL_POWER",
+        "ZC_CLAIM_WAVE_SECONDS",
+        "ZC_NEUTRAL_HINT_CYCLE_SECONDS",
+        "ZC_NEUTRAL_HINT_MIN_ALPHA",
+        "ZC_VICTORY_SWEEP_PULSE_LEAD_ROWS",
+        "ZC_VICTORY_SWEEP_PULSE_STEP_SECONDS",
+        "ZC_VICTORY_SWEEP_REVERT_LEAD_ROWS",
+        "ZC_VICTORY_SWEEP_REVERT_STEP_SECONDS",
+        "ZC_VICTORY_SWEEP_SHIMMER_CYCLE_SECONDS",
+        "ZC_VICTORY_SWEEP_SHIMMER_MAX",
+        "ZC_VICTORY_SWEEP_SHIMMER_ROW_PHASE",
+        "ZC_VICTORY_SWEEP_SHIMMER_STEPS",
+        "ZC_VICTORY_SWEEP_STEP_SECONDS"
+      ],
+      "assets/script/app/zcds/view/ZCHexView.ts": [
+        "NEUTRAL_RESOURCE_LIFT"
+      ],
+      "assets/script/app/zcds/view/ZCHudBossPanel.ts": [
+        "ZC_BOSS_HP_DRAIN_SECONDS"
+      ],
+      "assets/script/app/zcds/view/ZCNeutralRewardFx.ts": [
+        "ZC_ARTIFACT_CLAIM_BURST_FADE_SECONDS",
+        "ZC_ARTIFACT_CLAIM_BURST_FPS",
+        "ZC_ARTIFACT_CLAIM_BURST_SIZE",
+        "ZC_NEUTRAL_REWARD_ARTIFACT_POP",
+        "ZC_NEUTRAL_REWARD_COIN_FADE_SECONDS",
+        "ZC_NEUTRAL_REWARD_RISE_LIFT_PX"
+      ],
+      "assets/script/app/zcds/view/ZCOutlineLayer.ts": [
+        "NEUTRAL_GRID_LINE_COLOR",
+        "NEUTRAL_GRID_LINE_WIDTH"
+      ],
+      "assets/script/app/zcds/view/ZCSpawnSelectionView.ts": [
+        "SPAWN_HINT_CENTER_Y",
+        "SPAWN_HINT_PICKING_Y"
+      ],
+      "assets/script/app/zcds/view/ZCTheme.ts": [
+        "ZC_RUINS_GRAY_MIX"
+      ],
+      "assets/script/core/hex/HexFlipPresentation.ts": [
+        "HEX_REVEAL_POP",
+        "HEX_SHATTER_FLASH",
+        "HEX_SHATTER_FLASH_WINDOW",
+        "HEX_SHATTER_REVEAL_START"
+      ],
+      "assets/script/framework/ui/UIMotion.ts": [
+        "UI_MOTION_EXIT_SECONDS",
+        "UI_MOTION_PANEL_ENTER_SECONDS",
+        "UI_MOTION_PANEL_SCALE_FROM",
+        "UI_MOTION_SCREEN_SCALE_FROM"
+      ]
+    },
+    "C2": {
+      "assets/script/app/ResConst.ts": [
+        "AUDIO_ROOT",
+        "PREFAB_ROOT",
+        "PREFAB_UI_ROOT",
+        "SFX_ROOT"
+      ],
+      "assets/script/app/battle/BattleStartService.ts": [
+        "BATTLE_FINISH_TIMEOUT_MS"
+      ],
+      "assets/script/app/battle/PvpInfoService.ts": [
+        "PVP_INFO_TIMEOUT_MS"
+      ],
+      "assets/script/app/battletoken/BattleTokenArt.ts": [
+        "BT_ART_ROOT"
+      ],
+      "assets/script/app/battletoken/BattleTokenTable.ts": [
+        "BT_TYPE_LOTTERY2"
+      ],
+      "assets/script/app/bigmap/application/BigMapArtCatalog.ts": [
+        "BIGMAP_CONCEPT_SPRITE_ROOT",
+        "BIGMAP_WORLD_CAMP_ART"
+      ],
+      "assets/script/app/bigmap/application/BigMapController.ts": [
+        "BIGMAP_SEARCH_MONSTER_FOUND"
+      ],
+      "assets/script/app/bigmap/application/BigMapLayoutLoader.ts": [
+        "BIGMAP_LAYOUT_DIR"
+      ],
+      "assets/script/app/bigmap/model/BigMapBattle.ts": [
+        "BIGMAP_ATTACK_PER_MAIN_LEVEL",
+        "BIGMAP_BASE_ATTACK"
+      ],
+      "assets/script/app/bigmap/model/BigMapCitySchedule.ts": [
+        "BIGMAP_CITY_PHASE_LABEL"
+      ],
+      "assets/script/app/bigmap/model/BigMapLayout.ts": [
+        "BIGMAP_LAYOUT_VERSION"
+      ],
+      "assets/script/app/bigmap/model/BigMapSaveData.ts": [
+        "BIGMAP_SAVE_VERSION"
+      ],
+      "assets/script/app/bigmap/model/BigMapServerState.ts": [
+        "BIGMAP_SERVER_POSITION_BASE"
+      ],
+      "assets/script/app/bigmap/view/BigMapBasePresentation.ts": [
+        "BIGMAP_BASE_MAP_SIZE"
+      ],
+      "assets/script/app/bigmap/view/BigMapCityPopup.ts": [
+        "BIGMAP_CITY_POPUP_BUFF_SLOTS",
+        "BIGMAP_CITY_POPUP_RANK_SLOTS",
+        "BIGMAP_CITY_POPUP_SCORE_LABEL"
+      ],
+      "assets/script/app/bigmap/view/BigMapWorldLayout.ts": [
+        "BIGMAP_COLUMN_STEP",
+        "BIGMAP_MARKER_ICON_LIFT",
+        "BIGMAP_ROW_STEP"
+      ],
+      "assets/script/app/card/CardDetailPresenter.ts": [
+        "DETAIL_CHAIN_SLOTS"
+      ],
+      "assets/script/app/card/FormationService.ts": [
+        "FORMATION_REQUEST_TIMEOUT_MS"
+      ],
+      "assets/script/app/card/model/UnitGrowthModifier.ts": [
+        "NO_GROWTH_MODIFIER"
+      ],
+      "assets/script/app/celebration/CelebrationArt.ts": [
+        "OS_POWER_TEXT_UNREACHED",
+        "OS_QUALITY_FRAME_ROOT",
+        "OS_RANK_TEXT_COLORS",
+        "OS_SPRITE_SLICED",
+        "OS_TINT_GRAY",
+        "OS_TINT_NORMAL"
+      ],
+      "assets/script/app/celebration/OSArtStrip.ts": [
+        "OS_REWARD_NATIVE_H",
+        "OS_REWARD_NATIVE_W"
+      ],
+      "assets/script/app/celebration/OSRankPage.ts": [
+        "CL_TICK_SECONDS"
+      ],
+      "assets/script/app/celebration/OSRankRankDetailPage.ts": [
+        "CL_DETAIL_SHOW_NUM"
+      ],
+      "assets/script/app/chat/ChatArt.ts": [
+        "CHAT_ART_JOIN_BTN",
+        "CHAT_ART_RECRUIT_BG",
+        "CHAT_SHARED_HEAD_FRAME_NAME",
+        "CHAT_SHARED_SEND_ROOT",
+        "CHAT_SHARED_TITLE_BG_NAME",
+        "CHAT_SHARED_TITLE_BG_ROOT"
+      ],
+      "assets/script/app/common/GemReward.ts": [
+        "GEM_ICON_ROOT"
+      ],
+      "assets/script/app/common/QualityFrameArt.ts": [
+        "QUALITY_FRAME_LEVELS"
+      ],
+      "assets/script/app/common/RedDotArt.ts": [
+        "RED_DOT_ICON_SIZES"
+      ],
+      "assets/script/app/common/RewardIcon.ts": [
+        "ITEM_ICON_PATH_ROOT"
+      ],
+      "assets/script/app/friend/FriendArt.ts": [
+        "FRIEND_ART_CHECK_BG",
+        "FRIEND_ART_HEAD_FRAME",
+        "FRIEND_ART_INPUT_BG",
+        "FRIEND_ART_LV_TAG",
+        "FRIEND_ART_ROW_BG"
+      ],
+      "assets/script/app/friend/FriendTexts.ts": [
+        "FRIEND_ROW_GET_END_TEXT"
+      ],
+      "assets/script/app/gift/RechargeActivityTable.ts": [
+        "RECHARGE_ACTIVITY_TYPE"
+      ],
+      "assets/script/app/guide/application/GuideGateway.ts": [
+        "GUIDE_FUNCTION_ID"
+      ],
+      "assets/script/app/guide/application/GuideLoader.ts": [
+        "GUIDE_DIALOG_TABLE",
+        "GUIDE_STEP_TABLE"
+      ],
+      "assets/script/app/hang/HangRepository.ts": [
+        "HJ_PRIVILEGE_NO_COUNT_SWEEP"
+      ],
+      "assets/script/app/itemdetail/ItemDetailArtLoader.ts": [
+        "ID_ART_ROOT"
+      ],
+      "assets/script/app/itemdetail/ItemInfoTable.ts": [
+        "ITEM_TYPE_NAMES"
+      ],
+      "assets/script/app/limitTimeAct/LimitTimeActTable.ts": [
+        "LIMIT_TIME_ACT_TYPE"
+      ],
+      "assets/script/app/mail/MailArt.ts": [
+        "MAIL_ROW_BG_READ",
+        "MAIL_SHARED_ROW_BG_UNREAD"
+      ],
+      "assets/script/app/mail/MailTable.ts": [
+        "MAIL_CONFIG_MAX_NUM",
+        "MAIL_CONFIG_VALID_DAYS"
+      ],
+      "assets/script/app/main/MainResBarFeedback.ts": [
+        "RES_BAR_SPEND_LABEL_HOP"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftTable.ts": [
+        "MONTH_CARD_ACT_TYPE",
+        "MONTH_CARD_ACT_TYPE_2"
+      ],
+      "assets/script/app/rd/RdServerVar.ts": [
+        "RD_CACHE_NAME"
+      ],
+      "assets/script/app/role/RoleArt.ts": [
+        "RL_ART_SLICED",
+        "RL_QUALITY_MAX"
+      ],
+      "assets/script/app/role/RoleEquipRedDotTable.ts": [
+        "EQUIP_WASH_MIN_LIB_COUNT"
+      ],
+      "assets/script/app/role/RoleTable.ts": [
+        "ROLE_BAG_TAB_READY",
+        "ROLE_NAV_NAMES"
+      ],
+      "assets/script/app/role/RoleTexts.ts": [
+        "ROLE_QUALITY_NAMES"
+      ],
+      "assets/script/app/territory/model/TerritoryBattleIntro.ts": [
+        "TERRITORY_BATTLE_INTRO_COVER_JITTER",
+        "TERRITORY_BATTLE_INTRO_COVER_MARGIN"
+      ],
+      "assets/script/app/territory/model/TerritoryChapterSwitch.ts": [
+        "TERRITORY_CHAPTER_SWITCH_SINK_RATIO"
+      ],
+      "assets/script/app/territory/model/TerritoryChestAnimation.ts": [
+        "TERRITORY_CHEST_FLY_ARC_RATIO",
+        "TERRITORY_CHEST_FOUNTAIN_GRAVITY",
+        "TERRITORY_CHEST_FOUNTAIN_SPEED_MAX",
+        "TERRITORY_CHEST_FOUNTAIN_SPEED_MIN",
+        "TERRITORY_CHEST_STAR_LIFE_MAX",
+        "TERRITORY_CHEST_STAR_LIFE_MIN",
+        "TERRITORY_CHEST_STAR_SPEED_MAX",
+        "TERRITORY_CHEST_STAR_SPEED_MIN"
+      ],
+      "assets/script/app/territory/model/TerritoryChestBubble.ts": [
+        "TERRITORY_CHEST_BUBBLE_LINE_HEIGHT",
+        "TERRITORY_CHEST_BUBBLE_OUTLINE_COLOR",
+        "TERRITORY_CHEST_BUBBLE_OUTLINE_WIDTH"
+      ],
+      "assets/script/app/territory/model/TerritoryChestOpenLayout.ts": [
+        "CHEST_LEGEND_CARD_RARITY",
+        "CHEST_OPEN_CARD_FROM_SCALE",
+        "CHEST_OPEN_CARD_RISE",
+        "CHEST_OPEN_CHEST_FROM_SCALE"
+      ],
+      "assets/script/app/territory/model/TerritoryChestTier.ts": [
+        "TERRITORY_FIXED_TILE_SOUND_LARGE_ABOVE"
+      ],
+      "assets/script/app/territory/model/TerritoryCloud.ts": [
+        "TERRITORY_CLOUD_ART_CENTER_Y"
+      ],
+      "assets/script/app/territory/model/TerritoryHeroReward.ts": [
+        "TERRITORY_HERO_FLIGHT_ARC_RATIO"
+      ],
+      "assets/script/app/territory/model/TerritoryMapConfig.ts": [
+        "TERRITORY_SITE_TYPES"
+      ],
+      "assets/script/app/territory/model/TerritoryResourceGain.ts": [
+        "TERRITORY_GAIN_BURST_BASE_SCALE"
+      ],
+      "assets/script/app/territory/view/TerritoryCloudView.ts": [
+        "TERRITORY_CLOUD_BOTTOM_STRIP_SHADOW_NODE",
+        "TERRITORY_CLOUD_FILL_SHADOW_NODE",
+        "TERRITORY_CLOUD_LAYER_SHADOW_NODE",
+        "TERRITORY_CLOUD_POCKET_NODE"
+      ],
+      "assets/script/app/territory/view/TerritoryMapView.ts": [
+        "TERRITORY_GHOST_LAYER",
+        "TERRITORY_HEX_LOCK_LAYER"
+      ],
+      "assets/script/app/zcds/ZCMissileSkillDiagnostics.ts": [
+        "ZC_MISSILE_WATCH_UNIT_IDS"
+      ],
+      "assets/script/app/zcds/model/ZCBlinkCastFx.ts": [
+        "ZC_BLINK_CAST_BEHAVIOR_KEY"
+      ],
+      "assets/script/app/zcds/model/ZCBoltStrikeFx.ts": [
+        "ZC_BOLT_STRIKE_BEHAVIOR_KEY"
+      ],
+      "assets/script/app/zcds/model/ZCBurstFx.ts": [
+        "ZC_BURST_AURA_BEHAVIOR_KEY",
+        "ZC_BURST_IMPACT_PREFAB_SCREEN_WIDTH",
+        "ZC_BURST_KNOCKBACK_BEHAVIOR_KEY",
+        "ZC_BURST_SCREEN_PER_LOGIC"
+      ],
+      "assets/script/app/zcds/model/ZCChainLightningFx.ts": [
+        "ZC_CHAIN_FADE_STEP",
+        "ZC_CHAIN_SEGMENT_OVERLAP_SCREEN_LENGTH"
+      ],
+      "assets/script/app/zcds/model/ZCCombatCatalog.ts": [
+        "ZC_LUCK_TEXTS"
+      ],
+      "assets/script/app/zcds/model/ZCDamageStats.ts": [
+        "ZC_DAMAGE_STATS_MIN_BAR_RATIO"
+      ],
+      "assets/script/app/zcds/model/ZCEffectCatalog.ts": [
+        "ZC_HIT_FX_SURFACE_LIFT_Y"
+      ],
+      "assets/script/app/zcds/model/ZCFanSweepFx.ts": [
+        "ZC_FAN_SWEEP_BEHAVIOR_KEY"
+      ],
+      "assets/script/app/zcds/model/ZCFireZoneFx.ts": [
+        "ZC_FIRE_ZONE_BEHAVIOR_KEY"
+      ],
+      "assets/script/app/zcds/model/ZCGameModel.ts": [
+        "ZC_DEFENCE_MONSTER_SCALE_MAX"
+      ],
+      "assets/script/app/zcds/model/ZCGuideConfig.ts": [
+        "ZC_GUIDE_MAX_REWARDS"
+      ],
+      "assets/script/app/zcds/model/ZCMapConfig.ts": [
+        "ZC_MAP_ZOOM_HARD_MAX",
+        "ZC_MAP_ZOOM_HARD_MIN"
+      ],
+      "assets/script/app/zcds/model/ZCProjectileDropStyle.ts": [
+        "ZC_BULLET_FLY_SPEED",
+        "ZC_BULLET_RAIN_IMPACT_FALLBACK_SECONDS"
+      ],
+      "assets/script/app/zcds/model/ZCRayBeamFx.ts": [
+        "ZC_RAY_BEAM_BEHAVIOR_KEY"
+      ],
+      "assets/script/app/zcds/model/ZCSingleStrikeFx.ts": [
+        "ZC_SINGLE_STRIKE_BEHAVIOR_KEY"
+      ],
+      "assets/script/app/zcds/model/ZCSkillAnnounceStyle.ts": [
+        "ZC_ANNOUNCE_SKILL_KINDS",
+        "ZC_SKILL_ANNOUNCE_POP_RATIO"
+      ],
+      "assets/script/app/zcds/model/ZCSpawnSelection.ts": [
+        "ZC_SPAWN_AI_FOLLOW_DELAY_SECONDS",
+        "ZC_SPAWN_AI_MAX_DELAY_SECONDS",
+        "ZC_SPAWN_AI_MIN_DELAY_SECONDS",
+        "ZC_SPAWN_COMPRESSED_SECONDS",
+        "ZC_SPAWN_SELECTION_SECONDS"
+      ],
+      "assets/script/app/zcds/model/ZCSplashShotFx.ts": [
+        "ZC_SPLASH_SHOT_BEHAVIOR_KEY",
+        "ZC_SPORE_BURST_BEHAVIOR_KEY"
+      ],
+      "assets/script/app/zcds/model/ZCStormFx.ts": [
+        "ZC_STORM_BEHAVIOR_KEY"
+      ],
+      "assets/script/app/zcds/model/ZCWindBarrageFx.ts": [
+        "ZC_BARRAGE_IMPACT_REFERENCE_RADIUS",
+        "ZC_BARRAGE_MIN_FLIGHT_SECONDS"
+      ],
+      "assets/script/app/zcds/model/systems/ZCAttackResolutionSystem.ts": [
+        "ZC_LANCE_DEFAULT_EFFECT_PREFAB_PATH"
+      ],
+      "assets/script/app/zcds/view/ZCGameHUDView.ts": [
+        "ZC_GOLD_DENY_BOUNCE_SECONDS",
+        "ZC_GOLD_DENY_FLASH_STEPS",
+        "ZC_GOLD_DENY_FLASH_STEP_SECONDS",
+        "ZC_MAP_ZOOM_WHEEL_STEP"
+      ],
+      "assets/script/app/zcds/view/ZCGameKillBannerView.ts": [
+        "KILL_BANNER_HEIGHT",
+        "KILL_BANNER_PORTRAIT_CENTER_X",
+        "KILL_BANNER_TEXT_LEFT",
+        "KILL_BANNER_TEXT_RIGHT_MARGIN"
+      ],
+      "assets/script/app/zcds/view/ZCGameViewUtil.ts": [
+        "DEVELOPABLE_SPAWN_FADE_END",
+        "FLOAT_TEXT_GOLD_RISE_SPAN",
+        "ZC_HEX_COLUMN_SPACING",
+        "ZC_HEX_ROW_SPACING",
+        "ZC_MAP_SCALE_X",
+        "ZC_MAP_SCALE_Y"
+      ],
+      "assets/script/app/zcds/view/ZCNeutralRewardFx.ts": [
+        "ZC_NEUTRAL_REWARD_ARC_PX",
+        "ZC_NEUTRAL_REWARD_ARTIFACT_FADE_SECONDS",
+        "ZC_NEUTRAL_REWARD_ARTIFACT_SIZE",
+        "ZC_NEUTRAL_REWARD_COIN_JITTER_PX",
+        "ZC_NEUTRAL_REWARD_COIN_SIZE",
+        "ZC_NEUTRAL_REWARD_LABEL_FONT_SIZE",
+        "ZC_NEUTRAL_REWARD_LABEL_HEIGHT",
+        "ZC_NEUTRAL_REWARD_LABEL_WIDTH"
+      ],
+      "assets/script/app/zcds/view/ZCOutlineLayer.ts": [
+        "NEUTRAL_GRID_INSET_SCALE"
+      ],
+      "assets/script/app/zcds/view/ZCTheme.ts": [
+        "ZC_DEEP_SATURATION"
+      ],
+      "assets/script/core/hex/HexFlipPresentation.ts": [
+        "HEX_FLIP_GROUND_GLOW",
+        "HEX_FLIP_GROUND_GLOW_FADE_COS",
+        "HEX_FLIP_RISE_RATIO",
+        "HEX_FLIP_SECONDS"
+      ],
+      "assets/script/core/layout/FguiLayout.ts": [
+        "FGUI_DESIGN_HEIGHT",
+        "FGUI_DESIGN_WIDTH"
+      ],
+      "assets/script/framework/audio/AudioMgr.ts": [
+        "AUDIO_CONFIG_TABLE",
+        "AUDIO_ROOT_NODE_NAME"
+      ],
+      "assets/script/framework/audio/AudioSettingTable.ts": [
+        "AUDIO_VOLUME_MAX",
+        "MUSIC_STORAGE_KEY_PREFIX",
+        "RESTORE_VOLUME",
+        "SOUND_STORAGE_KEY_PREFIX"
+      ],
+      "assets/script/framework/log/Log.ts": [
+        "LOG_MAIN_NAME"
+      ],
+      "assets/script/framework/tween/TweenEase.ts": [
+        "TweenEase"
+      ],
+      "assets/script/framework/ui/UIMotion.ts": [
+        "UI_MOTION_EXIT_OFFSET_Y",
+        "UI_MOTION_EXIT_SCALE",
+        "UI_MOTION_PANEL_OFFSET_Y",
+        "UI_MOTION_SCREEN_ENTER_SECONDS"
+      ],
+      "assets/script/framework/ui/UIResources.ts": [
+        "UI_RESOURCE_ROOT"
+      ],
+      "assets/script/platform/hotupdate/HotUpdateConfigLoader.ts": [
+        "DEFAULT_HOT_UPDATE_CONFIG"
+      ],
+      "assets/script/platform/hotupdate/NativeHotUpdateHost.ts": [
+        "HOT_UPDATE_CLIENT_VERSION_KEY",
+        "HOT_UPDATE_SEARCH_PATHS_KEY"
+      ]
+    },
+    "C3": {
+      "assets/script/app/activity/LayerActivityLayout.ts": [
+        "ACTIVITY_PREVIEW_CELL_SIZE"
+      ],
+      "assets/script/app/activity/LayerActivityTable.ts": [
+        "ACTIVITY_STATE_FINISH"
+      ],
+      "assets/script/app/battle/BattleStartModel.ts": [
+        "ZC_CHAPTER_BATTLE_SUB_CELL"
+      ],
+      "assets/script/app/battle/BattleStartService.ts": [
+        "BATTLE_FINISH_TIMEOUT_MS",
+        "BATTLE_RESULT_WIN"
+      ],
+      "assets/script/app/battletoken/BattleTokenArt.ts": [
+        "BT_SPRITE_SLICED"
+      ],
+      "assets/script/app/battletoken/BattleTokenTable.ts": [
+        "BT_MAX_LEVEL_EXP",
+        "BT_PLAN_FREE",
+        "BT_TYPE_END"
+      ],
+      "assets/script/app/bigmap/application/BigMapController.ts": [
+        "BIGMAP_VISIBLE_REFRESH_INTERVAL_MS"
+      ],
+      "assets/script/app/bigmap/model/BigMapLayout.ts": [
+        "BIGMAP_LAYOUT_VERSION"
+      ],
+      "assets/script/app/card/CardUpgradedTimeline.ts": [
+        "FX_DURATION"
+      ],
+      "assets/script/app/card/FormationService.ts": [
+        "FORMATION_REQUEST_TIMEOUT_MS",
+        "FORMATION_SAVE_TIMEOUT_MS"
+      ],
+      "assets/script/app/card/LineupSnapshot.ts": [
+        "LINEUP_SNAPSHOT_VERSION"
+      ],
+      "assets/script/app/celebration/CelebrationArt.ts": [
+        "OS_ART_ROOT",
+        "OS_SPRITE_SLICED"
+      ],
+      "assets/script/app/celebration/OSRankPage.ts": [
+        "CL_DEFAULT_TAB",
+        "CL_TICK_SECONDS"
+      ],
+      "assets/script/app/chat/ChatArt.ts": [
+        "CHAT_SPRITE_SLICED"
+      ],
+      "assets/script/app/chat/ChatTable.ts": [
+        "TF_BATTLE_TYPE_CHAPTER"
+      ],
+      "assets/script/app/common/RedDotState.ts": [
+        "RED_DOT_TYPE_NUMBER"
+      ],
+      "assets/script/app/friend/FriendArt.ts": [
+        "FRIEND_SPRITE_SLICED"
+      ],
+      "assets/script/app/gift/GiftTable.ts": [
+        "GIFT_TYPE_DAILY"
+      ],
+      "assets/script/app/guide/application/GuideGateway.ts": [
+        "GUIDE_FUNCTION_ID"
+      ],
+      "assets/script/app/guide/model/GuideSaveStore.ts": [
+        "GUIDE_SAVE_VERSION"
+      ],
+      "assets/script/app/hang/HangArt.ts": [
+        "HJ_SPRITE_SLICED"
+      ],
+      "assets/script/app/hang/HangTable.ts": [
+        "HJ_FALLBACK_INCOME_LEVEL",
+        "HJ_INTERACT_STATE_DONE",
+        "HJ_MIN_CHALLENGE_LEVEL",
+        "HJ_PASSED_STAR",
+        "HJ_SWEEP_TYPE_CHAPTER"
+      ],
+      "assets/script/app/itemdetail/ItemDetailArtLoader.ts": [
+        "ID_ART_ROOT"
+      ],
+      "assets/script/app/itemdetail/ItemDetailTable.ts": [
+        "CARD_ITEM_FRAME_STEP_SHIFT"
+      ],
+      "assets/script/app/league/LeagueArt.ts": [
+        "LEAGUE_SPRITE_SLICED"
+      ],
+      "assets/script/app/league/LeagueTable.ts": [
+        "LEAGUE_DISCOUNT_RESET_DAY_SECONDS"
+      ],
+      "assets/script/app/limitTimeAct/LimitTimeActTypes.ts": [
+        "TASK_STATE_FINISH"
+      ],
+      "assets/script/app/mail/MailTable.ts": [
+        "MAIL_REWARD_SLOT_SIZE",
+        "MAIL_STATE_READ"
+      ],
+      "assets/script/app/main/GameViewClickService.ts": [
+        "GAME_VIEW_CLICK_TIMEOUT_MS"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftLayout.ts": [
+        "MONTHCARD_SP_SCALE"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftTable.ts": [
+        "MONTH_CARD_TYPE_WELFARE"
+      ],
+      "assets/script/app/role/MilitiaTypes.ts": [
+        "MILITIA_DEFAULT_LEVEL"
+      ],
+      "assets/script/app/role/RoleArt.ts": [
+        "RL_ART_ROOT"
+      ],
+      "assets/script/app/sevenDay/SevenDayTable.ts": [
+        "SEVEN_DAY_STATE_FINISH"
+      ],
+      "assets/script/app/store/StoreAd.ts": [
+        "STORE_AD_TYPE_COMMON_BOX"
+      ],
+      "assets/script/app/territory/model/TerritoryBattleIntro.ts": [
+        "TERRITORY_BATTLE_INTRO_COVER_ALPHA_MAX"
+      ],
+      "assets/script/app/territory/model/TerritoryChestBubble.ts": [
+        "TERRITORY_CHEST_BUBBLE_ICON_SIZE",
+        "TERRITORY_CHEST_BUBBLE_OUTLINE_WIDTH"
+      ],
+      "assets/script/app/territory/model/TerritoryChestTier.ts": [
+        "TERRITORY_CHEST_MEDIUM_MAX",
+        "TERRITORY_FIXED_TILE_SOUND_LARGE_ABOVE"
+      ],
+      "assets/script/app/territory/model/TerritoryCloud.ts": [
+        "TERRITORY_CLOUD_SCALE"
+      ],
+      "assets/script/app/territory/model/TerritoryConditionBadge.ts": [
+        "TERRITORY_CONDITION_CHEST_GAP",
+        "TERRITORY_CONDITION_FACE_MIN_MARGIN"
+      ],
+      "assets/script/app/territory/model/TerritoryLevelBubble.ts": [
+        "TERRITORY_PVP_BUBBLE_BODY_BOTTOM_ROW"
+      ],
+      "assets/script/app/territory/model/TerritoryMonsterBoxSpec.ts": [
+        "TERRITORY_MONSTER_BOX_MIN_LV"
+      ],
+      "assets/script/app/territory/model/TerritoryResourceGain.ts": [
+        "TERRITORY_GAIN_BURST_BASE_SCALE",
+        "TERRITORY_GAIN_BURST_HALF_ANGLE_DEG"
+      ],
+      "assets/script/app/territory/model/TerritoryTapFeedback.ts": [
+        "TERRITORY_TAP_RING_RADIUS"
+      ],
+      "assets/script/app/territory/model/TerritoryUnlockTransition.ts": [
+        "TERRITORY_UNLOCK_TRANSITION_SECONDS"
+      ],
+      "assets/script/app/territory/view/TerritoryStationView.ts": [
+        "CONDITION_GAP"
+      ],
+      "assets/script/app/zcds/model/ZCChainLightningFx.ts": [
+        "ZC_CHAIN_SEGMENT_LEADING_GAP_SCREEN_LENGTH"
+      ],
+      "assets/script/app/zcds/model/ZCCharacterDrawOrder.ts": [
+        "ZC_CHARACTER_TIER_GROUND"
+      ],
+      "assets/script/app/zcds/model/ZCGameModel.ts": [
+        "ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS"
+      ],
+      "assets/script/app/zcds/model/ZCNeutralBurst.ts": [
+        "ZC_NEUTRAL_BURST_HALF_ANGLE_DEG"
+      ],
+      "assets/script/app/zcds/model/ZCSpawnSelection.ts": [
+        "ZC_SPAWN_AI_FOLLOW_DELAY_SECONDS"
+      ],
+      "assets/script/app/zcds/view/ZCCombatEffectScale.ts": [
+        "ZC_HIT_FX_FALLBACK_SCALE"
+      ],
+      "assets/script/app/zcds/view/ZCGameViewUtil.ts": [
+        "ZC_MAP_PRESENTATION_SCALE",
+        "ZC_VICTORY_SWEEP_PULSE_BAND_ROWS"
+      ],
+      "assets/script/app/zcds/view/ZCNeutralRewardFx.ts": [
+        "ZC_ARTIFACT_CLAIM_BURST_SIZE",
+        "ZC_NEUTRAL_REWARD_ARC_PX",
+        "ZC_NEUTRAL_REWARD_LABEL_FONT_SIZE",
+        "ZC_NEUTRAL_REWARD_LABEL_HEIGHT"
+      ],
+      "assets/script/app/zcds/view/ZCOutlineLayer.ts": [
+        "NEUTRAL_GRID_INSET_SCALE"
+      ],
+      "assets/script/core/update/HotUpdateTypes.ts": [
+        "HOT_UPDATE_SCHEMA_VERSION"
+      ]
+    },
+    "C4": {
+      "assets/script/app/activity/ActivityProgressBox.ts": [
+        "const LOCKED_TINT = new Color(190, 190, 190, 255);",
+        "const WHITE = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/activity/LayerActivityPage.ts": [
+        "hintErrorColor: Color = new Color(226, 88, 74, 255);",
+        "private readonly hintIdleColor = new Color();"
+      ],
+      "assets/script/app/bigmap/view/BigMapButton.ts": [
+        ": this.foreground ? new Color(167, 159, 143) : BIGMAP_COLORS.muted;",
+        "? (enabled ? Color.WHITE : new Color(140, 140, 140))",
+        "const fallbackText = this.primary ? new Color(48, 34, 22) : BIGMAP_COLORS.text;"
+      ],
+      "assets/script/app/bigmap/view/BigMapCityPopup.ts": [
+        "const AVATAR_EMPTY_TINT = new Color(150, 150, 150, 255);"
+      ],
+      "assets/script/app/bigmap/view/BigMapResourceFeedback.ts": [
+        "floatLabel.outlineColor = new Color(0, 0, 0, 255);",
+        "this.floatLabel.color = new Color(255, 255, 255, Math.round(255 * fx.alpha));",
+        "this.label.color = new Color(r, g, b, Math.round(this.baseA * fx.labelAlpha));",
+        "this.label.color = new Color(this.baseR, this.baseG, this.baseB, this.baseA);"
+      ],
+      "assets/script/app/bigmap/view/BigMapSkin.ts": [
+        "card: new Color(72, 73, 83, 232),",
+        "cardDeep: new Color(46, 47, 55, 240),",
+        "cardLight: new Color(92, 93, 104, 236),",
+        "cream: new Color(238, 235, 214, 255),",
+        "danger: new Color(214, 96, 62, 255),",
+        "dangerText: new Color(255, 205, 190, 255),",
+        "dark: new Color(41, 32, 21),",
+        "glowFill: new Color(255, 226, 150, 64),",
+        "gold: new Color(245, 201, 92, 255),",
+        "gold: new Color(255, 202, 92),",
+        "ink: new Color(48, 34, 22, 255),",
+        "line: new Color(176, 138, 78, 170),",
+        "lockedArt: Object.freeze(new Color(112, 116, 126, 255)),",
+        "lockedCard: Object.freeze(new Color(90, 105, 139, 255)),",
+        "muted: new Color(178, 176, 168, 255),",
+        "muted: new Color(189, 180, 161),",
+        "mutedText: new Color(224, 220, 208, 255),",
+        "nameOutline: new Color(34, 30, 24, 255),",
+        "placeBad: new Color(122, 26, 26, 235),",
+        "placeOk: new Color(24, 92, 40, 235),",
+        "rim: new Color(7, 7, 8, 255),",
+        "ringDone: new Color(255, 202, 92, 255),",
+        "ringUnder: new Color(28, 24, 18, 150),",
+        "ringUrgent: new Color(255, 140, 90, 255),",
+        "scrim: new Color(5, 10, 14, 205),",
+        "selectInner: new Color(255, 202, 92, 255),",
+        "selectOuter: new Color(20, 18, 14, 210),",
+        "text: new Color(245, 233, 205),"
+      ],
+      "assets/script/app/bigmap/view/BigMapWorldMarker.ts": [
+        "paintMapMarkerBadge(this.badgeBackground, tint, new Color(49, 31, 26), fallbackWidth, fallbackHeight);"
+      ],
+      "assets/script/app/bigmap/view/BigMapWorldView.ts": [
+        "const TRANSPARENT_GRID_COLOR = new Color(70, 92, 74, 48);",
+        "const fill = new Color(tint.r, tint.g, tint.b, fillAlpha);",
+        "forest: new Color(190, 198, 152),",
+        "forest: new Color(248, 244, 226),",
+        "forest: new Color(96, 170, 104, 24),",
+        "g.strokeColor = new Color(101, 79, 58);",
+        "marker.icon.color = !isPlayerBase && city.state === 'unavailable' ? new Color(130, 130, 130) : Color.WHITE;",
+        "marker.icon.color = monster.respawnInSeconds > 0 ? new Color(100, 100, 100) : Color.WHITE;",
+        "plain: new Color(0, 0, 0, 0),",
+        "plain: new Color(206, 175, 138),",
+        "rock: new Color(120, 122, 132, 24),",
+        "rock: new Color(190, 186, 178),",
+        "rock: new Color(240, 238, 234),",
+        "this.strokeTerritory(edges, new Color((tint.r + 255) / 2, (tint.g + 255) / 2, (tint.b + 255) / 2, 245), 2);",
+        "this.strokeTerritory(edges, new Color(tint.r, tint.g, tint.b, 45), 16);",
+        "this.strokeTerritory(edges, new Color(tint.r, tint.g, tint.b, BIGMAP_TERRITORY_STROKE_ALPHA), 6);",
+        "water: new Color(152, 190, 202),",
+        "water: new Color(228, 240, 244),",
+        "water: new Color(92, 138, 208, 40),"
+      ],
+      "assets/script/app/card/CardDetailHexSlot.ts": [
+        "unlockedColor: Color = new Color(255, 239, 202, 255);"
+      ],
+      "assets/script/app/card/CardDetailMilestoneRow.ts": [
+        "boostNumberColor: Color = new Color(24, 115, 30, 255);",
+        "lockedColor: Color = new Color(124, 106, 83, 255);",
+        "plainNumberColor: Color = new Color(28, 74, 168, 255);",
+        "private readonly lockedBackground = new Color(146, 129, 96, 255);",
+        "private readonly unlockedBackground = new Color(255, 255, 255, 255);",
+        "unlockedColor: Color = new Color(62, 38, 19, 255);"
+      ],
+      "assets/script/app/card/CardLineupCard.ts": [
+        "const COLOR_NORMAL = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/card/CardSkillListView.ts": [
+        "activeColor: Color = new Color(74, 60, 42, 255);",
+        "lockedColor: Color = new Color(138, 128, 110, 255);"
+      ],
+      "assets/script/app/card/CardSkillPage.ts": [
+        "@property(Color) enoughColor = new Color(255, 255, 255, 255);",
+        "@property(Color) insufficientColor = new Color(255, 119, 93, 255);"
+      ],
+      "assets/script/app/card/CardSkillTierView.ts": [
+        "@property(Color) learnedColor = new Color(255, 192, 34, 255);",
+        "@property(Color) unlearnedColor = new Color(255, 255, 255, 255);",
+        "boostNumberColor: Color = new Color(24, 115, 30, 255);",
+        "plainNumberColor: Color = new Color(28, 74, 168, 255);"
+      ],
+      "assets/script/app/card/CardUnitPreview.ts": [
+        "skeleton.color = new Color(tint.r, tint.g, tint.b, tint.a);"
+      ],
+      "assets/script/app/card/CardUpgradePage.ts": [
+        "critColor: Color = new Color(97, 19, 4, 255);",
+        "disabledUpgradeLabelColor: Color = new Color(255, 255, 255, 160);",
+        "enoughColor: Color = new Color(104, 218, 59, 255);",
+        "idleColor: Color = new Color(176, 168, 150, 255);",
+        "lackColor: Color = new Color(226, 88, 74, 255);"
+      ],
+      "assets/script/app/card/CardUpgradedPage.ts": [
+        "const BAR_GLOW_TINT = new Color(150, 236, 96, 255);",
+        "const HERO_GLOW_TINT = new Color(236, 255, 206, 255);",
+        "const HERO_HALO_TINT = new Color(168, 240, 110, 255);",
+        "sprite.color = new Color(BAR_GLOW_TINT.r, BAR_GLOW_TINT.g, BAR_GLOW_TINT.b, 255);",
+        "sprite.color = new Color(HERO_GLOW_TINT.r, HERO_GLOW_TINT.g, HERO_GLOW_TINT.b, 255);",
+        "sprite.color = new Color(HERO_HALO_TINT.r, HERO_HALO_TINT.g, HERO_HALO_TINT.b, 255);",
+        "sprite.color = new Color(spec.rgb[0], spec.rgb[1], spec.rgb[2], Math.round(255 * spec.alpha));"
+      ],
+      "assets/script/app/card/LineupBoardPage.ts": [
+        "presetActiveColor: Color = new Color(216, 178, 96, 255);",
+        "presetIdleColor: Color = new Color(92, 70, 48, 255);"
+      ],
+      "assets/script/app/celebration/OSRankItem.ts": [
+        "return new Color(rgb[0], rgb[1], rgb[2], 255);"
+      ],
+      "assets/script/app/celebration/OSShopItem.ts": [
+        "const tint = new Color(...osTint(vis.buyGrayed), 255);"
+      ],
+      "assets/script/app/common/ResBar.ts": [
+        "glow.fillColor = new Color(255, 241, 206, alpha);",
+        "glow.strokeColor = new Color(255, 252, 236, Math.min(255, Math.round(alpha * 1.9)));"
+      ],
+      "assets/script/app/common/TabButton.ts": [
+        "const TAB_DISABLED_TINT = new Color(140, 140, 140, 255);",
+        "const TAB_ENABLED_TINT = new Color(255, 255, 255, 255);",
+        "offLabelColor: Color = new Color(255, 255, 255, 255);",
+        "onLabelColor: Color = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/common/Toast.ts": [
+        "barColor: Color = new Color(0, 0, 0, 153);",
+        "fontColor: Color = new Color(255, 255, 255, 145);"
+      ],
+      "assets/script/app/firstRecharge/FirstRechargePage.ts": [
+        "hintErrorColor: Color = new Color(226, 88, 74, 255);",
+        "private readonly hintIdleColor = new Color();"
+      ],
+      "assets/script/app/firstRecharge/FirstRechargeTierTab.ts": [
+        "const TIER_LABEL_COLOR_OFF = new Color(255, 255, 255, 255);",
+        "const TIER_LABEL_COLOR_ON = new Color(48, 38, 24, 255);"
+      ],
+      "assets/script/app/friend/FriendRow.ts": [
+        ": new Color(255, 255, 255, 255);",
+        "? new Color(tint[0], tint[1], tint[2], 255)"
+      ],
+      "assets/script/app/friend/FriendTabButton.ts": [
+        ": new Color(74, 55, 38, 255);",
+        "? new Color(255, 248, 234, 255)",
+        "this.label.outlineColor = new Color(122, 74, 5, 255);"
+      ],
+      "assets/script/app/gift/GiftPage.ts": [
+        "const GIFT_HINT_ERROR = new Color(226, 88, 74, 255);",
+        "const GIFT_HINT_IDLE = new Color(176, 168, 150, 255);"
+      ],
+      "assets/script/app/gift/GiftTabButton.ts": [
+        "const BACKGROUND_COLOR = new Color(255, 255, 255, 255);",
+        "const LABEL_COLOR_OFF = new Color(255, 255, 255, 255);",
+        "const LABEL_COLOR_ON = new Color(48, 38, 24, 255);"
+      ],
+      "assets/script/app/league/LeagueCreatePage.ts": [
+        "if (label.enableOutline) label.outlineColor = new Color(stroke[0], stroke[1], stroke[2], 255);",
+        "label.color = new Color(color[0], color[1], color[2], 255);"
+      ],
+      "assets/script/app/league/LeagueDiscountPage.ts": [
+        "const GRAY_TINT = new Color(...LEAGUE_TINT_GRAY);",
+        "const NORMAL_TINT = new Color(...LEAGUE_TINT_NORMAL);",
+        "graphics.fillColor = new Color(r, g, b, 255);"
+      ],
+      "assets/script/app/league/LeagueNorthRewardRow.ts": [
+        "const TINT_GRAY = new Color(...LEAGUE_TINT_GRAY);",
+        "const TINT_NORMAL = new Color(...LEAGUE_TINT_NORMAL);"
+      ],
+      "assets/script/app/league/LeagueStoreRow.ts": [
+        "const GRAY_TINT = new Color(...LEAGUE_TINT_GRAY);",
+        "const NORMAL_TINT = new Color(...LEAGUE_TINT_NORMAL);"
+      ],
+      "assets/script/app/limitTimeAct/LimitTimeActPage.ts": [
+        "const TAB_LABEL_COLOR_OFF = new Color(255, 255, 255, 255);",
+        "const TAB_LABEL_COLOR_ON = new Color(48, 38, 24, 255);"
+      ],
+      "assets/script/app/loading/LaunchProgressPage.ts": [
+        "if (this.progressTrack) this.progressTrack.color = new Color(30, 43, 61, 230);",
+        "this.progressFill.color = new Color(59, 206, 235, 255);"
+      ],
+      "assets/script/app/login/LoginPage.ts": [
+        "const STATUS_COLOR = new Color(166, 176, 166, 255);"
+      ],
+      "assets/script/app/login/ServerSelectItem.ts": [
+        "[ServerStatus.Full]: new Color(242, 90, 80, 255),",
+        "[ServerStatus.Maintenance]: new Color(145, 145, 145, 255),",
+        "[ServerStatus.New]: new Color(248, 205, 78, 255),",
+        "const NORMAL_STATUS_COLOR = new Color(132, 220, 67, 255);"
+      ],
+      "assets/script/app/main/ChapterSelectItem.ts": [
+        "const STATUS_INK_GOLD = new Color(92, 56, 28, 255);",
+        "const STATUS_INK_GREEN = new Color(255, 248, 228, 255);"
+      ],
+      "assets/script/app/main/ChestDropFlightView.ts": [
+        "this.trail.fillColor = new Color(r, g, b, Math.round(255 * Math.min(1, quad.alpha)));"
+      ],
+      "assets/script/app/main/HeroFragmentBadge.ts": [
+        "const BAR_BG_COLOR = new Color(62, 64, 72, 255);",
+        "const BAR_FILL_COLOR = new Color(60, 200, 40, 255);",
+        "private readonly shineColor = new Color(255, 255, 255, 0);"
+      ],
+      "assets/script/app/main/MainResBarSlot.ts": [
+        "private readonly labelBaseColor = new Color(255, 255, 255, 255);",
+        "this.spendFloatLabel.color = new Color(255, 255, 255, Math.round(255 * fx.alpha));",
+        "this.valueLabel.color = new Color(",
+        "this.valueLabel.color = new Color(r, g, b, alpha);"
+      ],
+      "assets/script/app/matching/MatchPlayerItem.ts": [
+        "this.searchAvatar.color = new Color(tint[0], tint[1], tint[2], 255);"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftEntry.ts": [
+        "color = new Color();"
+      ],
+      "assets/script/app/playerinfo/ChangeHeadItem.ts": [
+        "const COLOR_LOCKED = new Color(90, 90, 90, 255);",
+        "const COLOR_NORMAL = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/role/EquipEvolveCostItem.ts": [
+        "const ENOUGH_COLOR = new Color(81, 209, 115);",
+        "const LACK_COLOR = new Color(255, 80, 84);"
+      ],
+      "assets/script/app/role/RoleBagPanel.ts": [
+        "graphics.fillColor = new Color(40, 26, 14, 238);",
+        "graphics.strokeColor = new Color(205, 160, 88, 255);",
+        "label.color = new Color(255, 255, 255, 255);",
+        "label.outlineColor = new Color(72, 40, 12, 255);",
+        "this.barSummary.color = new Color(255, 236, 196, 255);"
+      ],
+      "assets/script/app/role/RoleDashedCircle.ts": [
+        "color: Color = new Color(58, 35, 19, 130);"
+      ],
+      "assets/script/app/role/RoleEquipInfoPopup.ts": [
+        "1: new Color(183, 176, 163, 255),",
+        "2: new Color(143, 191, 122, 255),",
+        "3: new Color(111, 168, 214, 255),",
+        "4: new Color(185, 137, 201, 255),",
+        "5: new Color(230, 161, 92, 255),",
+        "6: new Color(217, 122, 108, 255),",
+        "7: new Color(217, 180, 94, 255),",
+        "const CHIP_GRAY = new Color(183, 176, 163, 255);",
+        "const CHIP_GREEN = new Color(169, 195, 154, 255);",
+        "const CHIP_PART = new Color(231, 217, 201, 255);",
+        "const CREAM = new Color(255, 243, 218, 255);",
+        "const INK = new Color(58, 35, 19, 255);"
+      ],
+      "assets/script/app/role/RoleGemInfoPopup.ts": [
+        "const LOCKED_TINT = new Color(255, 210, 120, 255);",
+        "const UNLOCKED_TINT = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/role/RoleGemReplacePanel.ts": [
+        "const C_DARK = new Color(58, 32, 4, 255);",
+        "const C_DARK_VALUE = new Color(128, 54, 2, 255);",
+        "const C_HEAD = new Color(106, 76, 44, 255);",
+        "const C_HINT = new Color(128, 98, 62, 255);",
+        "const C_OUTLINE = new Color(38, 24, 10, 235);",
+        "const C_TITLE = new Color(255, 233, 179, 255);",
+        "const C_VALUE = new Color(255, 232, 150, 255);",
+        "const C_WHITE = new Color(255, 253, 246, 255);",
+        "const ROW_RING_INK = new Color(124, 76, 26, 255);",
+        "const ROW_TINT_BLUE = new Color(126, 196, 255, 255);",
+        "const ROW_TINT_GOLD = new Color(255, 228, 168, 255);"
+      ],
+      "assets/script/app/role/RoleGemSocketTile.ts": [
+        "const ROW_BG_NORMAL = new Color(255, 255, 255, 255);",
+        "const ROW_BG_VIEWED = new Color(255, 242, 220, 255);"
+      ],
+      "assets/script/app/role/RolePage.ts": [
+        "const TAB_LABEL_IDLE = new Color(74, 55, 38, 255);",
+        "const TAB_LABEL_OUTLINE = new Color(54, 34, 17, 255);",
+        "label.color = active ? new Color(255, 255, 255, 255) : TAB_LABEL_IDLE.clone();"
+      ],
+      "assets/script/app/role/RoleStatRow.ts": [
+        "attack: new Color(232, 144, 43, 255),",
+        "defense: new Color(77, 143, 176, 255),",
+        "gem: new Color(140, 93, 158, 255),",
+        "life: new Color(78, 154, 78, 255),",
+        "normal: new Color(78, 51, 32, 255),"
+      ],
+      "assets/script/app/sevenDay/SevenDayPage.ts": [
+        "hintErrorColor: Color = new Color(226, 88, 74, 255);",
+        "private readonly hintIdleColor = new Color();"
+      ],
+      "assets/script/app/showReward/ShowRewardItem.ts": [
+        "const color = new Color(sprite.color);",
+        "const color = new Color(this.glow.color);"
+      ],
+      "assets/script/app/territory/view/TerritoryBattleCover.ts": [
+        "private readonly tint = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/territory/view/TerritoryChestView.ts": [
+        "Object.freeze(new Color(122, 232, 132)),",
+        "Object.freeze(new Color(126, 232, 255)),",
+        "Object.freeze(new Color(150, 240, 168)),",
+        "Object.freeze(new Color(178, 118, 255)),",
+        "Object.freeze(new Color(196, 156, 255)),",
+        "Object.freeze(new Color(255, 150, 200)),",
+        "Object.freeze(new Color(255, 168, 208)),",
+        "Object.freeze(new Color(255, 226, 110)),",
+        "Object.freeze(new Color(255, 226, 128)),",
+        "Object.freeze(new Color(96, 158, 255)),",
+        "Object.freeze(new Color(96, 232, 236)),",
+        "const RAY_COLOR = Object.freeze(new Color(255, 226, 138));",
+        "private readonly scratchColor = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/territory/view/TerritoryCloudView.ts": [
+        "private readonly dissolveFill = new Color(255, 255, 255, 0);",
+        "private readonly keepOutFill = new Color(255, 255, 255, 0);",
+        "private readonly tint = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/territory/view/TerritoryMonsterBoxPanel.ts": [
+        "private battleTint = new Color(255, 255, 255, 255);",
+        "private upgradeTint = new Color(255, 255, 255, 255);",
+        "sprite.color = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/territory/view/TerritoryMonsterPatrolView.ts": [
+        "const PATROL_DIM = new Color(",
+        "const PATROL_EDGE = new Color("
+      ],
+      "assets/script/app/territory/view/TerritoryStationView.ts": [
+        "private readonly badgeOutlineTint = new Color(0, 0, 0, 255);",
+        "private readonly badgeTextTint = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/territory/view/TerritoryTapFeedback.ts": [
+        "g.fillColor = new Color(126, 232, 132, Math.round(alpha * 92));",
+        "g.strokeColor = new Color(126, 206, 255, Math.round(Math.max(0, ring.alpha) * 235));"
+      ],
+      "assets/script/app/zcds/ui/GameRunAway.ts": [
+        "return idleSeatColor ??= new Color(120, 122, 128, 255);"
+      ],
+      "assets/script/app/zcds/ui/TestKapaiView.ts": [
+        "return new Color(r, g, b, Number.isFinite(a) ? a : 255);"
+      ],
+      "assets/script/app/zcds/ui/ZCGuideItem.ts": [
+        "blue: new Color(42, 111, 184, 255),",
+        "gold: new Color(229, 115, 3, 255),",
+        "green: new Color(74, 143, 34, 255),",
+        "private static readonly GUIDE_INK = new Color(87, 46, 35, 255);",
+        "purple: new Color(139, 63, 196, 255),"
+      ],
+      "assets/script/app/zcds/ui/ZCTestKapaiStage.ts": [
+        "grid.fillColor = new Color(cellColor.r, cellColor.g, cellColor.b, 55);",
+        "return new Color(r, g, b, Number.isFinite(a) ? a : 255);"
+      ],
+      "assets/script/app/zcds/view/ZCCardRevealView.ts": [
+        "private static readonly CARD_NAME_COLOR = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/zcds/view/ZCCombatEffectView.ts": [
+        "const BEAM_FALLBACK_COLOR = new Color(150, 240, 255);",
+        "graphics.fillColor = new Color(red, green, blue, Math.round(255 * quad.alpha));",
+        "private readonly genericTint = new Color(255, 229, 148);",
+        "private readonly tintScratch = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/zcds/view/ZCEffectPool.ts": [
+        "graphics.strokeColor = new Color(255, 248, 216, 230);"
+      ],
+      "assets/script/app/zcds/view/ZCFloatTextView.ts": [
+        "private readonly tint = new Color();",
+        "private static readonly EXECUTE_COLOR = new Color(255, 105, 72, 255);",
+        "private static readonly GOLD_COLOR = new Color(255, 198, 45, 255);",
+        "private static readonly HEAL_COLOR = new Color(91, 255, 49, 255);",
+        "private static readonly MISS_COLOR = new Color(120, 205, 255, 255);",
+        "private static readonly NORMAL_DAMAGE_COLOR = new Color(255, 255, 255, 255);",
+        "private static readonly PLAYER_LOSS_COLOR = new Color(255, 72, 62, 255);",
+        "private static readonly RESISTED_COLOR = new Color(150, 150, 150, 255);"
+      ],
+      "assets/script/app/zcds/view/ZCGameHUDView.ts": [
+        ": new Color(255, 255, 255, 255);",
+        "? new Color(rest.r, rest.g, rest.b, rest.a)",
+        "const ZC_GOLD_DENY_LABEL_COLOR = Object.freeze(new Color(255, 91, 91, 255));"
+      ],
+      "assets/script/app/zcds/view/ZCGameHudPlayerRow.ts": [
+        "this.nameText.color = new Color(tint.r, tint.g, tint.b, tint.a);"
+      ],
+      "assets/script/app/zcds/view/ZCGameLegendBannerView.ts": [
+        "private readonly roleColorScratch = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/zcds/view/ZCGameRenderWorld.ts": [
+        "private readonly skillAnnounceTint = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/zcds/view/ZCHealthBarDamageTrail.ts": [
+        "const DAMAGE_TRAIL_COLOR = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/zcds/view/ZCHexView.ts": [
+        "awake: new Color(ZC_MONSTER_TINTS.awake.r, ZC_MONSTER_TINTS.awake.g, ZC_MONSTER_TINTS.awake.b, ZC_MONSTER_TINTS.awake.a),",
+        "cancel: { text: '取消集火', color: new Color(235, 145, 55) },",
+        "const GATE_COOLDOWN_TINT = new Color(105, 105, 105, 255);",
+        "const MONSTER_FOCUS_LOCKED_TINT = new Color(140, 146, 158, 255);",
+        "const PULSE_TINT_GREEN = new Color(90, 226, 138, 255); // #5AE28A",
+        "focus: { text: '集火野怪', color: new Color(45, 120, 225) },",
+        "graphics.strokeColor = new Color(color.r, color.g, color.b, Math.round(255 * value * rings[index]));",
+        "graphics.strokeColor = new Color(color.r, color.g, color.b, Math.round(255 * value));",
+        "locked: { text: '', color: new Color(130, 140, 150) },",
+        "new Color(178, 108, 255, 255), // 3 紫 #B26CFF",
+        "new Color(255, 148, 148, ZCHexView.TERRITORY_FILL_ALPHA);",
+        "new Color(255, 196, 60, 255), // 4 金 #FFC43C",
+        "new Color(72, 148, 255, 255), // 2 蓝 #4894FF",
+        "private readonly groundGlowTintColor = new Color(255, 255, 255, HEX_FLIP_GROUND_GLOW_ALPHA);",
+        "private readonly pulseTintColor = new Color(255, 255, 255, 255);",
+        "private static readonly ENEMY_BUILDING_COLOR = new Color(255, 175, 175, 255);",
+        "private static readonly INSUFFICIENT_GOLD_COLOR = new Color(255, 91, 91, 255);",
+        "private static readonly RESOURCE_RESOLVED_COLOR = new Color(87, 220, 132, 255);",
+        "private static readonly SPAWN_BASE_NEIGHBOR_FILL = new Color(0x1D, 0x24, 0xC8, 170);",
+        "private static readonly UNCONFIRMED_HQ_COLOR = new Color(255, 255, 255, 205);",
+        "return new Color(",
+        "return new Color(color.r, color.g, color.b, ZCHexView.TERRITORY_FILL_ALPHA);",
+        "return new Color(color.r, color.g, color.b, alpha);",
+        "return new Color(shade.r, shade.g, shade.b, ZCHexView.NEUTRAL_FILL_ALPHA);",
+        "sleep: new Color(ZC_MONSTER_TINTS.sleep.r, ZC_MONSTER_TINTS.sleep.g, ZC_MONSTER_TINTS.sleep.b, ZC_MONSTER_TINTS.sleep.a),"
+      ],
+      "assets/script/app/zcds/view/ZCNeutralRewardFx.ts": [
+        "label.color = new Color(255, 205, 90, 255);"
+      ],
+      "assets/script/app/zcds/view/ZCOutlineLayer.ts": [
+        "const SELECTED_HEX_COLOR = new Color(255, 235, 150, 255);",
+        "const scratchStyle: { lineWidth: number; color: Color } = { lineWidth: 0, color: new Color() };",
+        "export const NEUTRAL_GRID_LINE_COLOR = new Color(90, 55, 30, 110);",
+        "scratchStyle.color = new Color(",
+        "scratchStyle.color = new Color(color.r, color.g, color.b, 255);"
+      ],
+      "assets/script/app/zcds/view/ZCSpawnSelectionView.ts": [
+        "private static readonly CONFIRM_IDLE = new Color(128, 136, 150, 255);",
+        "private static readonly CONFIRM_INVALID = new Color(176, 96, 96, 255);",
+        "private static readonly CONFIRM_READY = new Color(255, 255, 255, 255);",
+        "private static readonly URGENT = new Color(235, 92, 92, 255);",
+        "private static readonly WHITE = new Color(255, 255, 255, 255);"
+      ],
+      "assets/script/app/zcds/view/ZCUnitView.ts": [
+        "private static readonly OTHER_PLAYER_TINT = new Color(0x82, 0x82, 0x82, 255);",
+        "private static readonly UNIT_DEAD_TINT = new Color(135, 135, 135, 190);"
+      ],
+      "assets/script/app/zcds/view/ZCWallRenderer.ts": [
+        "sprite.color = new Color(255, greenBlue, wallMaterial"
+      ]
+    },
+    "C5": {
+      "assets/script/app/celebration/CelebrationTable.ts": [
+        "ECelebrationRankSegment",
+        "ECelebrationTab",
+        "ECelebrationTargetRewardType"
+      ],
+      "assets/script/app/chat/ChatTable.ts": [
+        "ChatChannel"
+      ],
+      "assets/script/app/friend/FriendTable.ts": [
+        "FriendTab"
+      ],
+      "assets/script/app/main/MainEntranceTypes.ts": [
+        "EntranceBelond"
+      ],
+      "assets/script/app/zcds/model/ZCSkillRuntime.ts": [
+        "ZCSkillTargetMode"
+      ],
+      "assets/script/app/zcds/view/ZCGameHudEvents.ts": [
+        "ZCGameUiEvent"
+      ],
+      "assets/script/core/runtime/GameRoute.ts": [
+        "GameRoute"
+      ],
+      "assets/script/framework/cache/GameCache.ts": [
+        "EventType"
+      ],
+      "assets/script/framework/cache/GameCacheMgr.ts": [
+        "CacheOperaterType"
+      ],
+      "assets/script/framework/event/FWEventCenter.ts": [
+        "FWEventType"
+      ],
+      "assets/script/framework/ui/PopupDef.ts": [
+        "PopupCloseReason",
+        "PopupLayer",
+        "PopupLifecycleState"
+      ],
+      "assets/script/framework/utils/PromiseWrap.ts": [
+        "IPromiseState"
+      ]
+    },
+    "C6": {
+      "assets/script/app/ArtPaths.ts": [
+        "CARD_ROLE_ICON_BY_ATTACK",
+        "ICON_PACKAGE_ART_ROOT",
+        "MATCH_CARD_FRAME_ART",
+        "MATCH_SEARCH_BARS",
+        "MATCH_SLOT_BARS",
+        "MATCH_SLOT_PILLS"
+      ],
+      "assets/script/app/HeadArtModel.ts": [
+        "EMPTY_HEAD_ART",
+        "EMPTY_ICON_ART"
+      ],
+      "assets/script/app/activity/ActivityJumpTable.ts": [
+        "ACTIVITY_JUMP_ROUTES"
+      ],
+      "assets/script/app/activity/LayerActivityArt.ts": [
+        "ACTIVITY_ART_NAMES"
+      ],
+      "assets/script/app/activity/LayerActivityTable.ts": [
+        "EMPTY_ACTIVITY_STATE"
+      ],
+      "assets/script/app/battletoken/BattleTokenArt.ts": [
+        "BT_ART_NAMES",
+        "BT_PAGE_ART"
+      ],
+      "assets/script/app/battletoken/BattleTokenTable.ts": [
+        "BT_TABS"
+      ],
+      "assets/script/app/bigmap/application/BigMapArtCatalog.ts": [
+        "BIGMAP_RES_ICON_ART",
+        "BIGMAP_WORLD_CAMP_ART"
+      ],
+      "assets/script/app/bigmap/model/BigMapCitySchedule.ts": [
+        "BIGMAP_CITY_PHASE_LABEL",
+        "DEFAULT_BIGMAP_CITY_SCHEDULE"
+      ],
+      "assets/script/app/bigmap/model/BigMapTypes.ts": [
+        "BIGMAP_BUILD_RES",
+        "BIGMAP_RES_ORDER"
+      ],
+      "assets/script/app/bigmap/view/BigMapSkin.ts": [
+        "BIGMAP_SKIN_COLORS"
+      ],
+      "assets/script/app/bigmap/view/BigMapTheme.ts": [
+        "BIGMAP_TERRITORY_COLORS"
+      ],
+      "assets/script/app/card/CardLevelAttr.ts": [
+        "CARD_LEVEL_ATTR_STAT"
+      ],
+      "assets/script/app/card/CardSkillDescMarkup.ts": [
+        "DEFAULT_SKILL_DESC_COLORS",
+        "SKILL_DESC_BOOST_VERBS"
+      ],
+      "assets/script/app/card/CardUpgradedTimeline.ts": [
+        "ENTRANCE_DIRECTIONS",
+        "PROGRESS_BEAM_LAYERS",
+        "SLOT_BEAM_LAYERS"
+      ],
+      "assets/script/app/card/HeroObtainData.ts": [
+        "HERO_OBTAIN_DEMO_USER_DATA"
+      ],
+      "assets/script/app/celebration/CelebrationArt.ts": [
+        "OS_ART_NAMES",
+        "OS_RANK_TEXT_COLORS",
+        "OS_TAB_ART_KEYS",
+        "OS_TINT_GRAY",
+        "OS_TINT_NORMAL"
+      ],
+      "assets/script/app/chat/ChatArt.ts": [
+        "CHAT_ART_DIRS",
+        "CHAT_TINT_GRAY",
+        "CHAT_TINT_NORMAL"
+      ],
+      "assets/script/app/chat/ChatTable.ts": [
+        "CHAT_CHANNEL_ORDER"
+      ],
+      "assets/script/app/chat/ChatTexts.ts": [
+        "CHAT_TITLE"
+      ],
+      "assets/script/app/common/QualityFrameArt.ts": [
+        "QUALITY_FRAME_NAMES"
+      ],
+      "assets/script/app/common/RedDotArt.ts": [
+        "RED_DOT_ART_KEYS",
+        "RED_DOT_ART_NAMES",
+        "RED_DOT_ICON_SIZES",
+        "RED_DOT_SPINE_SIZE"
+      ],
+      "assets/script/app/common/RedDotState.ts": [
+        "RED_DOT_TYPE_PAGES"
+      ],
+      "assets/script/app/common/ResTypes.ts": [
+        "FALLBACK_RES_ICON_ART",
+        "ROLE_PROPERTY_ICON_ROOT_OVERRIDE"
+      ],
+      "assets/script/app/firstRecharge/FirstRechargeTrigger.ts": [
+        "EMPTY_BATTLE_RESULT"
+      ],
+      "assets/script/app/friend/FriendArt.ts": [
+        "FRIEND_TINT_GRAY",
+        "FRIEND_TINT_NORMAL"
+      ],
+      "assets/script/app/friend/FriendTable.ts": [
+        "FRIEND_CONFIG_DEFAULTS",
+        "FRIEND_CONFIG_KEYS",
+        "FRIEND_TAB_KEYS"
+      ],
+      "assets/script/app/friend/FriendTexts.ts": [
+        "FRIEND_ROW_BUTTON_TEXT",
+        "FRIEND_TAB_LABELS"
+      ],
+      "assets/script/app/gift/GiftArt.ts": [
+        "GIFT_ART_NAMES",
+        "GIFT_RES_ICON_ART",
+        "GIFT_SUB_TAB_ART"
+      ],
+      "assets/script/app/gift/GiftTable.ts": [
+        "GIFT_MAIN_TABS",
+        "GIFT_SUB_TAB_ORDER"
+      ],
+      "assets/script/app/gift/GiftTexts.ts": [
+        "GIFT_TEXTS",
+        "RECHARGE_TEXTS"
+      ],
+      "assets/script/app/hang/HangArt.ts": [
+        "HJ_ART_NAMES"
+      ],
+      "assets/script/app/hang/HangTable.ts": [
+        "HJ_SWEEP_GEARS"
+      ],
+      "assets/script/app/itemdetail/ItemDetailArt.ts": [
+        "ID_ART_NAMES",
+        "ID_TITLE_KEYS"
+      ],
+      "assets/script/app/itemdetail/ItemDetailTable.ts": [
+        "BASE_CARD_ITEM_IDS"
+      ],
+      "assets/script/app/itemdetail/ItemInfoTable.ts": [
+        "ITEM_TYPE_NAMES"
+      ],
+      "assets/script/app/league/LeagueArt.ts": [
+        "LEAGUE_ART_BARGAIN_STRIKE_COLOR",
+        "LEAGUE_ART_COST_BAR_TINT",
+        "LEAGUE_ART_LEVEL_ROW_CTX_BAR_TINT",
+        "LEAGUE_ART_NORTH_TAB_TEXT_NORMAL",
+        "LEAGUE_ART_NORTH_TAB_TEXT_SELECTED",
+        "LEAGUE_ART_NORTH_TAB_TEXT_STROKE",
+        "LEAGUE_ART_TASK_AD_TEXT_COLOR",
+        "LEAGUE_ART_TASK_AD_TEXT_STROKE",
+        "LEAGUE_ART_TASK_BOX_VALUE_COLOR",
+        "LEAGUE_ART_TASK_BOX_VALUE_STROKE",
+        "LEAGUE_ART_TASK_COUNT_COLOR",
+        "LEAGUE_ART_TASK_COUNT_STROKE",
+        "LEAGUE_ART_TASK_HEAD_TINT",
+        "LEAGUE_ART_TASK_PROGRESS_TEXT_COLOR",
+        "LEAGUE_ART_TASK_PROGRESS_TEXT_STROKE",
+        "LEAGUE_ART_TASK_REWARD_BG_TINT",
+        "LEAGUE_COST_ENOUGH_COLOR",
+        "LEAGUE_COST_ENOUGH_STROKE",
+        "LEAGUE_COST_SHORT_COLOR",
+        "LEAGUE_COST_SHORT_STROKE",
+        "LEAGUE_TINT_GRAY",
+        "LEAGUE_TINT_NORMAL"
+      ],
+      "assets/script/app/league/LeagueNorthTab.ts": [
+        "LEAGUE_NORTH_TAB_ART_NAMES"
+      ],
+      "assets/script/app/league/LeagueTable.ts": [
+        "LEAGUE_ENTRANCE_RED_DOT_SOURCE",
+        "LEAGUE_NORTH_CONFIG_DEFAULTS",
+        "LEAGUE_NORTH_REWARD_SUB_TYPE",
+        "LEAGUE_NORTH_REWARD_SUB_TYPES",
+        "LEAGUE_P4_CONFIG_DEFAULTS",
+        "LEAGUE_P4_CONFIG_KEYS"
+      ],
+      "assets/script/app/login/LoginProtocol.ts": [
+        "DEFAULT_VERSION_CONFIG"
+      ],
+      "assets/script/app/mail/MailArt.ts": [
+        "MAIL_ART_NAMES"
+      ],
+      "assets/script/app/main/MainEntranceTypes.ts": [
+        "ENTRANCE_SIDE_LAYOUT"
+      ],
+      "assets/script/app/main/MainEntranceVisible.ts": [
+        "EMPTY_ENTRANCE_PLAYER_STATE"
+      ],
+      "assets/script/app/main/MainHudMotion.ts": [
+        "MAIN_HUD_INTRO_PLAN"
+      ],
+      "assets/script/app/main/MainResBarFeedback.ts": [
+        "RES_BAR_SPEND_FLASH"
+      ],
+      "assets/script/app/main/MainResBarTypes.ts": [
+        "RES_BAR_KEYS"
+      ],
+      "assets/script/app/main/MainTabItems.ts": [
+        "MAIN_TAB_ITEMS"
+      ],
+      "assets/script/app/maintask/MainTaskArt.ts": [
+        "MT_ART_NAMES"
+      ],
+      "assets/script/app/matching/MatchPool.ts": [
+        "LOCAL_PLAYER"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftArt.ts": [
+        "MONTHCARD_FRAME_NAMES"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftLayout.ts": [
+        "MONTHCARD_TITLE_POS"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftTable.ts": [
+        "MONTHCARD_BOUGHT_TAG_DY",
+        "MONTHCARD_IMPORTED_CURRENCY_ART",
+        "MONTHCARD_LAYOUT_DY"
+      ],
+      "assets/script/app/playerinfo/PlayerInfoArt.ts": [
+        "PI_ART_NAMES"
+      ],
+      "assets/script/app/rd/RdTypes.ts": [
+        "RD_CLIENT_VARS",
+        "RD_EXTRA_VAR_NAMES",
+        "RD_REGISTERED_VAR_NAMES",
+        "RD_SERVER_VAR_TYPES",
+        "RD_SET_VARS"
+      ],
+      "assets/script/app/rd/RdVars.ts": [
+        "RD_CLIENT_VAR_CLASSES"
+      ],
+      "assets/script/app/role/RoleArt.ts": [
+        "RL_ART_NAMES"
+      ],
+      "assets/script/app/role/RolePowerTable.ts": [
+        "EQUIP_EXTRA_ATTR_KEYS"
+      ],
+      "assets/script/app/role/RoleTable.ts": [
+        "ROLE_BAG_TAB_KINDS",
+        "ROLE_BAG_TAB_NAMES",
+        "ROLE_NAV_NAMES"
+      ],
+      "assets/script/app/role/RoleTexts.ts": [
+        "ROLE_QUALITY_NAMES"
+      ],
+      "assets/script/app/sevenDay/SevenDayTable.ts": [
+        "EMPTY_SEVEN_DAY_STATE"
+      ],
+      "assets/script/app/showReward/ShowRewardArt.ts": [
+        "SR_ART_NAMES"
+      ],
+      "assets/script/app/showReward/ShowRewardTable.ts": [
+        "SR_STAR_TRACKS"
+      ],
+      "assets/script/app/store/StoreShopTable.ts": [
+        "STORE_CHEST_ROWS",
+        "STORE_GIFT_ROW",
+        "STORE_GOLD_ROWS",
+        "STORE_GOODS_ROWS",
+        "STORE_QUALITY_FRAMES",
+        "STORE_SILVER_ROWS"
+      ],
+      "assets/script/app/store/StoreTable.ts": [
+        "STORE_GRID_LINE_GAP",
+        "STORE_GRID_ROWS",
+        "STORE_SECTIONS"
+      ],
+      "assets/script/app/territory/model/TerritoryBattleIntro.ts": [
+        "TERRITORY_BATTLE_INTRO_TARGETS"
+      ],
+      "assets/script/app/territory/model/TerritoryChestAnimation.ts": [
+        "TERRITORY_CHEST_ART_METRICS",
+        "TERRITORY_CHEST_SPECS"
+      ],
+      "assets/script/app/territory/model/TerritoryChestBubble.ts": [
+        "TERRITORY_CHEST_BUBBLE_OUTLINE_COLOR",
+        "TERRITORY_CHEST_BUBBLE_TEXT_COLOR"
+      ],
+      "assets/script/app/territory/model/TerritoryChestTier.ts": [
+        "TERRITORY_CHEST_TIER_LABEL"
+      ],
+      "assets/script/app/territory/model/TerritoryHexSpawn.ts": [
+        "TERRITORY_HEX_SPAWN_TIMING",
+        "TERRITORY_HEX_SPAWN_VICTORY_TIMING"
+      ],
+      "assets/script/app/territory/model/TerritoryMonsterPatrol.ts": [
+        "TERRITORY_PATROL_DIM_RGB",
+        "TERRITORY_PATROL_EDGE_RGB"
+      ],
+      "assets/script/app/territory/model/TerritoryRequestStatus.ts": [
+        "TERRITORY_REQUEST_STATUS"
+      ],
+      "assets/script/app/territory/model/TerritoryResourceGain.ts": [
+        "TERRITORY_WALLET_RES_IDS",
+        "TERRITORY_WALLET_RES_KEY"
+      ],
+      "assets/script/app/territory/view/TerritoryStationView.ts": [
+        "TERRITORY_BOTTOM_ANCHOR_BUILD_IDS"
+      ],
+      "assets/script/app/zcds/ZCMissileSkillDiagnostics.ts": [
+        "ZC_MISSILE_WATCH_UNIT_IDS"
+      ],
+      "assets/script/app/zcds/ZCSkillCastDiagnostics.ts": [
+        "ZC_SKILL_CAST_WATCH_UNITS"
+      ],
+      "assets/script/app/zcds/model/ZCCombatCatalog.ts": [
+        "ZC_LUCK_TEXTS"
+      ],
+      "assets/script/app/zcds/model/ZCEffectCatalog.ts": [
+        "ZC_EFFECT_BEAM_SPECS",
+        "ZC_EFFECT_BEHAVIOR_SPECS",
+        "ZC_EFFECT_MISSILE_BY_UNIT",
+        "ZC_EFFECT_SPECS",
+        "ZC_EFFECT_TRAIL_SPECS",
+        "ZC_HIT_FX_SURFACE_LIFT_Y",
+        "ZC_SKILL_RANGE_RING_UNITS"
+      ],
+      "assets/script/app/zcds/model/ZCFireZoneFx.ts": [
+        "ZC_FIRE_ZONE_TINT"
+      ],
+      "assets/script/app/zcds/model/ZCGuideConfig.ts": [
+        "ZC_GUIDE_DEFAULT_PARAMS"
+      ],
+      "assets/script/app/zcds/model/ZCHexTopGeometry.ts": [
+        "ZC_HEX_TOP_VERTICES"
+      ],
+      "assets/script/app/zcds/model/ZCMapConfig.ts": [
+        "ZC_DEPTH_ORDER",
+        "ZC_DEPTH_TENDENCY",
+        "ZC_HEX_CONFIG",
+        "ZC_MAP_ART",
+        "ZC_MAP_HOMES",
+        "ZC_MAP_HOME_CANDIDATES",
+        "ZC_MAP_REGIONS",
+        "ZC_MAP_RESOURCE_POINTS",
+        "ZC_MAP_SECTIONS",
+        "ZC_MAP_SPACING",
+        "ZC_TENDENCY_TEXT"
+      ],
+      "assets/script/app/zcds/model/ZCMonsterPresentation.ts": [
+        "ZC_MONSTER_FOCUS_TOAST",
+        "ZC_MONSTER_TINTS"
+      ],
+      "assets/script/app/zcds/model/ZCNeutralResourceGroup.ts": [
+        "ZC_GATE_EFFECTS"
+      ],
+      "assets/script/app/zcds/model/ZCProjectileDropStyle.ts": [
+        "ZC_BULLET_DROP_UNITS",
+        "ZC_BULLET_FLY_UNITS",
+        "ZC_BULLET_RAIN_UNITS"
+      ],
+      "assets/script/app/zcds/model/ZCPvpTileRules.ts": [
+        "ZC_PVP_RARITY_KEYS"
+      ],
+      "assets/script/app/zcds/model/ZCQuakeFx.ts": [
+        "ZC_EMPOWERED_FX_OVERRIDES"
+      ],
+      "assets/script/app/zcds/model/ZCRankBoard.ts": [
+        "RANK_FALLBACK_NAMES",
+        "RANK_SEAT_ORDER"
+      ],
+      "assets/script/app/zcds/model/ZCSkillAnnounceStyle.ts": [
+        "ZC_ANNOUNCE_SKILL_KINDS"
+      ],
+      "assets/script/app/zcds/model/ZCStatSchema.ts": [
+        "STAT_TO_PATCH"
+      ],
+      "assets/script/app/zcds/model/ZCTestKapaiModel.ts": [
+        "EMPTY_TEST_KAPAI_CONFIG"
+      ],
+      "assets/script/app/zcds/model/ZCTrapFx.ts": [
+        "ZC_TRAP_EXPIRE_PREFAB_BY_UNIT"
+      ],
+      "assets/script/app/zcds/ui/RunAwayQualityArt.ts": [
+        "RUNAWAY_QUALITY_FRAME_NAMES"
+      ],
+      "assets/script/app/zcds/view/ZCGameViewUtil.ts": [
+        "ZC_HINT_GLOW_RING_ALPHAS"
+      ],
+      "assets/script/app/zcds/view/ZCWallGeometry.ts": [
+        "WALL_TILE_EDGES"
+      ],
+      "assets/script/core/asset/BundleCatalog.ts": [
+        "BUNDLE_DIRECTORIES"
+      ],
+      "assets/script/core/hex/HexFlipPresentation.ts": [
+        "HEX_FLIP_IDLE_FX"
+      ],
+      "assets/script/framework/tween/TweenEase.ts": [
+        "TweenEase"
+      ],
+      "assets/script/framework/ui/PopupDef.ts": [
+        "POPUP_LAYER_NAMES"
+      ],
+      "assets/script/platform/hotupdate/HotUpdateConfigLoader.ts": [
+        "DEFAULT_HOT_UPDATE_CONFIG"
+      ]
+    },
+    "C7": {
+      "assets/script/app/guide/model/GuidePresentation.ts": [
+        ".replace(/点它/g, '<color=#FFD129>点它</color>');"
+      ],
+      "assets/script/app/territory/model/TerritoryChestBubble.ts": [
+        "fontSize: TERRITORY_CHEST_BUBBLE_FONT_SIZE,",
+        "readonly fontSize: number;"
+      ],
+      "assets/script/app/zcds/model/ZCBattleStartStyle.ts": [
+        "ZCBattleStartStyle.ts"
+      ],
+      "assets/script/app/zcds/model/ZCBossWarningStyle.ts": [
+        "ZCBossWarningStyle.ts"
+      ],
+      "assets/script/app/zcds/model/ZCProjectileDropStyle.ts": [
+        "ZCProjectileDropStyle.ts"
+      ],
+      "assets/script/app/zcds/model/ZCSettlementOutcomeStyle.ts": [
+        "ZCSettlementOutcomeStyle.ts"
+      ],
+      "assets/script/app/zcds/model/ZCSettlementStyle.ts": [
+        "ZCSettlementStyle.ts",
+        "rankAdd: '#57E467',",
+        "rankName: '#FFD028',",
+        "rewardTitle: '#FFFEFA',",
+        "teamLink: '#86C8FF',"
+      ],
+      "assets/script/app/zcds/model/ZCSkillAnnounceStyle.ts": [
+        "ZCSkillAnnounceStyle.ts"
+      ],
+      "assets/script/app/zcds/model/ZCTestKapaiModel.ts": [
+        "accent: '#FF00FF', danger: '#FF00FF',",
+        "background: '#FF00FF', panel: '#FF00FF', panelAlt: '#FF00FF', button: '#FF00FF',",
+        "buttonActive: '#FF00FF', buttonDisabled: '#FF00FF', text: '#FF00FF', muted: '#FF00FF',",
+        "effectOffsetY: 0, gridColor: '#FF00FF', gridFillColor: '#FF00FF', guideColor: '#FF00FF',",
+        "loadingColor: '#FF00FF', errorColor: '#FF00FF',",
+        "return '#FF00FF';"
+      ],
+      "assets/script/app/zcds/model/ZCUISpineBannerStyle.ts": [
+        "ZCUISpineBannerStyle.ts"
+      ]
+    },
+    "C8": {
+      "assets/script/app/bootstrap/card/CardPopupComposition.ts": [
+        "assets/script/app/card/CardLineupTexts.ts",
+        "assets/script/app/card/CardUpgradedArt.ts"
+      ],
+      "assets/script/app/bootstrap/guide/GuideComposition.ts": [
+        "assets/script/app/guide/GuideTexts.ts"
+      ],
+      "assets/script/app/main/MainTabItems.ts": [
+        "assets/script/app/card/CardLineupTexts.ts"
+      ],
+      "assets/script/app/main/MainTerritoryMap.ts": [
+        "assets/script/app/territory/application/TerritoryTexts.ts"
+      ]
+    },
+    "C9": {
+      "assets/script/app/activity/LayerActivityLayout.t": [
+        "C9|assets/script/app/activity/LayerActivityLayout.ts"
+      ],
+      "assets/script/app/battletoken/BattleTokenTable.t": [
+        "C9|assets/script/app/battletoken/BattleTokenTable.ts"
+      ],
+      "assets/script/app/bigmap/application/BigMapArtCatalog.t": [
+        "C9|assets/script/app/bigmap/application/BigMapArtCatalog.ts"
+      ],
+      "assets/script/app/card/CardUpgradedTimeline.t": [
+        "C9|assets/script/app/card/CardUpgradedTimeline.ts"
+      ],
+      "assets/script/app/celebration/CelebrationArt.t": [
+        "C9|assets/script/app/celebration/CelebrationArt.ts"
+      ],
+      "assets/script/app/chat/ChatArt.t": [
+        "C9|assets/script/app/chat/ChatArt.ts"
+      ],
+      "assets/script/app/friend/FriendArt.t": [
+        "C9|assets/script/app/friend/FriendArt.ts"
+      ],
+      "assets/script/app/friend/FriendTexts.t": [
+        "C9|assets/script/app/friend/FriendTexts.ts"
+      ],
+      "assets/script/app/hang/HangArt.t": [
+        "C9|assets/script/app/hang/HangArt.ts"
+      ],
+      "assets/script/app/hang/HangTable.t": [
+        "C9|assets/script/app/hang/HangTable.ts"
+      ],
+      "assets/script/app/league/LeagueArt.t": [
+        "C9|assets/script/app/league/LeagueArt.ts"
+      ],
+      "assets/script/app/league/LeagueTable.t": [
+        "C9|assets/script/app/league/LeagueTable.ts"
+      ],
+      "assets/script/app/league/LeagueTexts.t": [
+        "C9|assets/script/app/league/LeagueTexts.ts"
+      ],
+      "assets/script/app/mail/MailTexts.t": [
+        "C9|assets/script/app/mail/MailTexts.ts"
+      ],
+      "assets/script/app/main/MainResBarFeedback.t": [
+        "C9|assets/script/app/main/MainResBarFeedback.ts"
+      ],
+      "assets/script/app/monthcard/MonthCardGiftLayout.t": [
+        "C9|assets/script/app/monthcard/MonthCardGiftLayout.ts"
+      ],
+      "assets/script/app/store/StoreTable.t": [
+        "C9|assets/script/app/store/StoreTable.ts"
+      ],
+      "assets/script/app/territory/model/TerritoryBattleIntro.t": [
+        "C9|assets/script/app/territory/model/TerritoryBattleIntro.ts"
+      ],
+      "assets/script/app/territory/model/TerritoryChestAnimation.t": [
+        "C9|assets/script/app/territory/model/TerritoryChestAnimation.ts"
+      ],
+      "assets/script/app/territory/model/TerritoryCloud.t": [
+        "C9|assets/script/app/territory/model/TerritoryCloud.ts"
+      ],
+      "assets/script/app/territory/model/TerritoryLevelBubble.t": [
+        "C9|assets/script/app/territory/model/TerritoryLevelBubble.ts"
+      ],
+      "assets/script/app/territory/model/TerritoryResourceGain.t": [
+        "C9|assets/script/app/territory/model/TerritoryResourceGain.ts"
+      ],
+      "assets/script/app/zcds/model/ZCBattlePresentationQueue.t": [
+        "C9|assets/script/app/zcds/model/ZCBattlePresentationQueue.ts"
+      ],
+      "assets/script/app/zcds/model/ZCMapConfig.t": [
+        "C9|assets/script/app/zcds/model/ZCMapConfig.ts"
+      ],
+      "assets/script/app/zcds/view/ZCGameViewUtil.t": [
+        "C9|assets/script/app/zcds/view/ZCGameViewUtil.ts"
+      ],
+      "assets/script/core/hex/HexFlipPresentation.t": [
+        "C9|assets/script/core/hex/HexFlipPresentation.ts"
+      ]
+    }
+  }
+}

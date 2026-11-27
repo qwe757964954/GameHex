@@ -112,13 +112,13 @@
   },
   {
     "resId": 10010,
-    "name": "随机兵种卷轴",
-    "desc": "可随机获得兵种对应的卷轴",
+    "name": "随机种族经验值",
+    "desc": "随机获得一个种族升级经验",
     "key": "suijijinengjuanzhou",
     "useType": 6,
     "type": 1,
     "quality": 3,
-    "icon": "icons/item/图标_兵书随机",
+    "icon": "icons/item/种族经验球_随机",
     "access": [
       8,
       9,
@@ -144,9 +144,9 @@
   },
   {
     "resId": 10012,
-    "name": "随机兵种卷轴",
-    "desc": "可随机获得已激活兵种对应的卷轴",
-    "key": "suijijinengjuanzhou",
+    "name": "随机种族经验值",
+    "desc": "随机获得一个种族大量升级经验",
+    "key": "suijijinengjuanzhou_10012",
     "useType": 4,
     "type": 1,
     "quality": 3,
@@ -772,7 +772,6 @@
     "useType": 1,
     "type": 1,
     "quality": 4,
-    "icon": "icons/hero/tx_icon_MB_JXK_SHOUREN",
     "access": [
       26
     ]
@@ -784,7 +783,6 @@
     "useType": 1,
     "type": 1,
     "quality": 5,
-    "icon": "icons/hero/tx_icon_MB_JXK_YUREN",
     "access": [
       26
     ]
@@ -796,7 +794,6 @@
     "useType": 1,
     "type": 1,
     "quality": 6,
-    "icon": "icons/hero/tx_icon_MB_JXK_KULOU",
     "access": [
       26
     ]
@@ -3427,7 +3424,7 @@
     "useType": 1,
     "type": 5,
     "quality": 3,
-    "icon": "icons/item/图标_兵书火法师",
+    "icon": "icons/item/种族经验球_花果",
     "access": [
       7,
       8,
@@ -3442,7 +3439,7 @@
     "useType": 1,
     "type": 5,
     "quality": 3,
-    "icon": "icons/item/图标_兵书轻骑兵",
+    "icon": "icons/item/种族经验球_蘑菇",
     "access": [
       7,
       8,
@@ -3457,7 +3454,7 @@
     "useType": 1,
     "type": 5,
     "quality": 3,
-    "icon": "icons/item/图标_兵书冰法师",
+    "icon": "icons/item/种族经验球_盆栽",
     "access": [
       7,
       8,
@@ -3472,7 +3469,7 @@
     "useType": 1,
     "type": 5,
     "quality": 3,
-    "icon": "icons/item/图标_兵书刀盾兵",
+    "icon": "icons/item/种族经验球_僵尸",
     "access": [
       7,
       8,
@@ -3849,12 +3846,12 @@
   },
   {
     "resId": 18003,
-    "name": "精灵弓箭手",
-    "desc": "用于英雄升级",
+    "name": "豌豆游侠碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
-    "quality": 2,
-    "icon": "icons/item/请神黑无常碎片",
+    "quality": 1,
+    "icon": "icons/item/豌豆游侠碎片",
     "access": [
       8
     ],
@@ -3862,12 +3859,12 @@
   },
   {
     "resId": 18004,
-    "name": "骷髅战士",
-    "desc": "用于英雄升级",
+    "name": "巨力坚果碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
-    "quality": 2,
-    "icon": "icons/item/请神白无常碎片",
+    "quality": 1,
+    "icon": "icons/item/巨力坚果碎片",
     "access": [
       8
     ],
@@ -3875,12 +3872,12 @@
   },
   {
     "resId": 18005,
-    "name": "火法师",
-    "desc": "用于英雄升级",
+    "name": "火焰树妖碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
-    "quality": 3,
-    "icon": "icons/item/请神牛头碎片",
+    "quality": 2,
+    "icon": "icons/item/火焰树妖碎片",
     "access": [
       8
     ],
@@ -3888,12 +3885,12 @@
   },
   {
     "resId": 18006,
-    "name": "女猎手",
-    "desc": "用于英雄升级",
+    "name": "玉林好汉碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
-    "quality": 3,
-    "icon": "icons/item/请神马面碎片",
+    "quality": 2,
+    "icon": "icons/item/玉林好汉碎片",
     "access": [
       8
     ],
@@ -3901,12 +3898,12 @@
   },
   {
     "resId": 18007,
-    "name": "熊猫人",
-    "desc": "用于英雄升级",
+    "name": "椰蛋战士碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
-    "quality": 4,
-    "icon": "icons/item/请神黑无常碎片",
+    "quality": 3,
+    "icon": "icons/item/椰蛋战士碎片",
     "access": [
       8
     ],
@@ -3914,12 +3911,12 @@
   },
   {
     "resId": 18008,
-    "name": "铜须",
-    "desc": "用于英雄升级",
+    "name": "波利奥碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
-    "quality": 4,
-    "icon": "icons/item/请神白无常碎片",
+    "quality": 3,
+    "icon": "icons/item/波利奥碎片",
     "access": [
       8
     ],
@@ -3927,12 +3924,12 @@
   },
   {
     "resId": 18009,
-    "name": "剑圣",
-    "desc": "用于英雄升级",
+    "name": "吞噬大嘴花碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
     "quality": 4,
-    "icon": "icons/item/请神牛头碎片",
+    "icon": "icons/item/吞噬大嘴花碎片",
     "access": [
       8
     ],
@@ -3940,12 +3937,12 @@
   },
   {
     "resId": 18010,
-    "name": "近卫半人马",
-    "desc": "用于英雄升级",
+    "name": "杰克藕碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
     "quality": 4,
-    "icon": "icons/item/请神马面碎片",
+    "icon": "icons/item/杰克藕碎片",
     "access": [
       8
     ],
@@ -3953,12 +3950,12 @@
   },
   {
     "resId": 18011,
-    "name": "恶魔卫士",
-    "desc": "用于英雄升级",
+    "name": "仙桃行者碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
-    "quality": 1,
-    "icon": "icons/item/请神黑无常碎片",
+    "quality": 4,
+    "icon": "icons/item/仙桃行者碎片",
     "access": [
       8
     ],
@@ -3966,12 +3963,12 @@
   },
   {
     "resId": 18012,
-    "name": "冰霜巨龙",
-    "desc": "用于英雄升级",
+    "name": "镭射飞龙碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
-    "quality": 1,
-    "icon": "icons/item/请神白无常碎片",
+    "quality": 4,
+    "icon": "icons/item/镭射飞龙碎片",
     "access": [
       8
     ],
@@ -3979,12 +3976,12 @@
   },
   {
     "resId": 18013,
-    "name": "冰法师",
-    "desc": "用于英雄升级",
+    "name": "水手菇碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
-    "quality": 3,
-    "icon": "icons/item/请神牛头碎片",
+    "quality": 1,
+    "icon": "icons/item/水手菇碎片",
     "access": [
       8
     ],
@@ -3992,12 +3989,12 @@
   },
   {
     "resId": 18014,
-    "name": "猎头者",
-    "desc": "用于英雄升级",
+    "name": "菇八戒碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 12,
-    "quality": 3,
-    "icon": "icons/item/请神牛头碎片",
+    "quality": 1,
+    "icon": "icons/item/菇八戒碎片",
     "access": [
       8
     ],
@@ -4005,12 +4002,12 @@
   },
   {
     "resId": 18015,
-    "name": "玛法",
-    "desc": "用于英雄升级",
+    "name": "风炮菇碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/请神马面碎片",
+    "quality": 3,
+    "icon": "icons/item/玛法碎片",
     "access": [
       8
     ],
@@ -4018,12 +4015,12 @@
   },
   {
     "resId": 18016,
-    "name": "驭兽师",
-    "desc": "用于英雄升级",
+    "name": "分裂菇碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/请神黑无常碎片",
+    "quality": 3,
+    "icon": "icons/item/分裂菇碎片",
     "access": [
       8
     ],
@@ -4031,12 +4028,12 @@
   },
   {
     "resId": 18017,
-    "name": "阿尔萨斯",
-    "desc": "用于英雄升级",
+    "name": "机甲菇碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
     "quality": 4,
-    "icon": "icons/item/请神白无常碎片",
+    "icon": "icons/item/机甲菇碎片",
     "access": [
       8
     ],
@@ -4044,12 +4041,12 @@
   },
   {
     "resId": 18018,
-    "name": "萨尔",
-    "desc": "用于英雄升级",
+    "name": "磁电菇碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
     "quality": 4,
-    "icon": "icons/item/请神牛头碎片",
+    "icon": "icons/item/磁电菇碎片",
     "access": [
       8
     ],
@@ -4057,12 +4054,12 @@
   },
   {
     "resId": 18019,
-    "name": "泰兰德",
-    "desc": "用于英雄升级",
+    "name": "毒箭蘑菇碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 1,
-    "icon": "icons/item/请神马面碎片",
+    "quality": 4,
+    "icon": "icons/item/毒箭蘑菇碎片",
     "access": [
       8
     ],
@@ -4070,12 +4067,12 @@
   },
   {
     "resId": 18020,
-    "name": "九头蛇",
-    "desc": "用于英雄升级",
+    "name": "诅咒菇碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 2,
-    "icon": "icons/item/请神黑无常碎片",
+    "quality": 4,
+    "icon": "icons/item/诅咒菇碎片",
     "access": [
       8
     ],
@@ -4083,12 +4080,12 @@
   },
   {
     "resId": 18021,
-    "name": "狼骑兵",
-    "desc": "用于英雄升级",
+    "name": "窝瓜人碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 2,
-    "icon": "icons/item/请神白无常碎片",
+    "quality": 1,
+    "icon": "icons/item/窝瓜人碎片",
     "access": [
       8
     ],
@@ -4096,12 +4093,12 @@
   },
   {
     "resId": 18022,
-    "name": "德鲁伊",
-    "desc": "用于英雄升级",
+    "name": "三叶小丑碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 3,
-    "icon": "icons/item/请神牛头碎片",
+    "quality": 2,
+    "icon": "icons/item/三叶小丑碎片",
     "access": [
       8
     ],
@@ -4109,12 +4106,12 @@
   },
   {
     "resId": 18023,
-    "name": "陈熊猫",
-    "desc": "用于英雄升级",
+    "name": "仙人侍卫碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 3,
-    "icon": "icons/item/请神马面碎片",
+    "quality": 2,
+    "icon": "icons/item/仙人侍卫碎片",
     "access": [
       8
     ],
@@ -4122,12 +4119,12 @@
   },
   {
     "resId": 18024,
-    "name": "萨满",
-    "desc": "用于英雄升级",
+    "name": "雷蕉碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/请神黑无常碎片",
+    "quality": 3,
+    "icon": "icons/item/雷蕉碎片",
     "access": [
       8
     ],
@@ -4135,12 +4132,12 @@
   },
   {
     "resId": 18025,
-    "name": "乌瑞恩",
-    "desc": "用于英雄升级",
+    "name": "南瓜战神碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/请神白无常碎片",
+    "quality": 3,
+    "icon": "icons/item/南瓜战神碎片",
     "access": [
       8
     ],
@@ -4148,12 +4145,12 @@
   },
   {
     "resId": 18026,
-    "name": "亡灵法师",
-    "desc": "用于英雄升级",
+    "name": "急冻瓜碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
     "quality": 4,
-    "icon": "icons/item/请神牛头碎片",
+    "icon": "icons/item/急冻瓜碎片",
     "access": [
       8
     ],
@@ -4161,12 +4158,12 @@
   },
   {
     "resId": 18027,
-    "name": "伊利丹",
-    "desc": "用于英雄升级",
+    "name": "大威天芦碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
     "quality": 4,
-    "icon": "icons/item/请神牛头碎片",
+    "icon": "icons/item/大威天芦碎片",
     "access": [
       8
     ],
@@ -4174,12 +4171,12 @@
   },
   {
     "resId": 18028,
-    "name": "凯尔萨斯",
-    "desc": "用于英雄升级",
+    "name": "麻辣铁锅碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 1,
-    "icon": "icons/item/请神马面碎片",
+    "quality": 4,
+    "icon": "icons/item/麻辣铁锅碎片",
     "access": [
       8
     ],
@@ -4187,12 +4184,12 @@
   },
   {
     "resId": 18029,
-    "name": "亡灵骑士",
-    "desc": "用于英雄升级",
+    "name": "爆锤莲王碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 2,
-    "icon": "icons/item/请神黑无常碎片",
+    "quality": 4,
+    "icon": "icons/item/爆锤莲王碎片",
     "access": [
       8
     ],
@@ -4200,12 +4197,12 @@
   },
   {
     "resId": 18030,
-    "name": "牛头人",
-    "desc": "用于英雄升级",
+    "name": "饥饿战士碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 2,
-    "icon": "icons/item/请神白无常碎片",
+    "quality": 1,
+    "icon": "icons/item/饥饿战士碎片",
     "access": [
       8
     ],
@@ -4213,12 +4210,12 @@
   },
   {
     "resId": 18031,
-    "name": "步兵",
-    "desc": "用于英雄升级",
+    "name": "金发统领碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 3,
-    "icon": "icons/item/请神牛头碎片",
+    "quality": 2,
+    "icon": "icons/item/金发统领碎片",
     "access": [
       8
     ],
@@ -4226,12 +4223,12 @@
   },
   {
     "resId": 18032,
-    "name": "近卫变节巫师",
-    "desc": "用于英雄升级",
+    "name": "篮球天才碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/请神马面碎片",
+    "quality": 2,
+    "icon": "icons/item/篮球天才碎片",
     "access": [
       8
     ],
@@ -4239,12 +4236,12 @@
   },
   {
     "resId": 18033,
-    "name": "血蹄",
-    "desc": "用于英雄升级",
+    "name": "艺术家碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/请神黑无常碎片",
+    "quality": 3,
+    "icon": "icons/item/艺术家碎片",
     "access": [
       8
     ],
@@ -4252,12 +4249,12 @@
   },
   {
     "resId": 18034,
-    "name": "吉安娜",
-    "desc": "用于英雄升级",
+    "name": "吉他手碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
     "quality": 4,
-    "icon": "icons/item/请神白无常碎片",
+    "icon": "icons/item/吉他手碎片",
     "access": [
       8
     ],
@@ -4265,12 +4262,12 @@
   },
   {
     "resId": 18035,
-    "name": "刺杀者",
-    "desc": "用于英雄升级",
+    "name": "运动霸碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
     "quality": 4,
-    "icon": "icons/item/请神牛头碎片",
+    "icon": "icons/item/运动霸碎片",
     "access": [
       8
     ],
@@ -4278,12 +4275,12 @@
   },
   {
     "resId": 18036,
-    "name": "雷克萨",
-    "desc": "用于英雄升级",
+    "name": "魔术师碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
     "quality": 4,
-    "icon": "icons/item/请神牛头碎片",
+    "icon": "icons/item/魔术师碎片",
     "access": [
       8
     ],
@@ -4291,12 +4288,12 @@
   },
   {
     "resId": 18037,
-    "name": "希尔瓦娜斯",
-    "desc": "用于英雄升级",
+    "name": "科学家碎片",
+    "desc": "用于卡牌升级",
     "useType": 1,
     "type": 1,
     "quality": 4,
-    "icon": "icons/item/请神牛头碎片",
+    "icon": "icons/item/科学家碎片",
     "access": [
       8
     ],
@@ -4308,10 +4305,8 @@
     "desc": "大地图玩法核心资源",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/图标_粮食",
-    "access": [],
-    "useJump": 0
+    "quality": 1,
+    "icon": "image/concept/ui/top_grain"
   },
   {
     "resId": 18502,
@@ -4319,10 +4314,8 @@
     "desc": "大地图玩法核心资源",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/图标_木材",
-    "access": [],
-    "useJump": 0
+    "quality": 1,
+    "icon": "image/concept/ui/top_wood"
   },
   {
     "resId": 18503,
@@ -4330,10 +4323,8 @@
     "desc": "大地图玩法核心资源",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/图标_矿石",
-    "access": [],
-    "useJump": 0
+    "quality": 1,
+    "icon": "image/concept/ui/top_iron"
   },
   {
     "resId": 18504,
@@ -4341,10 +4332,8 @@
     "desc": "大地图玩法核心资源",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/图标_钻石",
-    "access": [],
-    "useJump": 0
+    "quality": 1,
+    "icon": "image/concept/ui/top_coin"
   },
   {
     "resId": 18505,
@@ -4352,80 +4341,472 @@
     "desc": "大地图玩法核心资源",
     "useType": 1,
     "type": 1,
-    "quality": 4,
-    "icon": "icons/item/图标_行动力",
-    "access": [],
-    "useJump": 0
+    "quality": 5,
+    "icon": "image/concept/ui/top_stamina"
   },
   {
-    "resId": 19001,
-    "name": "青铜宝箱",
+    "resId": 18506,
+    "name": "迁城券",
+    "desc": "大地图玩法核心资源",
     "useType": 1,
     "type": 1,
-    "quality": 1
+    "quality": 5
   },
   {
-    "resId": 19002,
-    "name": "白银宝箱",
+    "resId": 18507,
+    "name": "保护罩-小",
+    "desc": "大地图玩法核心资源",
     "useType": 1,
     "type": 1,
-    "quality": 2
+    "quality": 4
   },
   {
-    "resId": 19003,
-    "name": "‌黄金宝箱‌",
+    "resId": 18508,
+    "name": "保护罩-大",
+    "desc": "大地图玩法核心资源",
     "useType": 1,
     "type": 1,
-    "quality": 3
+    "quality": 5
   },
   {
     "resId": 19101,
     "name": "青铜-绿色掉落池一",
     "useType": 2,
     "type": 2,
-    "quality": 1
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
   },
   {
     "resId": 19102,
     "name": "青铜-蓝色掉落池一",
     "useType": 2,
     "type": 2,
-    "quality": 2
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_绿色"
   },
   {
     "resId": 19103,
     "name": "青铜-紫色掉落池一",
     "useType": 2,
     "type": 2,
-    "quality": 3
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_绿色"
   },
   {
     "resId": 19104,
     "name": "白银-绿色掉落池一",
     "useType": 2,
     "type": 2,
-    "quality": 1
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
   },
   {
     "resId": 19105,
     "name": "白银-蓝色掉落池一",
     "useType": 2,
     "type": 2,
-    "quality": 2
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
   },
   {
     "resId": 19106,
     "name": "白银-紫色掉落池一",
     "useType": 2,
     "type": 2,
-    "quality": 3
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19107,
+    "name": "黄金-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19108,
+    "name": "黄金-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19109,
+    "name": "黄金-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19110,
+    "name": "铂金-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19111,
+    "name": "铂金-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19112,
+    "name": "铂金-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19113,
+    "name": "钻石-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19114,
+    "name": "钻石-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19115,
+    "name": "钻石-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19116,
+    "name": "大师-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19117,
+    "name": "大师-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19118,
+    "name": "大师-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19119,
+    "name": "宗师-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19120,
+    "name": "宗师-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19121,
+    "name": "宗师-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19122,
+    "name": "王者-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19123,
+    "name": "王者-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19124,
+    "name": "王者-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19125,
+    "name": "荣耀-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19126,
+    "name": "荣耀-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19127,
+    "name": "荣耀-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19128,
+    "name": "传奇-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19129,
+    "name": "传奇-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19130,
+    "name": "传奇-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19131,
+    "name": "史诗-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19132,
+    "name": "史诗-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19133,
+    "name": "史诗-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19134,
+    "name": "神话-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19135,
+    "name": "神话-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19136,
+    "name": "神话-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19137,
+    "name": "永恒-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19138,
+    "name": "永恒-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19139,
+    "name": "永恒-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19140,
+    "name": "至尊-绿色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_绿色"
+  },
+  {
+    "resId": 19141,
+    "name": "至尊-蓝色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19142,
+    "name": "至尊-紫色掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19301,
+    "name": "章节1掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19302,
+    "name": "章节2掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19303,
+    "name": "章节3掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 1,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19304,
+    "name": "章节4掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19305,
+    "name": "章节5掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19306,
+    "name": "章节6掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19307,
+    "name": "章节7掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19350,
+    "name": "初始阵容掉落池",
+    "useType": 2,
+    "type": 2,
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_金色"
   },
   {
     "resId": 19401,
-    "name": "保底池一",
+    "name": "蓝色保底",
     "useType": 2,
     "type": 2,
-    "quality": 2
+    "quality": 2,
+    "icon": "icons/item/卡牌碎片_蓝色"
+  },
+  {
+    "resId": 19402,
+    "name": "紫色保底I",
+    "useType": 2,
+    "type": 2,
+    "quality": 3,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19403,
+    "name": "紫色保底II",
+    "useType": 2,
+    "type": 2,
+    "quality": 4,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19404,
+    "name": "紫色保底III",
+    "useType": 2,
+    "type": 2,
+    "quality": 5,
+    "icon": "icons/item/卡牌碎片_紫色"
+  },
+  {
+    "resId": 19405,
+    "name": "金色保底",
+    "useType": 2,
+    "type": 2,
+    "quality": 6,
+    "icon": "icons/item/卡牌碎片_金色"
   },
   {
     "resId": 19501,

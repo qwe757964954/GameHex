@@ -31,6 +31,11 @@ export const MAIL_BTN_TAKE_ONE_KEY = '一键领取';
 export const MAIL_BTN_TAKE = '领取';
 export const MAIL_BTN_DELETE = '删除';
 
+/** 收件箱横幅 / 标签行计数（v2）。 */
+export const MAIL_BANNER_SUB_TEMPLATE = '共 {0} 封 · {1} 封可领取';
+export const MAIL_TAG_COUNT_TEMPLATE = '共 {0} 封';
+export const MAIL_UNREAD_TEMPLATE = '未读 {0}';
+
 /** 空态（FGUI `文本_无邮件提示` 原值）。 */
 export const MAIL_EMPTY = '邮箱内没有任何信件';
 

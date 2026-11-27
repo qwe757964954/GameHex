@@ -3,21 +3,23 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 import { GAME_AUDIO } from '../../ResConst';
 import { ZC_BATTLE_TYPE_CHAPTER } from '../../battle/BattleStartModel';
 import { buildDamageStatistics } from '../../battle/BattleStatisticsModel';
-import { findCatalogCard, type ZCCardRarity, type ZCDeckCard } from '../model/ZCCombatCatalog';
+import { findCatalogCard, type ZCCardRarity, type ZCDeckCard, type ZCUnitDefinition } from '../model/ZCCombatCatalog';
 import { ZCGameModel } from '../model/ZCGameModel';
 import { ZCOwner } from '../model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig } from '../model/ZCMatchConfig';
+import { ZC_MONSTER_FOCUS_TOAST } from '../model/ZCMonsterPresentation';
 import { buildRankSeats } from '../model/ZCRankBoard';
 import { createSeededRandom } from '../model/ZCSeededRandom';
 import { buildSettlementMvp, type IZCSettlementMvp, type IZCSettlementMvpCard } from '../model/ZCSettlementMvp';
+import { buildZCBarracksInfo } from '../model/ZCBarracksInfo';
 import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../model/ZCSpawnSelection';
 import { ZCGameUiEvent, type IZCDebugDrawCardIntent, type IZCRequestEffectArtIntent, type IZCRequestUnitArtIntent } from '../view/ZCGameHudEvents';
-import { ZCDC_LOG_DAMAGE_FLOAT } from '../ZCDCLogSwitch';
+import { ZCDC_LOG_DAMAGE_FLOAT, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { ZCBattleAudio } from './ZCBattleAudio';
 import type { IZCBattlePhase } from './ZCBattleController';
-import { ZC_BATTLE_EVENTS, type IZCBattleFrame } from './ZCBattleEvents';
-import type { IZCBattleConfirmOptions, IZCBattleRuntimeServices, IZCBattleView, IZCDamageStatsPopup, IZCDamageStatsSeats, IZCDamageStatsUnit } from './ZCBattleRuntimeContract';
-import { ZCBattleSettlementController, type IZCBattlePopup } from './ZCBattleSettlementController';
+import { ZC_BATTLE_EVENTS, type IZCBattleDamagePopupState, type IZCBattleFrame } from './ZCBattleEvents';
+import type { IZCBattleRuntimeServices, IZCBattleView, IZCDamageStatsSeats, IZCDamageStatsUnit } from './ZCBattleRuntimeContract';
+import { ZCBattleSettlementController } from './ZCBattleSettlementController';
 import type { IZCGameEntry } from './ZCGameEntry';
 
 /**
@@ -33,6 +35,14 @@ import type { IZCGameEntry } from './ZCGameEntry';
 const RETREAT_CONFIRM = {
     content: '你确定放弃当前对局，提前退出嘛？', sureText: '确定', cancelText: '取消',
 } as const;
+
+/**
+ * 同一条集火提示的最短重复间隔（用对局逻辑秒，不是墙钟）。
+ *
+ * 按钮改成恒可点之后，不相邻地块上连点会一直弹同一句话；吐司是**排队**播的，
+ * 连点五下要排队放好几秒，看起来像卡住。只压同一句，换句子（比如冷却中 → 相邻）照常弹。
+ */
+const MONSTER_FOCUS_TOAST_REPEAT_SECONDS = 1;
 
 /**
  * 战斗内翻地块的抽卡音按品阶四选一（用户 2026-11-24）：
@@ -61,10 +71,9 @@ export class ZCBattleRuntimeController extends ControllerBase {
     private readonly audioSourceOf = (id: number) => this.model?.attackInfoForUnit(id);
     private hints = true;
     private stopShowcase: (() => void) | null = null;
-    private readonly popups = new Map<'guide' | 'damage' | 'rank' | 'retreat', IZCBattlePopup>();
     /** 投降确认进行中（await 期间连点不能叠出第二个确认框）。*/
     private retreating = false;
-    private damagePopup: IZCDamageStatsPopup | null = null;
+    private damageActive = false;
     private damageOpening = false;
     private guideOpening = false;
     private readonly pendingUnitArt = new Set<string>();
@@ -72,6 +81,8 @@ export class ZCBattleRuntimeController extends ControllerBase {
     /** 特效美术按需补载：在飞的（path → Promise）与已到货的（路径集合）。*/
     private readonly pendingEffectArt = new Map<string, Promise<void>>();
     private readonly loadedEffectArt = new Set<string>();
+    /** 上一条集火提示：同一条文案在 `MONSTER_FOCUS_TOAST_REPEAT_SECONDS` 内不重复弹（见 `showMonsterFocusToast`）。*/
+    private lastMonsterFocusToast: { key: keyof typeof ZC_MONSTER_FOCUS_TOAST; at: number } | null = null;
     get currentModel(): ZCGameModel | null { return this.model; }
     constructor(context: IControllerContext, private readonly view: IZCBattleView,
         private readonly settlement: ZCBattleSettlementController, private readonly services: IZCBattleRuntimeServices,
@@ -116,6 +127,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
         this.listen(ZCGameUiEvent.ReturnToMain, this.onReturnToMain);
         this.listen(ZCGameUiEvent.SpawnConfirm, this.onSpawnConfirm);
         this.listen(ZCGameUiEvent.SpawnToggleHints, this.onSpawnToggleHints);
+        this.listen(ZC_BATTLE_EVENTS.DAMAGE_POPUP_STATE, this.onDamagePopupState);
     }
     private onFrame({ dt }: IZCBattleFrame): void {
         if (this.selection) {
@@ -130,9 +142,9 @@ export class ZCBattleRuntimeController extends ControllerBase {
         if (!model || this.phase.isSettled) return;
         model.tick(dt);
         const frame = model.createRenderFrame(), events = model.drainPresentationEvents();
-        if (this.services.playSound) {
+        if (this.services.audio?.playSound) {
             const { combatEvents, projectiles, elapsedSeconds } = frame.snapshot;
-            this.battleAudio.present(combatEvents, elapsedSeconds, this.audioSourceOf, this.services.playSound, projectiles);
+            this.battleAudio.present(combatEvents, elapsedSeconds, this.audioSourceOf, this.services.audio.playSound, projectiles);
         }
         this.view.renderBattle(model, frame, events, 'dynamic');
         if (model.snapshot.status === 'playing') {
@@ -144,8 +156,11 @@ export class ZCBattleRuntimeController extends ControllerBase {
             }
             return;
         }
-        this.phase.beginSettlementPresentation();
-        this.refreshDamageStats();
+        if (this.phase.beginSettlementPresentation()) {
+            this.services.dialogs.cancel();
+            this.view.hideBarracksInfo();
+            this.refreshDamageStats();
+        }
         if (this.view.advanceSettlementPresentation(model, frame, dt)) return;
         this.render();
         this.openSettlement(false);
@@ -156,10 +171,8 @@ export class ZCBattleRuntimeController extends ControllerBase {
     }
     private renderSpawn(): void { if (this.selection) this.view.renderSpawnSelection(this.selection, this.hints); }
     private finishSpawnSelection(): void {
-        if (this.stopShowcase) {
-            this.stopShowcase();
-            this.stopShowcase = null;
-        }
+        this.stopShowcase?.();
+        this.stopShowcase = null;
         const selection = this.selection;
         const result = selection ? selection.result : null;
         const entry = this.entry;
@@ -220,17 +233,19 @@ export class ZCBattleRuntimeController extends ControllerBase {
                 }),
             };
         });
-        const { id, name, version, rows, columns, resolvedResources } = config.map;
-        console.info('[对局开局配置]', JSON.stringify({
-            seed: entry.battleSeed,
-            battleType: entry.battleType ?? entry.slgBattleType ?? null,
-            pveContext: entry.pveContext,
-            configHash: config.configHash,
-            map: { id, name, version, rows, columns, spawnMode: entry.matchConfig.map.cityMode ?? 'fixed',
-                resources: resolvedResources ?? [] },
-            rules: config.rules,
-            seats,
-        }));
+        if (ZCDC_LOG_WARNINGS) {
+            const { id, name, version, rows, columns, resolvedResources } = config.map;
+            console.info('[对局开局配置]', JSON.stringify({
+                seed: entry.battleSeed,
+                battleType: entry.battleType ?? entry.slgBattleType ?? null,
+                pveContext: entry.pveContext,
+                configHash: config.configHash,
+                map: { id, name, version, rows, columns, spawnMode: entry.matchConfig.map.cityMode ?? 'fixed',
+                    resources: resolvedResources ?? [] },
+                rules: config.rules,
+                seats,
+            }));
+        }
     }
     private async onRequestUnitArt({ unitId }: IZCRequestUnitArtIntent, source: object): Promise<void> {
         if (source !== this.view || this.pendingUnitArt.has(unitId) || this.loadedUnitArt.has(unitId)) return;
@@ -270,9 +285,68 @@ export class ZCBattleRuntimeController extends ControllerBase {
         })();
         this.pendingEffectArt.set(path, task);
     }
+    /**
+     * 集火按钮（或整只野怪）点击 → 切集火 + 弹提示。
+     *
+     * 2026-11-26 第 56 批用户：
+     * 「点击特效按钮后弹出提示UI，地块相邻后才能集火野怪；激活野怪后，点击按钮，
+     *   弹出屏幕中间弹出文字提示，开始激活野怪；点击取消集火，取消集火时弹出提示【集火取消】」。
+     *
+     * 三种结局都由模型回（`toggleMonsterFocusResult`），这里只负责翻译成一句话：
+     * 被拦 → 原因；开 → 「开始激活野怪」；关 → 「集火取消」。
+     * 🔴 同一句话**一秒内不重复弹**：按钮现在是恒可点（视觉上灰着也能点），
+     * 玩家在不相邻的地块上连点会把吐司队列刷满，排队放完要好几秒。
+     */
     private onMonsterFocus(hexId: number): void {
         if (!this.phase.isPlaying || this.view.dragMoved) return;
-        if (this.model && this.model.toggleMonsterFocus(hexId)) this.render();
+        if (!this.model) return;
+        // HUD 按钮直接触发时不经过 `HexClick` 路由，兵营面板要在这里收（点击路由那次同理）。
+        this.view.hideBarracksInfo();
+        const result = this.model.toggleMonsterFocusResult(hexId);
+        const key = result.reason ?? result.kind;
+        if (!key) return;
+        this.showMonsterFocusToast(key);
+        if (result.kind) this.render();
+    }
+
+    private showMonsterFocusToast(key: keyof typeof ZC_MONSTER_FOCUS_TOAST): void {
+        const now = this.model?.snapshot.elapsedSeconds ?? 0;
+        const last = this.lastMonsterFocusToast;
+        if (last && last.key === key && now - last.at < MONSTER_FOCUS_TOAST_REPEAT_SECONDS) return;
+        this.lastMonsterFocusToast = { key, at: now };
+        // 🔴 走 services 注入而不是直接 import `common/Toast`：`Toast` 顶层 `import 'cc'`，
+        // 而 application 层的**运行期**依赖图必须保持 cc-free（`tests/helpers/battle-runtime.ts`
+        // 直接 import 本控制器）。真实装配在 `BattleComposition.createRuntimeServices`。
+        this.services.toast?.(ZC_MONSTER_FOCUS_TOAST[key]);
+    }
+    /**
+     * 点击兵营 → 装配并展示兵营信息；返回 `true` 表示这一下被面板消费。
+     *
+     * 数据口径：卡（席位卡组 → 本地卡牌目录兜底）、本局生效兵种属性、卡牌英雄等级。
+     * 四阵营兵营都可看（中立营没有归属卡组，直接不弹）。
+    */
+    private openBarracksInfoFor(hexId: number): boolean {
+        const model = this.model;
+        const entry = this.entry;
+        if (!model || !entry || !this.phase.isPlaying) return false;
+        const hex = model.snapshot.hexes[hexId];
+        if (!hex || hex.building !== 'barracks' || !hex.cardId || hex.owner === 'neutral') return false;
+        const owner = hex.owner as ZCOwner;
+        const config = entry.matchConfig;
+        const deck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
+        const card = deck.find(item => item.id === hex.cardId) ?? findCatalogCard(hex.cardId);
+        if (!card) return false;
+        //  兵营卡必须指向兵种；纯建筑卡或配置缺失时不开面板，也不让异常打断点击链路。
+        if (card.unitId == null) return false;
+        const heroLevel = entry.heroLevels?.find(([seat]) => seat === owner)?.[1][card.id] ?? 1;
+        let definition: ZCUnitDefinition;
+        try {
+            definition = model.effectiveDefinitionForUnit(owner, String(card.unitId));
+        } catch {
+            return false;
+        }
+        this.view.showBarracksInfo(buildZCBarracksInfo(card, definition, heroLevel));
+        return true;
     }
     private onHexClick(hexId: number): void {
         if (this.phase.isSettled || this.view.dragMoved) return;
@@ -282,17 +356,23 @@ export class ZCBattleRuntimeController extends ControllerBase {
             this.renderSpawn(); return;
         }
         const model = this.model;
+        //  兵营：点击只弹信息面板，不参与开发/集火判定（用户 2026-11-25「点击兵营弹出兵营信息」）。
+        if (model && this.openBarracksInfoFor(hexId)) return;
+        if (model) this.view.hideBarracksInfo();
+        //  野怪格：点整只野怪 = 点集火按钮（2026-11-25 用户）。走 `onMonsterFocus` 而不是在这里
+        //  重写一遍，冷却 / 拖拽 / 结算态的守卫都在它那儿。
+        if (model && model.isMonsterFocusHex(hexId)) { this.onMonsterFocus(hexId); return; }
         if (model && model.canPlayerDevelop(hexId)) {
             const result = model.developHex(hexId);
             if (result.reason === 'insufficientGold') {
                 this.view.flashInsufficientGold();
-            } else if (result.ok && this.services.playSound) {
+            } else if (result.ok && this.services.audio?.playSound) {
                 // 战斗内翻地块的四档抽卡音（用户 2026-11-24）：抽空 / 蓝绿 / 紫 / 金。
                 // 只在**开发真的落地**那一拍响：不可开发的格、金币不足都静默
                 // （后者已有金栏闪红），否则玩家会以为白捡了一次奖励。
                 // 品阶取 `result.cardRarity`（`ZCDevelopResult`）：抽空时它是 `undefined`，
                 // 抽到卡但该格建不上时仍有值 ⇒ 音效按「抽到什么」走，不按「建没建成」走。
-                this.services.playSound(battleDrawSoundOf(result.cardRarity));
+                this.services.audio.playSound(battleDrawSoundOf(result.cardRarity));
             }
             this.render();
         }
@@ -325,32 +405,16 @@ export class ZCBattleRuntimeController extends ControllerBase {
      * 取消 / 点空白关闭都直接返回，不产生任何对局副作用；`retreating` 挡住连点。
     */
     private async onRetreat(): Promise<void> {
-        if (this.phase.isSettled || this.retreating) return;
+        if (!this.phase.isPlaying || this.retreating) return;
         this.retreating = true;
         try {
-            if (!await this.askRetreat(RETREAT_CONFIRM)) return;
+            if (!await this.services.dialogs.confirm(RETREAT_CONFIRM)) return;
+            if (this.isDisposed || !this.phase.isPlaying) return;
             this.openSettlement(true);
         } catch (error) {
             if (!this.isDisposed) this.services.failed(error);
         } finally {
             this.retreating = false;
-        }
-    }
-    /**
-     * 问一次。返回 `true` 只有「玩家点了确定」这一种情况。
-     *
-     * 弹窗句柄存进 `popups`，退出对局时 `closePopups` 会关它 ⇒ `answered` 兑现 `false`，
-     * 这里就自然不会再往下走（不需要额外的 disposed 竞速）。
-    */
-    private async askRetreat(step: IZCBattleConfirmOptions): Promise<boolean> {
-        const popup = await this.services.popups.confirm(step);
-        if (!popup) return false;
-        if (this.isDisposed) { popup.close('force'); return false; }
-        this.popups.set('retreat', popup);
-        try {
-            return (await popup.answered) === true;
-        } finally {
-            if (this.popups.get('retreat') === popup) this.popups.delete('retreat');
         }
     }
     private onResetCamera(): void { this.view.resetCamera(); }
@@ -361,7 +425,10 @@ export class ZCBattleRuntimeController extends ControllerBase {
         if (!model || !entry || this.phase.isSettled) return;
         if (!retreated && model.snapshot.status === 'playing') return;
         if (!this.phase.openSettlement()) return;
-        this.clearDamagePopup();
+        this.damageOpening = false;
+        this.damageActive = false;
+        this.services.dialogs.cancel();
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.POPUP_COMMAND, { kind: 'closeRuntimePopups' }, this.view);
         const stats = model.damageStats, unitIds = new Map(entry.seatUnitIds ?? []);
         // ≥3 人局的结算要先过排行榜（需求 11-4）。席位与档案和 HUD 那颗「排行榜」按钮同源，
         // `finished=true` ⇒ 不再出现「比赛中…」态（结算时每方地块数都已是定局）。
@@ -390,7 +457,10 @@ export class ZCBattleRuntimeController extends ControllerBase {
         try {
             const content = await entry.resources.loadGuide();
             if (this.isDisposed || this.phase.isSettled) return;
-            await this.trackPopup('guide', this.services.popups.openGuide(content));
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.POPUP_COMMAND, {
+                kind: 'openGuide',
+                content,
+            }, this.view);
         } catch (error) {
             if (!this.isDisposed) this.services.failed(error);
         } finally {
@@ -400,33 +470,30 @@ export class ZCBattleRuntimeController extends ControllerBase {
     /**
      * 打开实时伤害统计面板。
      *
-     * 7 重生命周期与防重入门闩：
-     * 1. 战局未就绪 / 选点中 / 已结算：直接忽略；
-     * 2. 加载在途中 (damageOpening) / 弹窗已展示 (isDamageOpen)：防连点与防叠窗；
-     * 3. 异步加载完成后：若控制器已销毁或已进入结算，立刻 close 迟到弹窗，防止幽灵弹窗残留；
-     * 4. 绑定成功后：立刻全量刷新一次数据（追平加载间隙产生的伤害）；
-     * 5. 局内由 onFrame 按 0.15s 节流持续推流 refresh。
+     * 1. 战局未就绪 / 选点中 / 已结算 / 在途或已展开时直接忽略；
+     * 2. 打开命令交给组合层托管，回告就绪后立刻推一次追平刷新；
+     * 3. 局内由 onFrame 按 0.15s 节流持续推流，弹窗关闭回告后停止推流。
      */
-    private async onOpenDamage(): Promise<void> {
-        const isDamageOpen = Boolean(this.damagePopup && this.damagePopup.isOpen);
-        if (!this.model || !this.entry || this.phase.isSettled || this.damageOpening || isDamageOpen) {
+    private onOpenDamage(): void {
+        if (!this.model || !this.entry || this.phase.isSettled || this.damageOpening || this.damageActive) {
             return;
         }
+        const units = this.damageUnits();
+        const seats = this.damageSeats();
         this.damageOpening = true;
-        try {
-            const popup = await this.services.popups.openDamage(this.damageUnits(), this.damageSeats());
-            if (!popup) return;
-            if (this.isDisposed || this.phase.isSettled) {
-                popup.close();
-                return;
-            }
-            if (!popup.isOpen) return;
-            this.bindDamagePopup(popup);
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.POPUP_COMMAND, {
+            kind: 'openDamage',
+            phase: 'runtime',
+            units,
+            seats,
+        }, this.view);
+    }
+    private onDamagePopupState({ phase, open }: IZCBattleDamagePopupState, source: object): void {
+        if (source !== this.view || phase !== 'runtime') return;
+        this.damageOpening = false;
+        this.damageActive = open && !this.phase.isSettled;
+        if (this.damageActive) {
             this.refreshDamageStats();
-        } catch (error) {
-            if (!this.isDisposed) this.services.failed(error);
-        } finally {
-            this.damageOpening = false;
         }
     }
     /**
@@ -501,6 +568,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
         }
         for (const owner of model.owners) {
             deckOf(owner).forEach((deckCard, index) => {
+                if (!deckCard.unitId) return;
                 if (counted.has(`${owner}:${deckCard.id}`)) return;
                 rows.push({
                     owner, unitId: '', cardId: deckCard.id,
@@ -525,51 +593,22 @@ export class ZCBattleRuntimeController extends ControllerBase {
         if (!model || !entry) return { owners: [], profiles: new Map() };
         return { owners: model.owners, profiles: new Map(entry.seatProfiles) };
     }
-    private bindDamagePopup(popup: IZCDamageStatsPopup): void {
-        this.damagePopup = popup;
-        this.popups.set('damage', popup);
-    }
-    private detachDamagePopup(): void {
-        this.damagePopup = null;
-        this.popups.delete('damage');
-    }
-    private clearDamagePopup(): void {
-        if (!this.damagePopup) return;
-        const popup = this.damagePopup;
-        this.detachDamagePopup();
-        popup.close();
-    }
     private refreshDamageStats(): void {
-        if (!this.damagePopup) return;
-        if (!this.damagePopup.isOpen) {
-            this.detachDamagePopup();
-            return;
-        }
-        this.damagePopup.refresh(this.damageUnits());
+        if (!this.damageActive) return;
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.POPUP_COMMAND, {
+            kind: 'refreshDamage',
+            units: this.damageUnits(),
+        }, this.view);
     }
     private onOpenRank(): void {
         const model = this.model, entry = this.entry;
-        if (!model || !entry) return;
+        if (!model || !entry || this.phase.isSettled) return;
         const profiles = new Map(entry.seatProfiles);
-        void this.trackPopup('rank', this.services.popups.openRank(buildRankSeats(model.owners, owner => model.territoryCountOf(owner), profiles, model.snapshot.status !== 'playing'), profiles));
-    }
-    private async trackPopup(kind: 'guide' | 'rank', pending: Promise<IZCBattlePopup | null>): Promise<void> {
-        try {
-            const popup = await pending;
-            if (!popup) return;
-            if (this.isDisposed) popup.close(); else this.popups.set(kind, popup);
-        } catch (error) { if (!this.isDisposed) this.services.failed(error); }
-    }
-    private closePopups(): void {
-        const popups = Array.from(this.popups.values());
-        this.popups.clear();
-        let failed = false;
-        let firstError: unknown;
-        for (const popup of popups) {
-            try { popup.close(); }
-            catch (error) { if (!failed) { failed = true; firstError = error; } }
-        }
-        if (failed) throw firstError;
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.POPUP_COMMAND, {
+            kind: 'openRank',
+            seats: buildRankSeats(model.owners, owner => model.territoryCountOf(owner), profiles, model.snapshot.status !== 'playing'),
+            profiles,
+        }, this.view);
     }
     dispose(): void {
         if (this.isDisposed) return;
@@ -577,17 +616,25 @@ export class ZCBattleRuntimeController extends ControllerBase {
         this.releaseInputs();
         const stopShowcase = this.stopShowcase;
         this.stopShowcase = null;
-        try { stopShowcase?.(); }
-        finally {
-            try { this.settlement.dispose(); }
-            finally {
-                try { this.closePopups(); }
-                finally {
-                    this.pendingUnitArt.clear(); this.loadedUnitArt.clear();
-                    this.pendingEffectArt.clear(); this.loadedEffectArt.clear();
-                    this.model = null; this.selection = null; this.entry = null;
-                    this.damagePopup = null;
-                    super.dispose();
+        this.damageOpening = false;
+        this.damageActive = false;
+        try {
+            stopShowcase?.();
+        } finally {
+            try {
+                this.services.dialogs.cancel();
+            } finally {
+                try {
+                    this.settlement.dispose();
+                } finally {
+                    try {
+                        EventMgr.instance.emit(ZC_BATTLE_EVENTS.POPUP_COMMAND, { kind: 'closeRuntimePopups' }, this.view);
+                    } finally {
+                        this.pendingUnitArt.clear(); this.loadedUnitArt.clear();
+                        this.pendingEffectArt.clear(); this.loadedEffectArt.clear();
+                        this.model = null; this.selection = null; this.entry = null;
+                        super.dispose();
+                    }
                 }
             }
         }

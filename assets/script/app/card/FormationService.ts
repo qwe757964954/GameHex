@@ -22,7 +22,7 @@ export type FormationSaveResult =
  * 阵型读取的硬超时。GameNet.send 没有按请求超时，服务端不回应时 Promise 会一直悬着，
  * 面板会停在 prefab 占位外观。
  */
-export const FORMATION_REQUEST_TIMEOUT_MS = 3000;
+const FORMATION_REQUEST_TIMEOUT_MS = 3000;
 
 /**
  * 阵型保存的硬超时。保存是用户主动操作，超时会误报失败，所以比读取给得宽。

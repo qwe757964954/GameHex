@@ -29,6 +29,7 @@ import { ZCStatusSystem } from '../assets/script/app/zcds/model/ZCStatusEffect';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import {
     ZC_TRAP_BEHAVIOR_KEY, ZC_TRAP_EXPIRE_PREFAB_PATH, ZC_TRAP_EXPIRE_SECONDS,
     ZC_TRAP_IDLE_PREFAB_PATH, ZC_TRAP_SPAWN_PREFAB_PATH, ZC_TRAP_SPAWN_SECONDS, zcTrapEffectPath,
@@ -127,7 +128,7 @@ function trapContext(caster: ZCUnitState, params: Record<string, number>) {
         damageBuilding: () => undefined,
         unitsInRadius: () => [],
         healUnit: () => {},
-    } as unknown as Parameters<typeof ZCAttackResolutionSystem.castTrap>[2];
+    } as unknown as Parameters<typeof ZCSkillResolutionSystem.castTrap>[2];
 }
 
 /** 区域 tick 的最小上下文（与 `tests/zcds-magdi-mushroom.test.ts` 同一套收窄手法）。 */
@@ -175,7 +176,7 @@ test('103504 三行 = 精密陷阱 / trap_place / 七个参数逐档对齐设计
             .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
         assert.equal(trap.length, 3, '103504 必须三档俱全');
         // 103504 是这张卡的**第 4 格** ⇒ 按「技能4 = 12 / 24 / 36」统一档位（2026-11-17）。
-        assert.deepEqual(trap.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36]);
+        assert.deepEqual(trap.map((row) => Number(row.unlockHeroLevel)), [7, 24, 36]);
         for (const row of trap) {
             assert.equal(row.skillName, '精密陷阱');
             assert.equal(row.behaviorKey, ZC_TRAP_BEHAVIOR_KEY);
@@ -308,7 +309,7 @@ test('预制体三件套在盘上：start / 爆炸一次性、idle 循环', () =
 test('castTrap：落在**脚下**，两段伤害与延迟出场一次性配齐', () => {
     const caster = unit(1, 'player', { freeX: 100, freeY: 200 });
     const state = snapshot([caster]);
-    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, trapContext(caster, TRAP_PARAMS)), true);
+    assert.equal(ZCSkillResolutionSystem.castTrap(state, caster, trapContext(caster, TRAP_PARAMS)), true);
 
     assert.equal(state.groundZones.length, 1);
     const zone = state.groundZones[0];
@@ -337,7 +338,7 @@ test('castTrap：落在**脚下**，两段伤害与延迟出场一次性配齐',
 test('castTrap：三档参数各自生效；缺任一参数 ⇒ 返回 false，一个区域都不建', () => {
     const caster = unit(1, 'player');
     const state = snapshot([caster]);
-    ZCAttackResolutionSystem.castTrap(state, caster,
+    ZCSkillResolutionSystem.castTrap(state, caster,
         trapContext(caster, { ...TRAP_PARAMS, trapDuration: 23, trapDamageRate: 3, trapExplodeDamageRate: 2.8 }));
     assert.equal(state.groundZones[0].remainingSeconds, 23);
     assert.equal(state.groundZones[0].contactDamage, 90);
@@ -347,7 +348,7 @@ test('castTrap：三档参数各自生效；缺任一参数 ⇒ 返回 false，�
         const broken = { ...TRAP_PARAMS } as Record<string, number>;
         delete broken[missing];
         const fresh = snapshot([caster]);
-        assert.equal(ZCAttackResolutionSystem.castTrap(fresh, caster, trapContext(caster, broken)), false,
+        assert.equal(ZCSkillResolutionSystem.castTrap(fresh, caster, trapContext(caster, broken)), false,
             `缺 ${missing} 还放出了陷阱`);
         assert.equal(fresh.groundZones.length, 0);
     }
@@ -356,7 +357,7 @@ test('castTrap：三档参数各自生效；缺任一参数 ⇒ 返回 false，�
 test('trapForward 是「往前丢一格」的备用槽：配了才偏，缺省恒等于脚下', () => {
     const caster = unit(1, 'player', { freeX: 0, freeY: 0, facingRadians: 0 });
     const forward = snapshot([caster]);
-    ZCAttackResolutionSystem.castTrap(forward, caster,
+    ZCSkillResolutionSystem.castTrap(forward, caster,
         trapContext(caster, { ...TRAP_PARAMS, trapForward: 30 }));
     closeTo(forward.groundZones[0].x, 9, '30 表值 px × 0.3 = 9 世界 px');
     closeTo(forward.groundZones[0].y, 0);

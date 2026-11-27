@@ -37,6 +37,6 @@ test('每次打开重置上膛状态（实例复用不能带着上一轮的状�
 
 test('投降只确认一次：不再配「再次确认」，也不会串行弹两个框', () => {
     assert.doesNotMatch(runtime, /confirmAgainText: '再次确认'/, '投降已改为一次确认（2026-11-11 口径）');
-    assert.equal((runtime.match(/popups\.confirm\(/g) ?? []).length, 1, 'confirm 只在一个地方调用（串行两次会变两个框）');
+    assert.equal((runtime.match(/dialogs\.confirm\(/g) ?? []).length, 1, 'confirm 只在一个地方调用（串行两次会变两个框）');
     assert.match(runtime, /content: '你确定放弃当前对局，提前退出嘛？'/, '文案是策划原文');
 });

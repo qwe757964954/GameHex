@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import Long from 'long';
-import { BigMapSlgRepository, type IBigMapSlgGateway, type IBigMapSlgRequestBody, type IBigMapSlgRequestName } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
+import { BigMapSlgRepository, type IBigMapSlgGateway, type IBigMapSlgRequestBody, type IBigMapSlgRequestName,
+    type IBigMapSlgRequestOutcome } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
 import {
     bigMapServerCellIndex, normalizeBigMapBuild, normalizeBigMapBuildInfo, normalizeBigMapBuildQueue,
     projectBigMapServerBase,
@@ -23,9 +24,14 @@ class Gateway implements IBigMapSlgGateway {
         if (name === 'CmdSlgGameInfoReqMsg') return { info: { maxMonsterLevel: 0, toCampId: 0 } };
         return {};
     };
-    request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<unknown> {
+    /** 置位后下一次请求直接以该结论收尾（模拟服务端 `CmdTips` 拒绝 / 请求没发出 / 发了没回音），用完即清。 */
+    outcome: IBigMapSlgRequestOutcome | null = null;
+    request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<IBigMapSlgRequestOutcome> {
         this.calls.push({ name, body });
-        return this.reply(name, body);
+        const outcome = this.outcome;
+        this.outcome = null;
+        return outcome ? Promise.resolve(outcome)
+            : this.reply(name, body).then((response): IBigMapSlgRequestOutcome => ({ status: 'ok', response }));
     }
     subscribe(listener: (kind: 'game' | 'build') => void): () => void {
         this.listener = listener;
@@ -183,6 +189,65 @@ test('写请求未确认且无广播时，只读重拉恢复服务端已经执�
     repo.dispose();
 });
 
+test('服务端 CmdTips 拒绝：不置脏、不重拉、不补第二条提示', async () => {
+    const { repo, gateway } = harness();
+    await repo.initialize();
+    const before = JSON.stringify(repo.projectBase());
+    const pulls = () => gateway.calls.filter((call) => call.name === 'CmdSlgBuildInfoReqMsg').length;
+    const pulled = pulls();
+    gateway.outcome = { status: 'rejected' };
+    const result = await repo.move(ID, 2);
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'rejected');
+    assert.equal('message' in result, false, '仓储只返结构化状态，不决策 UI 文案');
+    assert.equal(repo.ready, true, '服务端拒绝 ⇒ 状态没变，不置脏');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(pulls(), pulled, '不触发只读重拉');
+    assert.equal(JSON.stringify(repo.projectBase()), before);
+    //读请求被拒绝同理：这次没拿到，已有快照原样保留。
+    gateway.outcome = { status: 'rejected' };
+    assert.equal(await repo.refreshBuildInfo(), false);
+    assert.equal(repo.ready, true);
+    assert.equal(JSON.stringify(repo.projectBase()), before);
+    //写锁已释放，下一次操作照常发出。
+    gateway.reply = async () => ({ build: build({ position: 3 }) });
+    const moved = await repo.move(ID, 3);
+    assert.deepEqual(moved, { ok: true, status: 'ok', action: 'moved' });
+    assert.equal(repo.projectBase()?.buildings[0].hexId, 3);
+    repo.dispose();
+});
+
+test('请求没发出（未连接 / 关页 / 切号）：不置脏、不重拉，也不再误报「服务器未确认」', async () => {
+    const { repo, gateway } = harness();
+    await repo.initialize();
+    const before = JSON.stringify(repo.projectBase());
+    const sent = gateway.calls.length;
+    gateway.outcome = { status: 'offline' };
+    const result = await repo.move(ID, 2);
+    assert.deepEqual(result, { ok: false, status: 'offline' });
+    assert.equal(repo.ready, true);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(gateway.calls.length, sent + 1, '只发了这一次，没有任何后续请求');
+    assert.equal(JSON.stringify(repo.projectBase()), before);
+    repo.dispose();
+});
+
+test('发出后没有结论：置脏、只读重拉、不重发，重拉成功即恢复', async () => {
+    const { repo, gateway } = harness();
+    await repo.initialize();
+    const count = (name: IBigMapSlgRequestName) => gateway.calls.filter((call) => call.name === name).length;
+    const pulled = count('CmdSlgBuildInfoReqMsg');
+    gateway.outcome = { status: 'unconfirmed' };
+    const result = await repo.move(ID, 2);
+    assert.deepEqual(result, { ok: false, status: 'failed' });
+    assert.equal(repo.ready, false, '服务端可能已执行 ⇒ 本地快照不可信');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(count('CmdSlgBuildMoveReqMsg'), 1, '不重发写请求');
+    assert.equal(count('CmdSlgBuildInfoReqMsg'), pulled + 1, '写锁释放后只读重拉一次');
+    assert.equal(repo.ready, true);
+    repo.dispose();
+});
+
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 test('建筑脏标记不再触发定时 BuildInfo 请求，行动力轮询与广播重拉仍保留', async () => {
@@ -261,9 +326,8 @@ test('还没同步到基地信息时，写操作顺手补拉一次，而不是�
     const { gateway, repo } = harness();
     // 故意不 initialize：`info` 还是 null。
     const result = await repo.build(config.mainBuildingId, 1);
-    assert.equal(result.ok, false, '未就绪时不能提交建造');
-    assert.equal(result.message, '正在同步基地信息');
-    // 关键：不能只回一句提示就完事 —— 要顺手补一次 BuildInfo，
+    assert.deepEqual(result, { ok: false, status: 'loading' }, '未就绪时不能提交建造');
+    // 关键：不能只回状态就完事 —— 要顺手补一次 BuildInfo，
     // 否则表现就是用户看到的「点了没反应、服务器也没收到请求」。
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(gateway.calls.some((call) => call.name === 'CmdSlgBuildInfoReqMsg'), true,
@@ -272,17 +336,15 @@ test('还没同步到基地信息时，写操作顺手补拉一次，而不是�
     // 补拉成功后照常提交。
     assert.equal(await repo.initialize(), true);
     gateway.reply = async (name) => (name === 'CmdSlgBuildReqMsg' ? { build: build({ position: 1 }), queue: null } : {});
-    assert.equal((await repo.build(config.mainBuildingId, 1)).ok, true);
+    assert.deepEqual(await repo.build(config.mainBuildingId, 1), { ok: true, status: 'ok', action: 'built' });
 });
 
-test('首帧同步确实失败后，写操作说「同步失败」而不是「正在同步」', async () => {
+test('首帧同步确实失败后，写操作返回 syncFailed 而不是 loading', async () => {
     const { gateway, repo } = harness();
     gateway.reply = async () => null;   // 全部被拦 / 超时
     assert.equal(await repo.initialize(), false);
     const result = await repo.build(config.mainBuildingId, 1);
-    assert.equal(result.ok, false);
-    // 「正在同步」会让人一直等；这里必须明说失败。
-    assert.match(result.message, /同步失败/);
+    assert.deepEqual(result, { ok: false, status: 'syncFailed' });
 });
 
 test('unlockQueue=0（还没解锁任何队列）是合法快照，不能整包丢弃', () => {

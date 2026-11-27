@@ -1,3 +1,4 @@
+import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
 import type { ZCCombatTarget, ZCProjectileState, ZCUnitState } from '../ZCGameTypes';
 import type { IZCModelServices } from './ZCModelServices';
 
@@ -76,7 +77,7 @@ export class ZCProjectileSystem {
     private readonly wideUnits: ZCUnitState[] = [];
     /** 每轮复用的结构候选（墙体 / 建筑），由 `context.structureTargets` 填。*/
     private readonly structures: ZCCombatTarget[] = [];
-    private readonly cellSize = 42;
+    private readonly cellSize = HEX_GRID_LOGICAL_ROW_STEP;
 
     // ---- 每帧/每弹道复用的临时量：只读字段引用，写其内部成员，不产生 GC ----
     private readonly fromPoint: Point = { x: 0, y: 0 };

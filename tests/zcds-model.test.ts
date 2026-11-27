@@ -1439,8 +1439,10 @@ test('植物占领世界普攻特效接入：每张卡用自己的独立行，�
     assert.equal(dart.trigger, 'every_seconds', '精英猎手是「主动-冷却 10 秒」，必须走时间触发');
     assert.equal(dart.cooldown, 10, '设计案 100404 的冷却就是 10 秒');
     assert.equal(dart.empoweredSkillId, 30821, '强化那一击必须换用精英猎手 30821');
+    //  2026-11-26 第 57 批：普攻弹体换成「卡牌常用子弹物件」的统一格式（白色三角拖尾，
+    //  拖尾几何登记在 `ZC_EFFECT_TRAIL_SPECS`、不烘进 prefab）。30821 仍是原先那套放大版飞镖。
     assert.equal(String(skillRows.get(30716)!.effectPrefabPath),
-        'units/projectiles/玉林好汉_飞镖普攻/玉林好汉_飞镖普攻', '普攻必须用新做的飞镖三件套');
+        'units/projectiles/卡牌常用子弹物件/玉林好汉_子弹', '普攻必须用第 57 批的统一子弹');
     // 「子弹大小 ×3」不在弹道参数里做，而是强化那一击换一张 `_lscale` 更大的同源 prefab
     // （尺寸真源只能是 prefab 根 `_lscale`，见 `docs/zcds-表现层与领地规范.md` §1.10）。
     assert.equal(String(skillRows.get(30821)!.effectPrefabPath),

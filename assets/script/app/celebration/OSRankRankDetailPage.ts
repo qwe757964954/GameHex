@@ -27,7 +27,7 @@ const { ccclass, property } = _decorator;
  */
 
 /** 老端 `showNum: 50`。 */
-export const CL_DETAIL_SHOW_NUM = 50;
+const CL_DETAIL_SHOW_NUM = 50;
 
 /** 打开参数（由 `OSRankPage` 传）。 */
 export interface IOsRankDetailParams {

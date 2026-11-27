@@ -12,8 +12,8 @@ import { ZCSkillRuntimeRegistry } from '../assets/script/app/zcds/model/ZCSkillR
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { ZCStatusSystem } from '../assets/script/app/zcds/model/ZCStatusEffect';
 import {
-    ZCAttackResolutionSystem, type IZCAttackResolutionContext,
-} from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+    ZCAttackResolutionSystem, type IZCAttackResolutionContext } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import { ZCDamageResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCDamageResolutionSystem';
 import { ZCUnitRegistry } from '../assets/script/app/zcds/model/systems/ZCUnitRegistry';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
@@ -32,7 +32,7 @@ import { assetPath } from './helpers/asset-paths';
  *  1. `self_cast`     —— 冷却到点给自己开一段限时增益（可带自愈 / 友军治疗 / 净化），
  *                        由 `ZCSkillTriggerSystem.applySelfCast` 按 `selfCastCooldown` 推进；
  *  2. `random_strike` —— 冷却（或累计普攻）到点在半径里挑 N 个敌人各打一发，
- *                        挑人在 trigger system、结算在 `ZCAttackResolutionSystem.strikeTargets`。
+ *                        挑人在 trigger system、结算在 `ZCSkillResolutionSystem.strikeTargets`。
  *
  * 另外两条被动原语的消费点也钉在这里：
  *  · `ZCStatusStatMods.damageRatePct` / `lifestealRate`（限时增伤 / 限时吸血）；
@@ -367,7 +367,7 @@ test('多点打击：strikeNearest 挑最近的那几个，不碰远处与友军
     const units = [caster, closeBy, middle, far, ally, outside];
     const state = makeState(units, 5);
     const { context, damaged } = strikeContext(units, () => 0.5);
-    const hit = ZCAttackResolutionSystem.strikeTargets(state, caster, {
+    const hit = ZCSkillResolutionSystem.strikeTargets(state, caster, {
         count: 2, radius: 336 * 0.3, damageRate: 3, nearest: true,
     }, context);
     assert.equal(hit, 2);
@@ -385,7 +385,7 @@ test('多点打击：随机模式用同一套随机序列就能重演出同一�
         let cursor = 0;
         const sequence = [0.9, 0.1, 0.5, 0.3];
         const { context, damaged } = strikeContext(units.map((unit) => ({ ...unit })), () => sequence[cursor++ % sequence.length]);
-        ZCAttackResolutionSystem.strikeTargets(state, state.units[0], {
+        ZCSkillResolutionSystem.strikeTargets(state, state.units[0], {
             count: 2, radius: 210 * 0.3, damageRate: 0.5, nearest: false,
         }, context);
         return damaged.map((item) => item.id).sort();
@@ -409,7 +409,7 @@ test('追踪导弹：一次施法恒定 3 颗（配表 strikeCount=5 被登记�
     const { context, pushed } = strikeContext(units, () => 0.5);
     const fire = (missileCount?: number): number => {
         pushed.length = 0;
-        const fired = ZCAttackResolutionSystem.strikeTargets(state, caster, {
+        const fired = ZCSkillResolutionSystem.strikeTargets(state, caster, {
             count: 5, radius: 336 * 0.3, damageRate: 8, nearest: true,
             missilePrefabPath: missile.missilePrefabPath,
             impactPrefabPath: missile.impactPrefabPath,

@@ -814,6 +814,7 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
     const events: Array<{ name: string; payload: { playing?: boolean } }> = [];
     const tick = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
     const modules: Record<string, unknown> = {
+        '/ResourceScope': { ResourceScope },
         '/ControllerBase': { ControllerBase: class {} },
         '/EventMgr': { EventMgr: { instance: { emit: (name: string, payload: unknown) => { events.push({ name, payload }); } } } },
         '/FW': { FW: { ShowReward: (goods: unknown[]) => { rewardCalls.push(goods); } } },
@@ -830,18 +831,51 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
         },
         '/TerritoryChestOpenPage': {
             TerritoryChestOpenPage: {
-                open: async (params: unknown) => {
+                open: async (params: { scope?: InstanceType<typeof ResourceScope> }) => {
+                    if (params.scope?.disposed) return null;
                     chestOpens.push(params);
-                    return { close: () => { chestCloses++; } };
+                    let closed = false;
+                    const popup = {
+                        close: () => {
+                            if (closed) return;
+                            closed = true;
+                            chestCloses++;
+                        },
+                    };
+                    params.scope?.defer(() => popup.close());
+                    return popup;
                 },
             },
         },
         '/TerritoryChestOpenLayout': layout,
         '/HeroObtainPage': {
             HeroObtainPage: {
-                open: async (params: typeof opened[number]) => {
-                    opened.push(params);
-                    return { close: () => { closed++; params.onClose(); } };
+                open: async (params: typeof opened[number] & { scope?: InstanceType<typeof ResourceScope> }) => {
+                    if (params.scope?.disposed) return null;
+                    let heroClosed = false;
+                    let detach = () => {};
+                    const origOnClose = params.onClose;
+                    const wrappedParams = {
+                        ...params,
+                        onClose: () => {
+                            if (heroClosed) return;
+                            heroClosed = true;
+                            detach();
+                            origOnClose();
+                        },
+                    };
+                    opened.push(wrappedParams);
+                    const popup = {
+                        close: () => {
+                            if (heroClosed) return;
+                            heroClosed = true;
+                            detach();
+                            closed++;
+                            origOnClose();
+                        },
+                    };
+                    detach = params.scope?.defer(() => popup.close()) ?? (() => {});
+                    return popup;
                 },
             },
         },
@@ -916,6 +950,7 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
         [['territory:chest-presentation', false]]);
 
     const treasureHost = Object.create(loaded.exports.MainChestRewardCoordinator.prototype);
+    treasureHost.scope = new ResourceScope('treasure');
     treasureHost.isDisposed = false;
     const goods = [{ resId: 18001, number: 2 }];
     treasureHost.onTreasureRewards({ goods: [] });
@@ -926,8 +961,9 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
     assert.equal((chestOpens[0] as { userData: { goods: unknown } }).userData.goods, goods);
     treasureHost.onTreasureRewards({ goods });
     treasureHost.isDisposed = true;
+    treasureHost.scope.dispose();
     await tick();
-    assert.equal(chestCloses, 1, '开箱页加载期间退出时关闭迟到弹窗');
+    assert.equal(chestCloses, 2, '退出时关闭已开及加载中的开箱弹窗');
 });
 
 

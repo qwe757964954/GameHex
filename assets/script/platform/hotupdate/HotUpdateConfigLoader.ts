@@ -3,7 +3,7 @@ import type { IHotUpdateConfig, HotUpdatePlatform } from '../../core/update/HotU
 
 const CONFIG_PATH = 'config/hot_update';
 
-export const DEFAULT_HOT_UPDATE_CONFIG: IHotUpdateConfig = {
+const DEFAULT_HOT_UPDATE_CONFIG: IHotUpdateConfig = {
     enabled: false,
     enabledPlatforms: ['android', 'ios'],
     channel: 'dev',

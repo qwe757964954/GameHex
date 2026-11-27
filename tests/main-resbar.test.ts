@@ -25,9 +25,11 @@ import {
     artKey,
     spriteFramePath,
 } from '../assets/script/app/ArtPaths';
+import { formatResourceAmount } from '../assets/script/core/math/CompactNumber';
 import {
     buildResBarView,
     computeExpRatio,
+    formatResBarAmountText,
     formatResValue,
     RES_BAR_ICON_ART,
     RES_BAR_KEYS,
@@ -62,16 +64,46 @@ test('formatResValue：体力走「当前/上限」，负数归零但上限保�
     assert.equal(formatResValue({}, 'end'), '0/0');
 });
 
-test('formatResValue：gold/gem 是 string 字段，超 2^53 也不许过 number', () => {
-    const huge = '12345678901234567890';
-    assert.equal(formatResValue({ gold: huge }, 'gold'), huge);
+test('formatResValue：gold/gem 是 string 字段，显示前走工程大数换算（万以下原样）', () => {
+    // 2026-11-25：顶栏银币出现 122328065 占满读数区 —— 资源数值统一走
+    // `core/math/CompactNumber`（与老端资源栏 `BigNum.shortNum` 的 K/M/B/T 阶梯同源）。
+    assert.equal(formatResValue({ gold: '122328065' }, 'gold'), '122.3M');
     assert.equal(formatResValue({ gem: '20' }, 'gem'), '20');
-    // 服务端给空串时显示 0，而不是留一片空白
+    assert.equal(formatResValue({ gold: '9999' }, 'gold'), '9999', '一万以下不缩写（避免 1 万以下也变成 9K）');
+    assert.equal(formatResValue({ gold: '10000' }, 'gold'), '10K');
+    assert.equal(formatResValue({ gold: '12345' }, 'gold'), '12.3K', '一位小数，1900000 这类值不许被截成 1M');
+    // 超过 2^53 的十进制串也要有确定输出：先归一成数量级，再缩写（精度按显示需要取舍）
+    assert.equal(formatResValue({ gold: '1234567890123456' }, 'gold'), '1234.5T');
+    // 服务端给空串时显示 0，而不是留一片空白；脏串原样显示，不硬算成 0
     assert.equal(formatResValue({ gold: '' }, 'gold'), '0');
-    // 没登记的资源键 / 没拿到角色行 → 空串（视图层据此保留空图）
+    assert.equal(formatResValue({ gold: 'oops' }, 'gold'), 'oops');
+    // 没登记的资源键 / 没拿到角色行 → 空串（视图层据此保留空图标）
     assert.equal(formatResValue({ gold: '1' }, 'nope'), '');
     assert.equal(formatResValue(null, 'gold'), '');
     assert.equal(formatResValue(undefined, 'end'), '');
+});
+
+test('formatResourceAmount：1 万起 K/M/B/T 一位小数向下取整，档位阈值不串', () => {
+    assert.equal(formatResourceAmount(0), '0');
+    assert.equal(formatResourceAmount(9999), '9999', '一万以下原样（不提前缩成 9.9K）');
+    assert.equal(formatResourceAmount(10000), '10K');
+    assert.equal(formatResourceAmount(12345), '12.3K');
+    assert.equal(formatResourceAmount(999999), '999.9K');
+    assert.equal(formatResourceAmount(1000000), '1M');
+    assert.equal(formatResourceAmount(1900000), '1.9M', '整数截断会把 1.9M 写成 1M，货币读数不接受');
+    assert.equal(formatResourceAmount(9999999), '9.9M');
+    assert.equal(formatResourceAmount(1e9), '1B');
+    assert.equal(formatResourceAmount(1.5e12), '1.5T');
+    assert.equal(formatResourceAmount(Number.NaN), '0');
+    assert.equal(formatResourceAmount(-12), '0', '货币读数不显示负数');
+});
+
+test('formatResBarAmountText：体力只拼「当前/上限」，银币等走 K/M/B/T', () => {
+    assert.equal(formatResBarAmountText('gold', 122328065), '122.3M');
+    assert.equal(formatResBarAmountText('coin', 1175), '1175');
+    assert.equal(formatResBarAmountText('gold', 1900000), '1.9M', '货币读数不能被整数档吃掉一位有效数字');
+    assert.equal(formatResBarAmountText('end', 1175, 30), '1175/30', '体力不缩写，超出上限也照实显示');
+    assert.equal(formatResBarAmountText('end', Number.NaN, 30), '0/30');
 });
 
 test('computeExpRatio：取「下一级」那一行；满级 / 上限<=0 / 缺表一律 0', () => {
@@ -113,6 +145,9 @@ test('buildResBarView：三格顺序取自 RES_BAR_KEYS，只有体力格带「+
     // 槽位顺序、数值、加号显隐一次比完（顺序错了界面就会串格）
     assert.deepEqual(Array.from(view!.slots, (slot) => slot.key), ['gold', 'gem', 'end']);
     assert.deepEqual(Array.from(view!.slots, (slot) => slot.valueText), ['1000', '20', '30/120']);
+    // 原始值成对产出：读数滚动 / 扣减比对只认 amount，不反解析可能已缩写的 valueText
+    assert.deepEqual(Array.from(view!.slots, (slot) => slot.amount), [1000, 20, 30]);
+    assert.deepEqual(Array.from(view!.slots, (slot) => slot.cap), [0, 0, 120]);
     assert.deepEqual(Array.from(view!.slots, (slot) => slot.showPlus), [false, false, true]);
     assert.deepEqual(
         Array.from(view!.slots, (slot) => slot.iconArt),

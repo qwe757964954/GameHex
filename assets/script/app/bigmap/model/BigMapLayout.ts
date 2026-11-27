@@ -45,7 +45,7 @@ import type {
 export const BIGMAP_LAYOUT_KIND = 'bigmapWorld';
 
 /** 结构版本。加字段不用改它（可选字段向后兼容），语义变化才 +1。 */
-export const BIGMAP_LAYOUT_VERSION = 1;
+const BIGMAP_LAYOUT_VERSION = 1;
 
 /** 允许的地形取值，`parseBigMapLayout` 用它挡脏数据。 */
 const TERRAINS: readonly BigMapTerrain[] = ['plain', 'forest', 'rock', 'water'];

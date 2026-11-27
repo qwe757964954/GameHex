@@ -287,6 +287,27 @@ function loadZCGameClass(): { ZCGame: any; Widget: unknown } {
         '../../framework/ref/RefUtil': {},
         '../../framework/FW': { FW: { showTip: () => {} } },
         '../../core/runtime/GameRoute': { GameRoute: { Main: 'main' } },
+        // `ZCGame` 预加载大招通报的底光骨架（`sp.SkeletonData`）时按路径选分包：
+        // `assets.load(path, sp.SkeletonData, { scope, bundle: bundleForPath(path) })`。
+        // 缺桩 ⇒ 4 条借用/归还用例整个不跑（2026-11-25 实测）。用例不校验加载结果，给个常量即可。
+        '../../core/asset/BundleCatalog': { bundleForPath: () => 'battle' },
+        // 同上一处：骨架路径的真源在资源计划里（`ZC_BATTLE_FX_PATHS.skillAnnounceSkeleton`），
+        // 只在 `initialize` 里读一次文本路径，用例不跑那条分支 ⇒ 空表即可。
+        './model/ZCGameResourcePlan': { ZC_BATTLE_FX_PATHS: {}, ZC_BATTLE_SHELL_PATHS: {} },
+        // `ZCGame` 的兵营信息面板（2026-11-26 新增）：用例只走借用 / 归还，不点兵营 ⇒ 给空壳。
+        './view/ZCBarracksInfoView': { ZCBarracksInfoView: class {} },
+        // 结算胜负 UI 特效：`ZCGame` 结算分支按状态挑动画、再按骨架建节点。
+        // 这两条用例只走借用/归还，不跑结算 ⇒ 给最小桩（映射返回空串 = 不播）。
+        './model/ZCSettlementOutcomeStyle': { zcOutcomeAnimationOf: () => '' },
+        // 结算胜负 / 开局对战两条全屏横幅共用的组装件（2026-11-25 抽成通用件后取代 `ZCOutcomeEffectFx`）。
+        // 这 4 条只走借用/归还，不跑结算与开场 ⇒ 给最小桩。
+        './view/ZCUISpineBannerFx': {
+            createZCUISpineBannerNode: () => ({ root: {}, skeleton: {} }),
+            destroyZCUISpineBanner: () => {},
+            isZCUISpineBannerAlive: () => false,
+        },
+        // `ZCGame` 结算分支按骨架折算倍速（`zcOutcomeEffectSeconds`）；开场横幅只读路径。
+        './model/ZCUISpineBannerStyle': { zcUiBannerTimeScale: () => 1 },
         // `ZCGame` 的中控订阅挂 `EventMgr.instance`（`on` / `offTarget`）。
         '../../framework/event/EventMgr': {
             EventMgr: { instance: { on: () => {}, off: () => {}, offTarget: () => {} } },

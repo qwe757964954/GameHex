@@ -1,7 +1,7 @@
 import type { ZCAttackTrait } from './ZCCombatCatalog';
 import type {
     ZCBuildingDestruction, ZCBuildingShake, ZCBuildingType, ZCCardReveal, ZCFloatText, ZCFloatTextKind,
-    ZCHexActivation, ZCHitFx, ZCHitFxSurface, ZCNeutralReward,
+    ZCHexActivation, ZCHitFx, ZCHitFxSurface, ZCNeutralReward, ZCSkillAnnounce,
 } from './ZCGameTypes';
 import type { ZCFaction, ZCOwner } from './ZCMapConfig';
 import {
@@ -46,6 +46,24 @@ const EMPTY_BUILDING_DESTRUCTIONS: readonly Readonly<ZCBuildingDestruction>[] = 
  * 一轮最多领一圈邻格），上限只兜「渲染层整段没在跑还持续领」的极端情况 —— 丢最旧。
 */
 const NEUTRAL_REWARD_CAP = 16;
+/**
+ * 大招通报**同时存活**的上限。
+ *
+ * 用户口径 2026-11-25：「播报在玩家名字下方往下依次排队不重叠，间隔 3px，超过 3 个时，
+ * 后面的不展示了」。与样式层的 `ZC_SKILL_ANNOUNCE_STACK_MAX` 同值 —— 刻意各写一份
+ * （样式层是 `view|ui` 侧要用的零依赖模块，模型反向 import 会绕成环），一致性由
+ * `tests/zcds-skill-announce.test.ts` 直接断言两者相等来兜住。
+ */
+const SKILL_ANNOUNCE_LIVE_CAP = 3;
+/**
+ * 大招通报的存活时长（秒）—— 队列生命周期与视图动画共用的真源。
+ *
+ * 用户口径（2026-11-25）：「每次展示 2.3s」。
+ * 拆成两段：0~{@link ZC_SKILL_ANNOUNCE_HOLD_SECONDS} 全显（形象 + 名字），
+ * 之后淡出到结束。别压到 1s 以内：技能名刚看清就被摘掉节点，实机读不出名字。
+*/
+export const ZC_SKILL_ANNOUNCE_HOLD_SECONDS = 1.66;
+export const ZC_SKILL_ANNOUNCE_SECONDS = 2.3;
 
 /**
  * 中立资源获取表现的总时长（秒）—— 队列生命周期与视图动画共用的真源。
@@ -176,6 +194,16 @@ export interface IZCCardRevealOptions {
     readonly y: number;
 }
 
+/** 大招通报入参（卡面形象 + 技能名，坐标是棋盘逻辑坐标）。*/
+export interface IZCSkillAnnounceOptions {
+    readonly now: number;
+    readonly cardId: string;
+    readonly skillId: number;
+    readonly skillName: string;
+    readonly x: number;
+    readonly y: number;
+}
+
 /** 中立资源领取通知入参（金额/充能由模型按奖励表现取，不在视图猜）。*/
 export interface IZCNeutralRewardOptions {
     readonly now: number;
@@ -201,6 +229,8 @@ export class ZCBattlePresentationQueue {
     /** 建筑摧毁通知队列（同抖动：取走即空，不能标 `readonly`）。*/
     private buildingDestructionQueue: ZCBuildingDestruction[] = [];
     private neutralRewardQueue: ZCNeutralReward[] = [];
+    /** 通报队列 = 当前还在屏幕上的那几条（并列展示，过期即摘，见 `pushSkillAnnounce`）。*/
+    private readonly skillAnnounceQueue: ZCSkillAnnounce[] = [];
     private nextFloatTextId = 1;
     private nextHitFxId = 1;
     private nextCardRevealId = 1;
@@ -208,12 +238,14 @@ export class ZCBattlePresentationQueue {
     private nextBuildingShakeId = 1;
     private nextBuildingDestructionId = 1;
     private nextNeutralRewardId = 1;
+    private nextSkillAnnounceId = 1;
 
     get floatTexts(): readonly Readonly<ZCFloatText>[] { return this.floatingTexts; }
     get hitFxs(): readonly Readonly<ZCHitFx>[] { return this.hitFxQueue; }
     get cardReveals(): readonly Readonly<ZCCardReveal>[] { return this.cardRevealQueue; }
     get hexActivations(): readonly Readonly<ZCHexActivation>[] { return this.hexActivationQueue; }
     get neutralRewards(): readonly Readonly<ZCNeutralReward>[] { return this.neutralRewardQueue; }
+    get skillAnnounces(): readonly Readonly<ZCSkillAnnounce>[] { return this.skillAnnounceQueue; }
 
     pushFloatText(input: Readonly<IZCFloatTextOptions>): ZCFloatText | null {
         if (!Number.isFinite(input.value) || (input.value <= 0 && input.kind !== 'miss')) return null;
@@ -263,6 +295,62 @@ export class ZCBattlePresentationQueue {
         this.hitFxQueue.push(fx);
         while (this.hitFxQueue.length > HIT_FX_CAP) this.hitFxQueue.shift();
         return fx;
+    }
+
+    /**
+     * 推一条大招通报。
+     *
+     * 坐标 / 时长非有限值一律拒收，理由同 `pushHitFx`：这两个值渲染层会拿去算节点，
+     * 混进 `NaN` 会让那条通报永远算不出「过期」，变成跨局累积的幽灵节点。
+     * （位置已经改成「HUD 里按槽位排」，坐标只留作日志/调试，但校验照旧。）
+     *
+     * 技能名空串同样拒收 —— 没有名字的通报只剩一张悬在空中的卡面，比不播更糟。
+     *
+     * 🔴 **并列展示、最多 3 条**（用户口径 2026-11-25 改口径）：
+     *
+     * 旧口径是串行排队（`startedAt = max(now, 上一条结束)`），一次只有一条在屏幕上。
+     * 现在改成**同时起跳、纵向排队**：`startedAt` 一律取 `now`，槽位由视图按存活顺序排
+     * （`ZCGameRenderWorld.renderSkillAnnounces`）。所以：
+     *
+     * - 已满 {@link SKILL_ANNOUNCE_LIVE_CAP} 条 ⇒ **丢新来的**（用户：「超过 3 个时，
+     *   后面的不展示了」）。不能丢最旧：那等于把正在演的那条掐掉；
+     * - 入队前先摘掉过期的。并列之后没有「串行游标」帮忙自清，不摘会让 3 条
+     *   永久占位 ⇒ 后面一辈子进不来（这个坑不报错，只是「再也不弹了」）。
+     */
+    pushSkillAnnounce(input: Readonly<IZCSkillAnnounceOptions>): ZCSkillAnnounce | null {
+        if (!Number.isFinite(input.x) || !Number.isFinite(input.y)) return null;
+        if (!input.cardId || !input.skillName) return null;
+        this.pruneSkillAnnounces(input.now);
+        if (this.skillAnnounceQueue.length >= SKILL_ANNOUNCE_LIVE_CAP) return null;
+        const announce: ZCSkillAnnounce = {
+            id: this.nextSkillAnnounceId++,
+            cardId: input.cardId,
+            skillId: input.skillId,
+            skillName: input.skillName,
+            x: input.x,
+            y: input.y,
+            startedAt: input.now,
+            durationSeconds: ZC_SKILL_ANNOUNCE_SECONDS,
+        };
+        this.skillAnnounceQueue.push(announce);
+        return announce;
+    }
+
+    /**
+     * 摘掉已经过期的通报（保序，就地压缩）。
+     *
+     * 对外暴露给渲染层做同样的准入判断没意义 —— 视图看的是同一份队列，跳过过期即可；
+     * 这里只保证队列长度等价于「当前还在屏幕上的条数」。
+     */
+    private pruneSkillAnnounces(now: number): void {
+        const queue = this.skillAnnounceQueue;
+        let write = 0;
+        for (const item of queue) {
+            if (now >= item.startedAt + item.durationSeconds) continue;
+            queue[write] = item;
+            write += 1;
+        }
+        queue.length = write;
     }
 
     removeFloatText(id: number): number {
@@ -410,6 +498,10 @@ export class ZCBattlePresentationQueue {
             const reward = this.neutralRewardQueue[index];
             if (now >= reward.startedAt + reward.durationSeconds) this.neutralRewardQueue.splice(index, 1);
         }
+        for (let index = this.skillAnnounceQueue.length - 1; index >= 0; index -= 1) {
+            const announce = this.skillAnnounceQueue[index];
+            if (now >= announce.startedAt + announce.durationSeconds) this.skillAnnounceQueue.splice(index, 1);
+        }
     }
 
     reset(): void {
@@ -423,6 +515,8 @@ export class ZCBattlePresentationQueue {
         // `tests/zcds-battle-presentation-queue.test.ts`）。
         this.buildingDestructionQueue.length = 0;
         this.neutralRewardQueue.length = 0;
+        this.skillAnnounceQueue.length = 0;
+        //  串行游标也要归零：留着上一局的时间点会让新一局第一条通报永远排在未来。
         this.nextFloatTextId = 1;
         this.nextHitFxId = 1;
         this.nextCardRevealId = 1;
@@ -430,5 +524,6 @@ export class ZCBattlePresentationQueue {
         this.nextBuildingShakeId = 1;
         this.nextBuildingDestructionId = 1;
         this.nextNeutralRewardId = 1;
+        this.nextSkillAnnounceId = 1;
     }
 }

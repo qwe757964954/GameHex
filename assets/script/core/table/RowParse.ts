@@ -1,3 +1,5 @@
+import { readConfigNumber } from '../config/ConfigValue';
+
 /** 表行遍历骨架；只做 null 安全与循环，不承载业务校验。 */
 
 export type IRow = Record<string, unknown>;
@@ -50,4 +52,17 @@ export function parseRowsToMap<T>(
         }
     }
     return map;
+}
+
+/**
+ * 兵种/野怪预制体的等比缩放系数：留空（null / undefined / ''）= 1，填了非正数立即抛错，
+ * 避免缩放为 0 导致角色在战场上无报错消失。
+ */
+export function parsePrefabSize(value: unknown, field: string): number {
+    if (value === null || value === undefined || value === '') return 1;
+    const parsed = readConfigNumber(value, field);
+    if (parsed <= 0) {
+        throw new Error(`${field} 必须是大于 0 的数字，收到 ${parsed}`);
+    }
+    return parsed;
 }

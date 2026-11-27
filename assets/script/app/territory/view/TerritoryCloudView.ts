@@ -32,7 +32,7 @@ export const TERRITORY_CLOUD_DISSOLVE_NODE = 'CloudDissolveLayer';
 /** 「铺满背景」的虚拟云层（在 `CloudLayer` 之下、同一张挡云遮罩里）。 */
 export const TERRITORY_CLOUD_FILL_NODE = 'CloudFillLayer';
 /** 「被地块包围的云洞」顶层节点（挂在**页面根**、压在 UI 之上）。 */
-export const TERRITORY_CLOUD_POCKET_NODE = 'TerritoryCloudPocket';
+const TERRITORY_CLOUD_POCKET_NODE = 'TerritoryCloudPocket';
 /**
  * **底部补云带**（挂在页面根、**第 0 个孩子** = 压住橙色裸底图、但仍被 `MapViewport` 盖住）。
  *
@@ -41,7 +41,7 @@ export const TERRITORY_CLOUD_POCKET_NODE = 'TerritoryCloudPocket';
  */
 export const TERRITORY_CLOUD_BOTTOM_STRIP_NODE = 'CloudBottomStrip';
 /** 补云带里的影子分组（第 0 个孩子，保证影子在云体之下）。 */
-export const TERRITORY_CLOUD_BOTTOM_STRIP_SHADOW_NODE = 'CloudBottomStripShadow';
+const TERRITORY_CLOUD_BOTTOM_STRIP_SHADOW_NODE = 'CloudBottomStripShadow';
 /**
  * 影子层节点名（`CloudKeepOut` 的**第 0 个**孩子）。
  *
@@ -53,9 +53,9 @@ export const TERRITORY_CLOUD_BOTTOM_STRIP_SHADOW_NODE = 'CloudBottomStripShadow'
  */
 export const TERRITORY_CLOUD_SHADOW_NODE = 'CloudShadow';
 /** 影子层里的「铺满层影子」子分组（与真实云层影子分开，各自可清空）。 */
-export const TERRITORY_CLOUD_FILL_SHADOW_NODE = 'CloudFillShadow';
+const TERRITORY_CLOUD_FILL_SHADOW_NODE = 'CloudFillShadow';
 /** 影子层里的「真实云层影子」子分组。 */
-export const TERRITORY_CLOUD_LAYER_SHADOW_NODE = 'CloudLayerShadow';
+const TERRITORY_CLOUD_LAYER_SHADOW_NODE = 'CloudLayerShadow';
 
 /**
  * 注入的一套云美术。

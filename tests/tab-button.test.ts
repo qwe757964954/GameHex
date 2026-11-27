@@ -269,6 +269,121 @@ test('C1 `MainTabHost`：按 x 排序收集 `TabButton`，点击派发导航意�
     assert.match(code, /mainTabItem\(type\)/, '名称/红点配置必须按 prefab 业务类型查表');
 });
 
+test('C1b 七格红点抬到 `BottomNav` 末尾的 RedDotLayer：保留世界坐标、渲染在选中底板之上', () => {
+    class FakeNode {
+        name: string;
+        parent: FakeNode | null = null;
+        readonly children: FakeNode[] = [];
+        readonly components: unknown[] = [];
+        layer = 33554432;
+        readonly position = { x: 0, y: 0, z: 0 };
+        keptWorld = false;
+        constructor(name = '') { this.name = name; }
+        addComponent(Ctor: new () => unknown): unknown {
+            const component = new Ctor();
+            this.components.push(component);
+            return component;
+        }
+        getChildByName(name: string): FakeNode | null {
+            return this.children.find((child) => child.name === name) ?? null;
+        }
+        getComponentsInChildren(Ctor: new () => unknown): unknown[] {
+            const found: unknown[] = [];
+            const visit = (node: FakeNode): void => {
+                for (const component of node.components) if (component instanceof Ctor) found.push(component);
+                for (const child of node.children) visit(child);
+            };
+            visit(this);
+            return found;
+        }
+        setParent(parent: FakeNode | null, keepWorldTransform = false): void {
+            if (this.parent) {
+                const index = this.parent.children.indexOf(this);
+                if (index >= 0) this.parent.children.splice(index, 1);
+            }
+            this.parent = parent;
+            if (parent) parent.children.push(this);
+            if (keepWorldTransform) this.keptWorld = true;
+        }
+        setSiblingIndex(index: number): void {
+            const siblings = this.parent?.children;
+            if (!siblings) return;
+            const current = siblings.indexOf(this);
+            if (current < 0) return;
+            siblings.splice(current, 1);
+            siblings.splice(Math.max(0, Math.min(index, siblings.length)), 0, this);
+        }
+        on(): void { /* CLICK 监听由引擎负责，这里不需要真回调 */ }
+    }
+    class FakeComponent {
+        node: FakeNode | null = null;
+        scheduleOnce(): void { /* 首屏兜底定时器 */ }
+    }
+    class FakeUITransform {}
+    class FakeTabButton {
+        node!: FakeNode;
+        tabType = -1;
+        redDot: { node: FakeNode; isValid: boolean } = { node: new FakeNode(), isValid: false };
+        setEnabled(): void {}
+        setLabel(): void {}
+        setSelected(): void {}
+        bindSelect(): void {}
+        bindRedDotExpr(): void {}
+    }
+
+    const exports: Record<string, new () => { navBar: FakeNode; onLoad(): void; start(): void }> = {};
+    const source = readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8');
+    const code = ts.transpileModule(source, { compilerOptions: {
+        module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
+    } }).outputText;
+    runInNewContext(code, { exports, require: (name: string) => {
+        if (name === 'cc') return {
+            _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} },
+            CCInteger: Number, Button: { EventType: { CLICK: 'click' } },
+            Component: FakeComponent, Node: FakeNode, UITransform: FakeUITransform, Vec3: class {},
+        };
+        if (name === '../common/TabButton') return { TabButton: FakeTabButton };
+        if (name === './MainTabItems') return { mainTabItem: () => undefined };
+        if (name === './MainTabModel') return { isMainTabLocked: () => false, MainTab: { Role: 2, Territory: 3 } };
+        if (name === '../../framework/ui/ViewLifecycle') return { VIEW_LIFECYCLE: 'view-lifecycle' };
+        if (name === './MainTabEvents') return { MainTabEvent: { Select: 'select', Warmup: 'warmup' } };
+        if (name === '../../framework/event/EventMgr') return { EventMgr: { instance: { emit: () => {} } } };
+        throw new Error(`Unexpected import: ${name}`);
+    } });
+
+    const host = new exports.MainTabHost();
+    const navBar = new FakeNode('BottomNav');
+    host.navBar = navBar;
+    const xs = [-301, -200.67, -100.33, 0, 100.33, 200.67, 301];
+    xs.forEach((x, index) => {
+        const tabNode = new FakeNode(`Tab${index}`);
+        tabNode.position.x = x;
+        tabNode.setParent(navBar);
+        const dotNode = new FakeNode(`Dot${index}`);
+        dotNode.setParent(tabNode);
+        const button = new FakeTabButton();
+        button.node = tabNode;
+        button.tabType = index;
+        button.redDot = { node: dotNode, isValid: true };
+        tabNode.components.push(button);
+    });
+
+    host.onLoad();
+    host.start();
+
+    const layer = navBar.getChildByName('RedDotLayer');
+    assert.ok(layer, '缺少 RedDotLayer —— 红点还在页签子树里，会被右邻格选中底板盖住');
+    assert.equal(navBar.children.at(-1), layer, 'RedDotLayer 必须排在七格之后（渲染序最后）');
+    assert.ok(layer.components.some((component) => component instanceof FakeUITransform), '脚本造节点要补 UITransform');
+    assert.equal(layer.children.length, 7, '七格红点都该搬进 RedDotLayer');
+    for (let index = 0; index < xs.length; index++) {
+        const dot = layer.getChildByName(`Dot${index}`);
+        assert.ok(dot, `Dot${index} 没搬到 RedDotLayer`);
+        assert.equal(dot.parent, layer);
+        assert.equal(dot.keptWorld, true, '搬动必须 retain 世界坐标，视觉位置不能变');
+    }
+});
+
 test('C2 `BattleTokenPage`：运行时从 `tabBar` 收集共用页签，不再吃 Inspector 数组', () => {
     const code = stripComments(readFileSync('assets/script/app/battletoken/BattleTokenPage.ts', 'utf8'));
     assert.ok(!code.includes('BattleTokenTabButton'), '页面还在引用旧的私有页签组件');

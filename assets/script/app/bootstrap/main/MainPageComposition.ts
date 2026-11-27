@@ -1,17 +1,24 @@
 import { GuideComposition } from '../guide/GuideComposition';
 import type { Node } from 'cc';
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
+import { ResourceScope } from '../../../core/asset/ResourceScope';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { VIEW_LIFECYCLE, type IViewLifecycle } from '../../../framework/ui/ViewLifecycle';
+import type { IPopupOpenParams } from '../../../framework/ui/PopupDef';
 import { CardLineupPage } from '../../card/CardLineupPage';
 import { CardLineupController } from '../../card/CardLineupController';
+import { CardLineupUiEvent, type CardLineupOutput } from '../../card/CardLineupEvents';
 import { cardRepository } from '../../card/CardRepository';
 import { CardUpgradePage } from '../../card/CardUpgradePage';
 import type { ICardUpgradeOpenData } from '../../card/CardPresentations';
 import { LineupBoardPage } from '../../card/LineupBoardPage';
 import { RolePage } from '../../role/RolePage';
 import { RoleController, type IRoleGemDialog } from '../../role/RoleController';
+import { RoleEvent, type RoleOutput } from '../../role/RoleEvents';
 import { CommonTips } from '../../common/CommonTips';
+import { GAME_AUDIO } from '../../ResConst';
+import { PopupBase } from '../../../framework/ui/PopupBase';
+import { RoleComposePopup } from '../../role/RoleComposePopup';
 import { roleRepository } from '../../role/RoleRepository';
 import type { IRoleSnapshot } from '../../role/RoleTypes';
 import { MilitiaTalentPage } from '../../role/MilitiaTalentPage';
@@ -21,15 +28,16 @@ import { RoleGemInfoPopup } from '../../role/RoleGemInfoPopup';
 import { RoleGongMingPopup } from '../../role/RoleGongMingPopup';
 import { StorePage } from '../../store/StorePage';
 import { StoreController } from '../../store/StoreController';
+import { StoreEvent, type StoreOutput } from '../../store/StoreEvents';
 import { storeAction } from '../../store/StoreActions';
 import { LeagueTabPage } from '../../league/LeagueTabPage';
 import { LeagueTabController } from '../../league/LeagueTabController';
 import { LeagueJoinController } from '../../league/LeagueJoinController';
-import { LeagueTabEvent } from '../../league/LeagueTabEvents';
+import { LeagueJoinEvent, type ILeagueJoinView, type LeagueJoinOutput } from '../../league/LeagueJoinEvents';
+import { LeagueTabEvent, type LeagueTabOutput } from '../../league/LeagueTabEvents';
 import { LeagueCreatePage } from '../../league/LeagueCreatePage';
 import { LeagueInfoPage } from '../../league/LeagueInfoPage';
 import { leagueRepository } from '../../league/LeagueRepository';
-import { GameNet } from '../../net/GameNet';
 import { CacheMgr } from '../../net/CacheMgr';
 import { toCount, toIdString } from '../../net/RequestGuard';
 import { readRoleRow } from '../../main/MainRoleRow';
@@ -50,12 +58,24 @@ interface IPageLifecycle {
 export class MainPageComposition extends ControllerBase {
     private readonly pages = new Map<object, IPageLifecycle>();
     private territoryView: MainTerritoryMap | null = null;
+    private cardController: CardLineupController | null = null;
+    private rolePage: RolePage | null = null;
+    private storeController: StoreController | null = null;
+    private leaguePage: LeagueTabPage | null = null;
+    private leagueController: LeagueTabController | null = null;
+    private leagueJoin: LeagueJoinController | null = null;
+    private leagueJoinView: ILeagueJoinView | null = null;
     get territory(): MainTerritoryMap | null { return this.territoryView; }
 
     constructor(private readonly context: IControllerContext, private readonly root: Node, private readonly presented: () => void,
         private readonly requestOwner?: object) {
         super(context, 'main-page');
         this.listen(VIEW_LIFECYCLE, this.onLifecycle);
+        this.listen(CardLineupUiEvent.Output, this.onCardOutput);
+        this.listen(RoleEvent.Output, this.onRoleOutput);
+        this.listen(StoreEvent.Output, this.onStoreOutput);
+        this.listen(LeagueTabEvent.Output, this.onLeagueTabOutput);
+        this.listen(LeagueJoinEvent.Output, this.onLeagueJoinOutput);
         try { this.mount(root); }
         catch (error) {
             try { this.dispose(); }
@@ -87,29 +107,34 @@ export class MainPageComposition extends ControllerBase {
         this.own(() => controller.dispose());
         this.pages.set(owner, lifecycle);
     }
-    private openScopedPopup<T extends { close(): void }>(opening: Promise<T | null>): void {
-        void opening.then(popup => {
-            if (this.isDisposed) popup?.close();
-        }).catch(reportMainPageFailure);
+    private openPopup<T extends PopupBase>(
+        cls: { open(params?: IPopupOpenParams): Promise<T | null> },
+        params: IPopupOpenParams = {},
+    ): void {
+        void cls.open({ ...params, scope: this.scope }).catch(reportMainPageFailure);
     }
     private mountCard(card: CardLineupPage): void {
         const controller = this.createCardController(card);
+        this.cardController = controller;
         this.registerPage(card, controller, { ready: () => controller.start() });
         card.initialize(this.resources);
     }
     private mountRole(role: RolePage): void {
-        const controller = this.createRoleController(role);
+        this.rolePage = role;
+        const controller = this.createRoleController();
         this.registerPage(role, controller, {
             ready: () => controller.start(), enabled: () => { void controller.refresh(); }, disabled: () => controller.cancel(),
         });
-        this.own(() => GameNet.instance.removeCaller(role));
     }
     private mountStore(store: StorePage): void {
         const controller = this.createStoreController(store);
+        this.storeController = controller;
         this.registerPage(store, controller, { ready: () => controller.start() });
     }
     private mountLeague(league: LeagueTabPage): void {
-        const controller = this.createLeagueController(league);
+        this.leaguePage = league;
+        const controller = this.createLeagueController();
+        this.leagueController = controller;
         this.registerPage(league, controller, { ready: () => controller.start() });
     }
     private mountTerritory(territory: MainTerritoryMap, main: MainPage | null): void {
@@ -140,171 +165,258 @@ export class MainPageComposition extends ControllerBase {
 
     private createCardController(card: CardLineupPage): CardLineupController {
         return new CardLineupController(this.context, {
-            owner: card,
             autoLoadDecks: card.autoLoadDecks,
             fallbackLevel: card.fallbackLevel,
             repository: cardRepository,
-            failed: reportMainPageFailure,
-            popups: {
-                openEditor: () => { this.openScopedPopup(LineupBoardPage.open()); },
-                openUpgrade: (unit, level) => {
-                    this.openScopedPopup(CardUpgradePage.open({ userData: { card: unit, cardId: unit.id, level } satisfies ICardUpgradeOpenData }));
-                },
-            },
         });
     }
-    private createRoleController(role: RolePage): RoleController<IRoleSnapshot> {
+    private createRoleController(): RoleController<IRoleSnapshot> {
         const dialog = this.createRoleGemDialog();
         return new RoleController(this.context, {
-            owner: role,
             growth: {
                 equip: (id, partId) => roleRepository.equipmentGrowth(id, partId),
                 washAttributes: (ids, values) => roleRepository.equipmentWashAttributes(ids, values),
                 plans: () => roleRepository.equipPlans(),
                 gem: id => roleRepository.gemGrowth(id),
                 filters: () => roleRepository.gemFilters(),
-                request: (proto, payload, apply) => roleRepository.requestGrowth(proto, payload, role, apply),
+                request: (proto, payload, caller, apply) => roleRepository.requestGrowth(proto, payload, caller, apply),
             },
             gems: {
                 slots: () => roleRepository.equipParts(),
                 find: id => roleRepository.findGem(id),
-                change: change => roleRepository.changeGem(change, role),
-                preview: async () => {
-                    const { status, materials } = await roleRepository.previewGemCompose(role);
+                // 镶嵌（含替换）成功 → 通用「升级成功」音（用户 2026-11-26）。
+                // 接在这一层而不是控制器里：`AudioMgr` 链上带 `cc`，控制器一引就进不了 node 用例；
+                // 卸下（`down`）不播 —— 需求只要「镶嵌成功」这一拍。页面自己那几处（宝石详情）另外播。
+                change: async (change, caller) => {
+                    const status = await roleRepository.changeGem(change, caller);
+                    if (status === 'ok' && change.kind !== 'down') FW.playSound(GAME_AUDIO.upgradeSuccess);
+                    return status;
+                },
+                preview: async caller => {
+                    const { status, materials } = await roleRepository.previewGemCompose(caller);
                     return { status, materials: materials.map(item => ({ id: toIdString(item.id), count: item.num })) };
                 },
-                compose: () => roleRepository.composeGems(role),
+                compose: caller => roleRepository.composeGems(caller),
+                decompose: (ids, caller) => roleRepository.decomposeEquips(ids, caller),
+                qualities: () => roleRepository.gemComposeQualities(),
                 showRewards: rewards => FW.ShowReward(rewards),
                 dialog: dialog.open,
-                cancel: () => {
-                    dialog.cancel();
-                    GameNet.instance.removeCaller(role);
-                },
+                cancel: dialog.cancel,
             },
-            failed: reportMainPageFailure,
             repository: {
                 load: () => roleRepository.load()
             },
-            view: {
-                render: snapshot => role.renderSnapshot(snapshot),
-                selectBag: tab => role.selectBag(tab),
-                showBag: (tab, filter, filterName) => role.showBag(tab, filter, filterName)
-            },
             popups: {
-                openTalent: () => { this.openScopedPopup(MilitiaTalentPage.open()); },
-                openEquipInfo: (partId, bagUniqueId) => {
-                    this.openScopedPopup(RoleEquipInfoPopup.open({
-                        userData: {
-                            partId: partId || (bagUniqueId ? 0 : 1),
-                            bagUniqueId,
-                        },
-                    }));
-                },
-                openEquipEvolve: (partId, tab) => {
-                    this.openScopedPopup(EquipEvolvePage.open({ userData: { partId, tab } }));
-                },
-                openGemInfo: gemId => {
-                    this.openScopedPopup(RoleGemInfoPopup.open({ userData: { gemId } }));
-                },
-                openGongMing: () => {
-                    this.openScopedPopup(RoleGongMingPopup.open());
-                },
-            },
-            feedback: {
-                tip: text => FW.showTip(text)
+                equipInfo: true,
+                equipEvolve: true,
+                gemInfo: true,
             },
         });
     }
     private createRoleGemDialog() {
-        let cancel: (() => void) | null = null;
+        let activeScope: ResourceScope | null = null;
+        const cancel = () => {
+            const scope = activeScope;
+            activeScope = null;
+            scope?.dispose();
+        };
         return {
-            open: (data: IRoleGemDialog) => new Promise<'confirm' | 'alternate' | null>((resolve, reject) => {
-                let popup: CommonTips | null = null;
-                let choice: 'confirm' | 'alternate' | null = null;
-                let settled = false;
-                const finish = () => {
-                    if (settled) return;
-                    settled = true;
-                    if (cancel === dismiss) cancel = null;
-                    resolve(choice);
-                };
-                const dismiss = () => {
-                    choice = null;
-                    finish();
-                    if (popup?.isPopupOpen) popup.close();
-                };
-                cancel = dismiss;
-                void CommonTips.open({
-                    cache: false,
-                    allowMultiple: true,
-                    userData: {
-                        ...data,
-                        showCancel: !!data.sureText,
-                        onSure: () => {
-                            choice = 'confirm';
+            open: (data: IRoleGemDialog) => {
+                cancel();
+                if (this.isDisposed) return Promise.resolve(null);
+                const dialogScope = new ResourceScope('role-gem-dialog');
+                const detachHost = this.scope.defer(() => dialogScope.dispose());
+                activeScope = dialogScope;
+                return new Promise<'confirm' | 'alternate' | null>((resolve, reject) => {
+                    let choice: 'confirm' | 'alternate' | null = null;
+                    let settled = false;
+                    const finish = () => {
+                        if (settled) return;
+                        settled = true;
+                        detachHost();
+                        if (activeScope === dialogScope) activeScope = null;
+                        resolve(choice);
+                    };
+                    dialogScope.defer(() => {
+                        choice = null;
+                        finish();
+                    });
+                    const onSure = () => {
+                        choice = 'confirm';
+                    };
+                    const onCancel = () => {
+                        choice = data.cancelText ? 'alternate' : null;
+                    };
+                    const settleOpen = (opened: PopupBase | null) => {
+                        if (!opened) finish();
+                    };
+                    const failed = (error: unknown) => {
+                        if (settled) return;
+                        settled = true;
+                        detachHost();
+                        if (activeScope === dialogScope) activeScope = null;
+                        dialogScope.dispose();
+                        reject(error);
+                    };
+
+                    // 一键合成：图标台账版弹窗（部位 × 品质），不走通用文本清单。
+                    if (data.compose) {
+                        void RoleComposePopup.open({
+                            scope: dialogScope,
+                            userData: {
+                                view: data.compose,
+                                title: data.title,
+                                sureText: data.sureText,
+                                confirmAgainText: data.confirmAgainText,
+                                onConfirm: onSure,
+                                onCancel,
+                            },
+                            onClose: finish,
+                        }).then(settleOpen, failed);
+                        return;
+                    }
+
+                    void CommonTips.open({
+                        scope: dialogScope,
+                        cache: false,
+                        allowMultiple: true,
+                        userData: {
+                            ...data,
+                            content: data.content ?? '',
+                            showCancel: !!data.sureText,
+                            onSure,
+                            onCancel,
                         },
-                        onCancel: () => {
-                            choice = data.cancelText ? 'alternate' : null;
-                        },
-                    },
-                    onClose: finish,
-                }).then(opened => {
-                    popup = opened;
-                    if (settled && popup?.isPopupOpen) popup.close();
-                    if (!popup) finish();
-                }, error => {
-                    if (settled) return;
-                    settled = true;
-                    if (cancel === dismiss) cancel = null;
-                    reject(error);
+                        onClose: finish,
+                    }).then(settleOpen, failed);
                 });
-            }),
-            cancel: () => {
-                cancel?.();
             },
+            cancel,
         };
     }
 
     private createStoreController(store: StorePage): StoreController {
-        const controller = new StoreController(
-            this.context,
-            store,
-            storeAction,
-            reportMainPageFailure,
-            this.requestOwner,
-            () => store.isValid,
-        );
-        if (!this.requestOwner) {
-            this.own(() => GameNet.instance.removeCaller(controller));
-        }
-        return controller;
+        return new StoreController(this.context, {
+            owner: store,
+            action: storeAction,
+            requestOwner: this.requestOwner,
+            canSend: () => store.isValid,
+        });
     }
-    private createLeagueController(league: LeagueTabPage): LeagueTabController {
+    private createLeagueController(): LeagueTabController {
         return new LeagueTabController(this.context, {
-            failed: reportMainPageFailure,
             repository: {
                 load: () => leagueRepository.load()
             },
-            view: {
-                showPage: joined => league.showPage(joined)
-            },
-            join: {
-                create: view => new LeagueJoinController(this.context, {
-                    owner: view,
-                    repository: leagueRepository,
-                    view: { render: rows => view.render(rows) },
-                    feedback: {
-                        tip: text => FW.showTip(text),
-                        notifyJoined: () => EventMgr.instance.emit(LeagueTabEvent.Joined),
-                    },
-                    popups: {
-                        openCreate: () => { this.openScopedPopup(LeagueCreatePage.open()); },
-                        openUnion: union => { this.openScopedPopup(LeagueInfoPage.open({ userData: { union } })); },
-                    },
-                    requests: { removeCaller: caller => GameNet.instance.removeCaller(caller) },
-                }),
-            },
         });
+    }
+    private createLeagueJoinController(): LeagueJoinController {
+        return new LeagueJoinController(this.context, {
+            repository: leagueRepository,
+        });
+    }
+    private onCardOutput(output: CardLineupOutput): void {
+        switch (output.kind) {
+            case 'openEditor':
+                this.openPopup(LineupBoardPage);
+                return;
+            case 'openUpgrade':
+                this.openPopup(CardUpgradePage, {
+                    userData: { card: output.card, cardId: output.card.id, level: output.level } satisfies ICardUpgradeOpenData,
+                });
+                return;
+            case 'failed':
+                reportMainPageFailure(output.error);
+                return;
+        }
+    }
+    private onRoleOutput(output: RoleOutput<IRoleSnapshot>): void {
+        switch (output.kind) {
+            case 'render':
+                void this.rolePage?.renderSnapshot(output.snapshot).catch(reportMainPageFailure);
+                return;
+            case 'selectBag':
+                this.rolePage?.selectBag(output.tab);
+                return;
+            case 'showBag':
+                void this.rolePage?.showBag(output.tab, output.filter, output.filterName).catch(reportMainPageFailure);
+                return;
+            case 'openTalent':
+                this.openPopup(MilitiaTalentPage);
+                return;
+            case 'openEquipInfo':
+                this.openPopup(RoleEquipInfoPopup, {
+                    userData: {
+                        partId: output.partId || (output.bagUniqueId ? 0 : 1),
+                        bagUniqueId: output.bagUniqueId,
+                    },
+                });
+                return;
+            case 'openEquipEvolve':
+                this.openPopup(EquipEvolvePage, { userData: { partId: output.partId, tab: output.tab } });
+                return;
+            case 'decomposeDone':
+                if (output.status === 'ok' && output.rewards.length) FW.ShowReward([...output.rewards]);
+                void this.rolePage?.finishDecompose(output).catch(reportMainPageFailure);
+                return;
+            case 'openGemInfo':
+                this.openPopup(RoleGemInfoPopup, { userData: { gemId: output.gemId } });
+                return;
+            case 'openGongMing':
+                this.openPopup(RoleGongMingPopup);
+                return;
+            case 'tip':
+                FW.showTip(output.text);
+                return;
+            case 'failed':
+                reportMainPageFailure(output.error);
+                return;
+        }
+    }
+    private onStoreOutput(output: StoreOutput, source: object): void {
+        if (source !== this.storeController) return;
+        if (output.kind === 'failed') reportMainPageFailure(output.error);
+    }
+    private onLeagueTabOutput(output: LeagueTabOutput, source: object): void {
+        if (source !== this.leagueController) return;
+        if (output.kind === 'failed') {
+            reportMainPageFailure(output.error);
+            return;
+        }
+        this.disposeLeagueJoin();
+        const view = this.leaguePage?.showPage(output.joined) ?? null;
+        if (view) {
+            this.leagueJoinView = view;
+            const join = this.createLeagueJoinController();
+            this.leagueJoin = join;
+            join.start();
+        }
+    }
+    private onLeagueJoinOutput(output: LeagueJoinOutput, source: object): void {
+        if (source !== this.leagueJoin) return;
+        switch (output.kind) {
+            case 'render':
+                this.leagueJoinView?.render(output.rows);
+                return;
+            case 'tip':
+                FW.showTip(output.text);
+                return;
+            case 'joined':
+                EventMgr.instance.emit(LeagueTabEvent.Joined);
+                return;
+            case 'openCreate':
+                this.openPopup(LeagueCreatePage);
+                return;
+            case 'openUnion':
+                this.openPopup(LeagueInfoPage, { userData: { union: output.union } });
+                return;
+        }
+    }
+    private disposeLeagueJoin(): void {
+        const join = this.leagueJoin;
+        this.leagueJoin = null;
+        this.leagueJoinView = null;
+        join?.dispose();
     }
     private createTerritoryEntry(territory: MainTerritoryMap): TerritoryEntry {
         return new TerritoryEntry(this.context, (callback, seconds) => {
@@ -323,7 +435,13 @@ export class MainPageComposition extends ControllerBase {
     }
     dispose(): void {
         if (this.isDisposed) return;
-        // 输入解除由 super.dispose() 统一完成（先 offTarget 再释放资源），这里只丢生命周期表。
+        this.releaseInputs();
+        this.disposeLeagueJoin();
+        this.cardController = null;
+        this.rolePage = null;
+        this.storeController = null;
+        this.leaguePage = null;
+        this.leagueController = null;
         this.pages.clear();
         this.territoryView = null;
         super.dispose();

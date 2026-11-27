@@ -13,7 +13,7 @@
  */
 
 /** 宝石图标目录（`main-pages` bundle，`BundleCatalog` 按前缀路由）。 */
-export const GEM_ICON_ROOT = 'icons/gem';
+const GEM_ICON_ROOT = 'icons/gem';
 
 /** `gem` 表名。 */
 export const GEM_TABLE = 'gem';
@@ -113,10 +113,8 @@ export function gemRewardOf(
     const fromPayload = Math.floor(Number(quality) || 0);
     const want = fromPayload > 0 ? fromPayload : gemQualityOfResId(value);
     const qualityRow = tables.qualities.get(want) ?? tables.qualities.get(1);
-    if (!qualityRow) return null;
-
-    return {
-        quality: qualityRow.quality,
-        iconPath: qualityRow.icon ? `${GEM_ICON_ROOT}/${qualityRow.icon}` : '',
-    };
+    // 品质档优先信 payload / 末四位；`gemQuality` 缺行只影响图标，不能把底框也压回 1。
+    const resolvedQuality = qualityRow ? qualityRow.quality : (want > 0 ? want : 1);
+    const iconPath = qualityRow?.icon ? `${GEM_ICON_ROOT}/${qualityRow.icon}` : '';
+    return { quality: resolvedQuality, iconPath };
 }

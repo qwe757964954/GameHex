@@ -15,17 +15,6 @@ export const CARD_LINEUP_TEXTS = {
     boardLoadFailed: '布阵数据加载失败，请重新打开',
     onField: '出战中',
     progressSeparator: '/',
-    navShops: '商店',
-    navHero: '英雄',
-    navRoles: '角色',
-    /** 蓝湖改版后「领地」指主城页，不是角色主界面。 */
-    navTerritory: '领地',
-    navChallenge: '挑战',
-    navAlliance: '联盟',
-    navWorld: '世界',
-    /** 旧六格的名称（保留：老包/老入口仍可能引用，别删）。 */
-    navArena: '竞技',
-    navAdventure: '冒险',
     upgradeTitle: '卡牌升级',
     upgradeConfirm: '升级',
     /** 等级 0 → 1 是解锁，按钮改叫「解锁」。 */

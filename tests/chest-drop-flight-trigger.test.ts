@@ -180,15 +180,38 @@ test('★ 页面：victoryBattleCells 有值就发 DROP_FLIGHT，优先 asyncPvp
     assert.equal(h.emitted[0].payload.origin?.y, 260);
 });
 
-test('页面：单格 / 非 asyncPvp / 取不到格心都退化而不静默消失', () => {
-    const single = createMapHarness();
-    single.fire([367], [{ cellId: 367, type: 'stage' }]);
-    assert.equal(single.emitted.length, 1, '战斗掉落宝箱对任何据点胜利都成立');
-    assert.equal(single.emitted[0].payload.cellId, 367);
+test('★ 页面：只认 asyncPvp 那一格，多个候选取第一个异步 PVP 据点', () => {
+    const h = createMapHarness();
+    const sites = [
+        { cellId: 367, type: 'stage' },
+        { cellId: CELL, type: 'asyncPvp' },
+    ];
+    h.fire([367, CELL], sites);
+    assert.equal(h.emitted.length, 1);
+    assert.equal(h.emitted[0].name, CHEST_EVENTS.DROP_FLIGHT);
+    assert.equal(h.emitted[0].payload.cellId, CELL, '异步 PVP 格优先');
+    // 沙箱跨 realm：deepStrictEqual 会因原型不同而假红，逐字段比。
+    assert.equal(h.emitted[0].payload.origin?.x, -120);
+    assert.equal(h.emitted[0].payload.origin?.y, 260);
+});
 
+test('★ 页面：塔防 / 普通关 / boss / 资源格一律不播（用户 11-23 口径收窄）', () => {
+    // 用户原话：「塔防模式结束后回到领地，也播放了战斗宝箱飞入 icon 的动画，
+    //          只有 pvp 异步据点才需要播放」。
+    // `resolveBattle()` 是所有 pve 战斗共用的收尾口 ⇒ 这些模式的 `victoryBattleCells`
+    // 同样非空，只有页面这一层按 sitetype 白名单挡得住。
+    for (const type of ['stage', 'boss', 'fixedResource', 'bonus', 'patrolChest']) {
+        const h = createMapHarness();
+        h.fire([CELL], [{ cellId: CELL, type }]);
+        assert.equal(h.emitted.length, 0, `${type} 不许播宝箱飞行`);
+    }
+});
+
+test('页面：格心取不到但类型是 asyncPvp ⇒ 仍发事件、origin 交回 null', () => {
     const missing = createMapHarness();
-    missing.fire([999], []);
+    missing.fire([999], [{ cellId: 999, type: 'asyncPvp' }]);
     assert.equal(missing.emitted.length, 1);
+    assert.equal(missing.emitted[0].payload.cellId, 999);
     assert.equal(missing.emitted[0].payload.origin, null, '格心拿不到 ⇒ 让 MainPage 退回默认起飞点');
 });
 
@@ -201,8 +224,25 @@ test('页面：空边沿 / 老快照不带字段 / sites 缺失一律跳过且�
     old.fire(undefined, undefined);
     assert.equal(old.emitted.length, 0);
 
+    // sites 缺失 ⇒ 认不出 asyncPvp ⇒ 按白名单口径不发。宁可这一局不演，
+    // 也不能退化成「所有模式都演」（用户刚拍掉的就是这个）。
     const noSites = createMapHarness();
     noSites.fire([CELL], null);
-    assert.equal(noSites.emitted.length, 1, 'sites 缺失仍照常起飞（只是挑不出 asyncPvp）');
-    assert.equal(noSites.emitted[0].payload.cellId, CELL);
+    assert.equal(noSites.emitted.length, 0, 'sites 缺失不许回退成卖「第一格」');
 });
+
+test('★ 源码守卫：不许再出现「挑不到就退回第一格」的兜底', () => {
+    const source = readFileSync(MAP_PATH, 'utf8');
+    // 🔴 必须剥掉注释再扫：这份守卫的「反面写法」就写在真源注释里（讲清为什么去掉兜底），
+    //    直接扫整份源码会自己把自己的说明文字当成回归（`territory-mvc-boundary` 踩过同一个坑）。
+    const code = source
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    // `pvpCell ?? claimCells[0]` / `pvpCell || claimCells[0]` 都是同一类回归：
+    // 一旦回来，塔防与普通关回城就会重新播宝箱飞行。
+    assert.doesNotMatch(code, /pvpCell\s*(\?\?|\|\|)\s*claimCells\[0\]/,
+        '找不到异步 PVP 据点必须整条 return，不许退回第一格');
+    assert.match(code, /if \(pvpCell === undefined\)[\s\S]{0,400}?return;/,
+        '白名单挑不到要显式 return，并留一行可自解释的锚点');
+});
+

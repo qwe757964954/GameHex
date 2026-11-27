@@ -24,17 +24,10 @@ import {
     MATCH_ART_ROOT,
     BUILDING_ART_ROOT,
 } from '../assets/script/app/ArtPaths';
-import { CARD_LINEUP_TEXTS } from '../assets/script/app/card/CardLineupTexts';
 import { ZC_CARD_CLASSES } from '../assets/script/app/card/CardLineupTypes';
 import { cardArtConfig } from './helpers/card-art-config';
 import * as ArtPaths from '../assets/script/app/ArtPaths';
-import {
-    RL_ART_ALL_KEYS,
-    RL_ART_NAMES,
-    RL_ART_ROOT,
-    RL_ICON_ROOT_PREFIX,
-    roleArtRelPath,
-} from '../assets/script/app/role/RoleArt';
+import { RL_ART_NAMES, roleArtRelPath } from '../assets/script/app/role/RoleArt';
 import { MILITIA_ARMY_ID } from '../assets/script/app/role/MilitiaTypes';
 import { getGuideIconPath } from '../assets/script/app/zcds/model/ZCGuideConfig';
 import { assetExists, assetPath } from './helpers/asset-paths';
@@ -77,13 +70,8 @@ function readNavGroup(): Array<{ name: string }> {
     const code = ts.transpileModule(readFileSync('assets/script/app/main/MainTabItems.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
     }).outputText;
-    const dependencies: Record<string, unknown> = {
-        './CardLineupTexts': { CARD_LINEUP_TEXTS },
-        '../card/CardLineupTexts': { CARD_LINEUP_TEXTS },
-    };
     const context = {
         exports: {} as { MAIN_TAB_ITEMS: Array<{ name: string }> },
-        require: (name: string) => dependencies[name],
         console,
     };
     runInNewContext(code, context);
@@ -94,13 +82,10 @@ test('主城七格文案配置与 prefab 绑定的新图标资源齐全', () => 
     const group = readNavGroup();
     assert.equal(group.length, 7, '蓝湖「塔防主界面-1」是七格：商店 / 英雄 / 角色 / 领地 / 挑战 / 联盟 / 世界');
 
-    // 顺序与 CARD_LINEUP_TEXTS 里的名称一一对应，MainTabHost 的 MainTab 下标才有意义
-    //  配置组来自另一个 vm realm，必须用 Array.from 在本 realm 重建数组，
+    // 配置组来自另一个 vm realm，必须用 Array.from 在本 realm 重建数组，
     // 否则 deepStrictEqual 会因为 Array 原型不同而误报不等。
     assert.deepEqual(Array.from(group, (entry) => entry.name), [
-        CARD_LINEUP_TEXTS.navShops, CARD_LINEUP_TEXTS.navHero, CARD_LINEUP_TEXTS.navRoles,
-        CARD_LINEUP_TEXTS.navTerritory, CARD_LINEUP_TEXTS.navChallenge, CARD_LINEUP_TEXTS.navAlliance,
-        CARD_LINEUP_TEXTS.navWorld,
+        '商店', '英雄', '角色', '领地', '挑战', '联盟', '世界',
     ]);
 
     for (const icon of ['nav_shop', 'nav_hero', 'nav_role', 'nav_territory', 'nav_challenge', 'nav_alliance', 'nav_world']) {
@@ -205,37 +190,20 @@ test('指南表里每个 icon 键都能解析出真实存在的图', () => {
 });
 
 // ============================================================
-// 角色模块（`RoleArt`）：两根并存 —— `image/**` 要拼前缀、`icons/**` 不能拼
+// 角色模块运行时美术路径
 // ============================================================
 
-test('角色模块的每张图都按自己的根拼出了真实存在的路径（漏/多拼 image 都是静默留白）', () => {
-    const bad: string[] = [];
-    let iconCount = 0;
-    for (const key of RL_ART_ALL_KEYS) {
-        const value = (RL_ART_NAMES as Readonly<Record<string, string>>)[key];
+test('角色运行时美术键解析为 image 下实际存在的资源路径', () => {
+    for (const [key, value] of Object.entries(RL_ART_NAMES)) {
         const rel = roleArtRelPath(key);
-        if (value.startsWith(RL_ICON_ROOT_PREFIX)) {
-            iconCount += 1;
-            assert.ok(!rel.startsWith(`${RL_ART_ROOT}/`),
-                `${key}（${value}）在 icons/ 下，与 image/ 平级 ⇒ 不该再拼 ${RL_ART_ROOT}/`);
-        } else {
-            assert.ok(rel.startsWith(`${RL_ART_ROOT}/`), `${key}（${value}）应拼上 ${RL_ART_ROOT}/ 前缀`);
-        }
-        // 拼出来的路径必须在任一分包根下真有这张图（png / jpg 都算）
-        const hit = ['png', 'jpg', 'jpeg'].some((ext) => assetExists(`${rel}.${ext}`));
-        if (!hit) bad.push(`${key} → ${rel} 在任何分包根下都不存在`);
+        assert.equal(rel, `${ArtPaths.ART_ROOT}/${value}`);
+        assert.ok(['png', 'jpg', 'jpeg'].some(ext => assetExists(`${rel}.${ext}`)), `缺少角色美术 ${rel}`);
     }
-    assert.deepEqual(bad, [], '装配路径不对 / 缺图');
-    assert.equal(iconCount, 2, 'RL_ART_NAMES 里 icons/ 那两条（锻造页签图标）应还在，改口径要连这里一起改');
-    assert.equal(roleArtRelPath('不存在的key'), '', '缺 key 返回空串，别拼出 image//spriteFrame');
 });
 
-test('RoleArtLoader 一律走 roleArtRelPath（不许自己拼 root，否则 icons/ 那两条又会拼错）', () => {
-    const src = stripSourceComments(readFileSync('assets/script/app/role/RoleArtLoader.ts', 'utf8'));
-    assert.ok(src.includes('spriteFramePathOf(roleArtRelPath(key))'),
-        'roleFramePathOf 必须转发 roleArtRelPath（拼前缀 + icons 分流只在零 cc 的 RoleArt 里做一次）');
-    assert.ok(/export const ROLE_ART_ROOT = RL_ART_ROOT;/.test(src),
-        'ROLE_ART_ROOT 必须从零 cc 的 RoleArt 转发（真源只有一份，别在 Loader 里再写一次 image 字面量）');
+test('角色美术路径对未知键返回空串', () => {
+    assert.equal(roleArtRelPath('不存在的key'), '');
+    assert.equal(roleArtRelPath('constructor'), '');
 });
 
 // ============================================================
@@ -275,8 +243,3 @@ test('民兵天赋图标：配置表用到的每个 key 在 icons/militia 下都
     const roots = readFileSync('assets/script/app/role/RoleArtLoader.ts', 'utf8');
     assert.match(roots, /militia:\s*'icons\/militia'/, "BAG_ICON_ROOTS.militia 必须是 'icons/militia'");
 });
-
-/** 反向断言前先剥注释（规则 104：注释里会写反例）。 */
-function stripSourceComments(src: string): string {
-    return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/[^\n]*/g, '$1');
-}

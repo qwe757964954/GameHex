@@ -77,7 +77,7 @@ export const TERRITORY_CHEST_TIER_LABEL: Readonly<Record<TerritoryChestTier, str
  * 不是同一套刻度**：动画还分弱 / 中 / 强（100 / 1000），音效只按 1000 切两档，
  * 所以不能拿 `territoryChestTierOf` 的档位当音效判据（弱档会错误地落到「大」上）。
  */
-export const TERRITORY_FIXED_TILE_SOUND_LARGE_ABOVE = 1000;
+const TERRITORY_FIXED_TILE_SOUND_LARGE_ABOVE = 1000;
 
 /**
  * 这批固定格奖励该播「大」还是「小」音效。

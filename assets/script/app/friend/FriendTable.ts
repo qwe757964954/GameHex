@@ -455,6 +455,8 @@ export interface IFriendRowView {
     readonly durationText: string;
     readonly actionText: string;
     readonly actionGray: boolean;
+    /** 主按钮底图色系：金色（可操作）/ 蓝色（黑名单移除）/ 暗色（已赠送、已申请）。 */
+    readonly actionColor: 'gold' | 'blue' | 'mute';
     /** 主按钮是否可点（次数用完 / 已赠送 / 已申请时为 `false`，但仍显示）。 */
     readonly actionEnabled: boolean;
     /** 私聊按钮（仅「好友列表」页签、且不在删除模式）。 */
@@ -533,6 +535,7 @@ export function buildFriendRowView(
         durationText,
         actionText,
         actionGray,
+        actionColor: !isList && !isAdd && !isTake ? 'blue' : actionGray ? 'mute' : 'gold',
         actionEnabled,
         showChat: isList && !options.deleteMode && options.chatAvailable,
         // 删除模式只藏「好友列表」页签的主按钮（FGUI `btn` 上是 `gearDisplay 展示删除界面=0`）；

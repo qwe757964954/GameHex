@@ -27,6 +27,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as feedback from '../assets/script/app/main/MainResBarFeedback';
+import { formatResBarAmountText } from '../assets/script/app/main/MainResBarTypes';
 import {
     RES_BAR_SPEND_BLINKS,
     RES_BAR_SPEND_BLINK_MIN_ALPHA,
@@ -42,7 +43,6 @@ import {
     RES_BAR_SPEND_ICON_POP,
     RES_BAR_SPEND_LABEL_POP,
     RES_BAR_SPEND_SECONDS,
-    parseResBarCountText,
     resBarSpendFlashColor,
     resBarSpendFloatFx,
     resBarSpendFx,
@@ -226,23 +226,21 @@ test('飘字文本：`-` + 扣除数字，不带千分位（与资源栏自身�
 });
 
 test('端到端：扣 30 的整条文本链 —— 前段不动、之后单调降、首尾精确', () => {
-    const base = parseResBarCountText('137/30');
-    const amount = 30;
-    const to = base.value - amount;
-    assert.equal(to, 107);
+    const from = 137;
+    const to = 107;
     let previous = Number.POSITIVE_INFINITY;
     let frozenFrames = 0;
     for (let i = 0; i <= 200; i += 1) {
         const elapsed = (RES_BAR_SPEND_SECONDS * i) / 201;
         const fx = resBarSpendFx(elapsed)!;
-        const value = feedback.resBarCountValue(base.value, to, fx.countRatio);
+        const value = feedback.resBarCountValue(from, to, fx.countRatio);
         assert.ok(value <= previous, `数字涨了（扣的过程不许回头）：${previous} → ${value}`);
-        if (value === base.value) frozenFrames += 1;
+        if (value === from) frozenFrames += 1;
         previous = value;
     }
     assert.ok(frozenFrames > 20, '「先不扣」的那段必须真的存在（帧数不该是 0）');
     const last = resBarSpendFx(RES_BAR_SPEND_SECONDS - 1e-9)!;
-    assert.equal(feedback.formatResBarCountText(base, feedback.resBarCountValue(base.value, to, last.countRatio)),
+    assert.equal(formatResBarAmountText('end', feedback.resBarCountValue(from, to, last.countRatio), 30),
         '107/30', '后缀不许在滚动里丢掉');
 });
 
@@ -365,6 +363,13 @@ class FakeSprite extends FakeComponent {
 
 const SLOT = 'assets/script/app/main/MainResBarSlot.ts';
 
+/** 一格数据：`valueText` 由真函数产出，避免在用例里手抄/反解析已缩写的显示文本。 */
+function slotOf(key: string, amount: number, cap = 0): {
+    key: string; iconArt: string; valueText: string; amount: number; cap: number; showPlus: boolean;
+} {
+    return { key, iconArt: '', valueText: formatResBarAmountText(key, amount, cap), amount, cap, showPlus: key === 'end' };
+}
+
 /** 把 `MainResBarSlot.ts` 转译后塞进沙箱（真代码，只有 `cc` 与取图那一层是桩）。 */
 function loadSlotClass(): new () => {
     node: FakeNode;
@@ -372,11 +377,11 @@ function loadSlotClass(): new () => {
     valueLabel: FakeLabel;
     plus: null;
     onLoad(): void;
-    render(slot: unknown): void;
+    render(slot: ReturnType<typeof slotOf> | null): void;
     step(dt: number): boolean;
     playGainFeedback(amount: number): void;
-    playSpendFeedback(amount: number, valueText?: string): void;
-    spendDeltaOf(valueText: string): number;
+    playSpendFeedback(amount: number, next?: ReturnType<typeof slotOf> | null): void;
+    spendDeltaOf(amount: number): number;
     cancelFeedback(): void;
     readonly isFeedbackPlaying: boolean;
 } {
@@ -408,6 +413,8 @@ function loadSlotClass(): new () => {
             }
             // 曲线用**真模块**：模型改了这里立刻跟着变，不抄常量。
             if (id.endsWith('/MainResBarFeedback')) return feedback;
+            // 换算口径也用真模块（`formatResBarAmountText` 是缩写的唯一出口）。
+            if (id.endsWith('/MainResBarTypes')) return { formatResBarAmountText };
             // 取图那一层与本文件判据无关（沙箱里拿不到 assets）⇒ 给个永远不 resolve 的壳。
             if (id.endsWith('/MainResBarArt')) return { loadResBarSprite: () => Promise.resolve(null) };
             throw new Error(`Unexpected dependency: ${id}`);
@@ -417,7 +424,7 @@ function loadSlotClass(): new () => {
 }
 
 /** 造一个「label 已经是扣后值」的格子（实机就是这个顺序：`CmdRole` 先到）。 */
-function makeSlot(initialText: string): {
+function makeSlot(amount: number, cap = 0, key = 'end'): {
     slot: ReturnType<typeof loadSlotClass> extends new () => infer T ? T : never;
     labelNode: FakeNode;
     iconNode: FakeNode;
@@ -444,7 +451,7 @@ function makeSlot(initialText: string): {
     slot.valueLabel.node = new FakeNode('Value');
     slot.valueLabel.node.position = { x: 25.5, y: -3, z: 0 };
     slot.onLoad();
-    slot.render({ key: 'end', iconArt: '', valueText: initialText, showPlus: true });
+    slot.render(slotOf(key, amount, cap));
     const floatNode = (): FakeNode | undefined => slot.node.children.find((child) => child.name === 'SpendFloat');
     return {
         slot,
@@ -456,13 +463,13 @@ function makeSlot(initialText: string): {
 }
 
 test('★★★沙箱：先钉回扣前值 → 白闪 + 跳 + 上方飘字 → 才滚下去（顺序反了这条会红）', () => {
-    const { slot, labelNode, floatNode, floatLabel } = makeSlot('137/30');
-    assert.equal(slot.spendDeltaOf('137/30'), 0, '同一个值不是扣除');
-    assert.equal(slot.spendDeltaOf('150/30'), 0, '涨了不是扣除（不该演闪）');
-    assert.equal(slot.spendDeltaOf('107/30'), 30, '降了 30 ⇒ 扣了 30');
+    const { slot, labelNode, floatNode, floatLabel } = makeSlot(137, 30);
+    assert.equal(slot.spendDeltaOf(137), 0, '同一个值不是扣除');
+    assert.equal(slot.spendDeltaOf(150), 0, '涨了不是扣除（不该演闪）');
+    assert.equal(slot.spendDeltaOf(107), 30, '降了 30 ⇒ 扣了 30');
     assert.equal(floatNode(), undefined, '还没播扣除时不许先把飘字节点建出来');
 
-    slot.playSpendFeedback(30, '107/30');
+    slot.playSpendFeedback(30, slotOf('end', 107, 30));
     // ① 第一帧：文本必须还是**扣前**值（实机 label 此前已被 CmdRole 写成 107）。
     assert.equal(slot.valueLabel.string, '137/30', '播扣除的第一帧就把数字改了 = 玩家看到"先扣再闪"');
     assert.equal(slot.valueLabel.color.toString(), '255,255,255,255', '第 0 帧还没开始闪');
@@ -501,23 +508,23 @@ test('★★★沙箱：先钉回扣前值 → 白闪 + 跳 + 上方飘字 → �
     assert.equal(labelNode.scale.x, 1);
     assert.equal(float!.active, false, '飘字必须收起来（不然它会一直挂在资源栏上方）');
     assert.equal(slot.isFeedbackPlaying, false);
-    assert.equal(slot.spendDeltaOf('107/30'), 0, '落定后再比一次不该再判成扣除（否则会循环播）');
+    assert.equal(slot.spendDeltaOf(107), 0, '落定后再比一次不该再判成扣除（否则会循环播）');
 });
 
 test('★★沙箱：扣的过程中 CmdRole 又推包 ⇒ 只暂存，收尾才落地（不许半路跳数）', () => {
-    const { slot } = makeSlot('137/30');
-    slot.playSpendFeedback(30, '107/30');
+    const { slot } = makeSlot(137, 30);
+    slot.playSpendFeedback(30, slotOf('end', 107, 30));
     for (let i = 0; i < 4; i += 1) slot.step(1 / 60);
     // 期间来了个更新的值（比如别的系统又改了体力）。
-    slot.render({ key: 'end', iconArt: '', valueText: '100/30', showPlus: true });
+    slot.render(slotOf('end', 100, 30));
     assert.notEqual(slot.valueLabel.string, '100/30', '反馈途中不许被推包改写');
     while (slot.step(1 / 60)) { /* 播完 */ }
     assert.equal(slot.valueLabel.string, '100/30', '收尾必须落到最新值');
 });
 
 test('★★沙箱：整格隐藏要把白闪 / 位移 / 飘字一起复原（否则再显示时是一格半透明数字）', () => {
-    const { slot, labelNode, floatNode } = makeSlot('137/30');
-    slot.playSpendFeedback(30, '107/30');
+    const { slot, labelNode, floatNode } = makeSlot(137, 30);
+    slot.playSpendFeedback(30, slotOf('end', 107, 30));
     for (let i = 0; i < 6; i += 1) slot.step(1 / 60);
     assert.ok(slot.valueLabel.color.a < 255, '先确认它确实在闪');
     assert.equal(floatNode()?.active, true, '先确认飘字确实在飘');
@@ -527,13 +534,13 @@ test('★★沙箱：整格隐藏要把白闪 / 位移 / 飘字一起复原（�
     assert.equal(floatNode()?.active, false, '隐藏后飘字也必须收掉');
     assert.equal(slot.isFeedbackPlaying, false);
     // 重新显示：第一次渲染**不该**判成扣除（落定值已被清空）。
-    slot.render({ key: 'end', iconArt: '', valueText: '50/30', showPlus: true });
-    assert.equal(slot.spendDeltaOf('50/30'), 0);
+    slot.render(slotOf('end', 50, 30));
+    assert.equal(slot.spendDeltaOf(50), 0);
 });
 
 test('★沙箱：加 / 扣两条时间轴互斥（后到的接管，前一条不许留在节点上）', () => {
-    const { slot, iconNode, floatNode } = makeSlot('100');
-    slot.playSpendFeedback(30, '70');
+    const { slot, iconNode, floatNode } = makeSlot(100, 0, 'gold');
+    slot.playSpendFeedback(30, slotOf('gold', 70));
     for (let i = 0; i < 3; i += 1) slot.step(1 / 60);
     slot.playGainFeedback(20);
     // 加的那条接管：数字从 90 滚到 100（扣那条被打断，闪与位移、飘字都已复原）。
@@ -544,7 +551,7 @@ test('★沙箱：加 / 扣两条时间轴互斥（后到的接管，前一条�
     // 反向：加的播放途中来一次扣，扣接管。
     slot.playGainFeedback(20);
     slot.step(1 / 60);
-    slot.playSpendFeedback(20, '80');
+    slot.playSpendFeedback(20, slotOf('gold', 80));
     assert.equal(slot.valueLabel.string, '100', '扣接管时先从扣前值（100）演');
     while (slot.step(1 / 60)) { /* 播完 */ }
     assert.equal(slot.valueLabel.string, '80');

@@ -5,7 +5,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import { runInNewContext } from 'node:vm';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
-import { ZCGameUiEvent } from '../assets/script/app/zcds/view/ZCGameHudEvents';
+import { ZC_BATTLE_DEBUG_EVENTS } from '../assets/script/app/zcds/application/ZCBattleEvents';
 import { configureZCMap, ZCGameModel, type ZCMapLayout } from '../assets/script/app/zcds/model/ZCGameModel';
 import { getPlayerDeck, getEnemyDeck } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
@@ -132,7 +132,7 @@ test('GM 本地指令不联网，参数错误与无对局有反馈，结果监�
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, { exports, console, require(name: string) {
         if (name.endsWith('/EventMgr')) return { EventMgr };
-        if (name.endsWith('/ZCGameHudEvents')) return { ZCGameUiEvent };
+        if (name.endsWith('/ZCBattleEvents')) return { ZC_BATTLE_DEBUG_EVENTS };
         if (name.endsWith('/GameNet')) return { GameNet: { get instance() { throw new Error('本地发卡不应联网'); } } };
         return {};
     } });
@@ -145,10 +145,10 @@ test('GM 本地指令不联网，参数错误与无对局有反馈，结果监�
     assert.match(tips.at(-1), /先进入战斗/);
     const goldOwner = {};
     let goldRequests = 0;
-    EventMgr.instance.on(ZCGameUiEvent.DebugAddGold, (amount: number) => {
+    EventMgr.instance.on(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD, (amount: number) => {
         goldRequests++;
         assert.equal(amount, 123);
-        EventMgr.instance.emit(ZCGameUiEvent.DebugAddGoldResult, { message: '加金币成功' });
+        EventMgr.instance.emit(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD_RESULT, { message: '加金币成功' });
     }, goldOwner);
     try {
         for (const command of ['addBattleGold', 'addBattleGold abc', 'addBattleGold 0', 'addBattleGold -1',
@@ -164,17 +164,17 @@ test('GM 本地指令不联网，参数错误与无对局有反馈，结果监�
         EventMgr.instance.offTarget(goldOwner);
     }
     const goldTips = tips.length;
-    EventMgr.instance.emit(ZCGameUiEvent.DebugAddGoldResult, { message: '迟到金币结果' });
+    EventMgr.instance.emit(ZC_BATTLE_DEBUG_EVENTS.ADD_GOLD_RESULT, { message: '迟到金币结果' });
     assert.equal(tips.length, goldTips);
     assert.equal(await table.execute('addBattleCard 68001 1'), true);
     assert.match(tips.at(-1), /先进入战斗/);
     await table.execute('addBattleCard 68001 abc');
     assert.match(tips.at(-1), /用法/);
     const owner = {};
-    EventMgr.instance.on(ZCGameUiEvent.DebugDrawCard, (intent) => {
+    EventMgr.instance.on(ZC_BATTLE_DEBUG_EVENTS.DRAW_CARD, (intent) => {
         assert.equal(intent.cardId, '68001');
         assert.equal(intent.count, 2);
-        EventMgr.instance.emit(ZCGameUiEvent.DebugDrawCardResult, { message: '设置成功' });
+        EventMgr.instance.emit(ZC_BATTLE_DEBUG_EVENTS.DRAW_CARD_RESULT, { message: '设置成功' });
     }, owner);
     try {
         await table.execute('addBattleCard 68001 2');
@@ -185,6 +185,6 @@ test('GM 本地指令不联网，参数错误与无对局有反馈，结果监�
     await table.execute('addBattleCard 68001 1');
     assert.match(tips.at(-1), /先进入战斗/);
     const before = tips.length;
-    EventMgr.instance.emit(ZCGameUiEvent.DebugDrawCardResult, { message: '迟到结果' });
+    EventMgr.instance.emit(ZC_BATTLE_DEBUG_EVENTS.DRAW_CARD_RESULT, { message: '迟到结果' });
     assert.equal(tips.length, before);
 });

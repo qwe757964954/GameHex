@@ -23,6 +23,7 @@ import {
     formatBigMapCampRoleLines,
     normalizeBigMapCampRoleInfos,
 } from '../assets/script/app/bigmap/model/BigMapCampRoleInfo';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { assetPath } from './helpers/asset-paths';
 import { sendGameRequest } from '../assets/script/app/net/RequestGuard';
 
@@ -179,11 +180,12 @@ function harness() {
             roles.set(campId, d);
             return d.promise;
         },
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
         subscribeRoleEvents: () => () => undefined,
     };
     let now = 1000;
     const mod = loadModule('assets/script/app/bigmap/application/BigMapCampRepository.ts', (name) => {
+        if (name.endsWith('/ResourceScope')) return { ResourceScope };
         if (name.endsWith('/RequestGuard')) return { withTimeout: async (promise: Promise<unknown>) => promise };
         if (name.endsWith('/BigMapCampInfo')) return {
             isBigMapCampId: (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= 0xffffffff,

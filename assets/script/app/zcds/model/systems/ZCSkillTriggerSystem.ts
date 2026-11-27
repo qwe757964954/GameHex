@@ -18,12 +18,14 @@ import {
     singleStrikeHasteStatusId, singleStrikeStunStatusId,
 } from '../ZCSingleStrikeFx';
 import {
-    ZC_DASH_EFFECT_PREFAB_PATH, ZC_DASH_EFFECT_SECONDS,
+    ZC_DASH_EFFECT_PREFAB_PATH, ZC_DASH_EFFECT_SECONDS, ZC_DASH_EFFECT_LIFT_PX,
     dashGuardStatusId, dashVulnerableStatusId, pushDashGuardVisualEvent,
 } from '../ZCDashFx';
 import { ZC_BARRAGE_DEFAULT_INTERVAL } from '../ZCWindBarrageFx';
 import { ZC_QUAKE_STRIKE_PREFAB_PATH, ZC_QUAKE_STRIKE_SECONDS } from '../ZCQuakeFx';
 import { ZC_EFFECT_STATUS_PREFIX } from '../ZCEffectTuning';
+import { ZC_EFFECT_BEHAVIOR_KEYS } from '../ZCEffectCatalog';
+import { pushSkillRangeRingEvent, zcRangeRingEnabledForUnit } from '../ZCSkillRangeRingFx';
 import { missileLog, missileLogChanging, missileLogOnce } from '../../ZCMissileSkillDiagnostics';
 import { skillCastLogChanging, skillCastLogOnce, zcSkillCastWatched } from '../../ZCSkillCastDiagnostics';
 
@@ -59,7 +61,23 @@ export interface IZCSkillTriggerContext {
     healUnit?(unit: ZCUnitState, amount: number): void;
     strike?(unit: ZCUnitState, options: IZCStrikeOptions): number;
     /** 瞬移并同步更新地块索引 */
-    blinkTo?(unit: ZCUnitState, x: number, y: number): void;
+    /**
+     * 瞬移。
+     *
+     * 🔴 `behaviorKey` 必须由**调用方**给出（2026-11-25）：这条回调被五条车道共用 ——
+     * `blink_strike`（移形换影）、`dash_chain`（腾云驾雾）、`single_strike`、
+     * `charge_shield`、`legacy_dash`。大招通报按 `unitId:behaviorKey` 查名字，
+     * 若这里硬编码一个键，其余车道就永远查不到名字 ⇒ 静默不播、零报错。
+     */
+    blinkTo?(unit: ZCUnitState, x: number, y: number, behaviorKey?: string): void;
+    /**
+     * 「已经放出去了」的通报钩子，只给**没有 castXxx 回调**的两条车道用
+     * （`self_cast` 自带增益、`random_strike` 走 `strike`）。
+     *
+     * 其余车道有自己的回调，模型在返回成功那一拍自己通报，不用这条 —— 两边都调的话
+     * 只能靠 `announcedSkillCards` 去重，反而不好查。
+     */
+    announceCast?(unit: ZCUnitState, behaviorKey: string): void;
     /** 世界坐标，缺省用 freeX/freeY */
     unitPosition?(unit: ZCUnitState): { readonly x: number; readonly y: number };
     /** 普攻射程闸门：范围内有目标时才消耗 CD */
@@ -156,7 +174,8 @@ export class ZCSkillTriggerSystem {
             this.applyFanSweep(unit, params, now, context);
             this.applyChargeShield(state, unit, params, now, context);
             const strikeRadius = params?.strikeRadius ?? 300;
-            this.applyRandomStrike(state, unit, params, now, context, () => checkSkillGate(strikeRadius, params?.strikeTargetMode));
+            this.applyRandomStrike(state, unit, params, now, context,
+                () => checkSkillGate(strikeRadius, params?.strikeTargetMode), runtime);
             const blinkRadius = params?.blinkSearchRadius ?? 300;
             this.applyBlinkStrike(state, unit, params, now, context, runtime, () => checkSkillGate(blinkRadius, params?.blinkTargetMode));
             this.applySingleStrike(state, unit, params, now, context);
@@ -460,6 +479,8 @@ export class ZCSkillTriggerSystem {
         if (now < readyAt) return false;
         unit.selfCastReadyAt = now + cooldown;
         this.markCastAction(unit, now, true);
+        //  CD 已消费 = 技能放出去了（判据与其它车道一致），补一条通报机会。
+        context.announceCast?.(unit, ZC_EFFECT_BEHAVIOR_KEYS.selfCast);
 
         const seconds = Math.max(0, params.selfCastSeconds ?? 0);
         const mods: ZCStatusStatMods = {};
@@ -564,11 +585,17 @@ export class ZCSkillTriggerSystem {
         const cooldown = Math.max(0, params.auraCooldown ?? 0);
         const every = Math.max(0, params.auraEvery ?? 0);
         if (!(cooldown > 0) && !(every > 0)) {
-            if (zcSkillCastWatched(unit.unitId)) {
-                skillCastLogChanging(`aura-params:${unit.id}`, '触发',
-                    `${unit.unitId}#${unit.id} 自身光环没有 auraCooldown / auraEvery`
-                    + `（读到 ${params.auraCooldown ?? 'undefined'} / ${params.auraEvery ?? 'undefined'}）`
-                    + '⇒ 这条车道整段不执行');
+            // 「整条车道没配」= 这张卡本来就没有光环（普通兵常态），不能按告警刷屏；
+            // 只有 params 里声明过 aura* 却缺关键参数才算配置不全。按 unitId 去重：每卡一行，
+            // 不再按实例 id 给每个兵各打一遍。
+            const declared = params.auraCooldown !== undefined || params.auraEvery !== undefined
+                || params.auraSeconds !== undefined || params.auraInterval !== undefined
+                || params.auraRadius !== undefined || params.auraDamageRate !== undefined
+                || params.auraTriggerRange !== undefined || params.auraSelfDamagePct !== undefined;
+            if (declared && zcSkillCastWatched(unit.unitId)) {
+                skillCastLogOnce(`aura-params:${unit.unitId}`, '触发',
+                    `${unit.unitId}#${unit.id} 自身光环参数不全：auraCooldown=${params.auraCooldown ?? 'undefined'}`
+                    + ` / auraEvery=${params.auraEvery ?? 'undefined'} ⇒ 这条车道整段不执行`);
             }
             return false;
         }
@@ -713,10 +740,13 @@ export class ZCSkillTriggerSystem {
         if (!context.castBolt || !params) return;
         const cooldown = Math.max(0, params.boltCooldown ?? 0);
         if (!(cooldown > 0)) {
-            if (zcSkillCastWatched(unit.unitId)) {
-                skillCastLogChanging(`bolt-params:${unit.id}`, '触发',
-                    `${unit.unitId}#${unit.id} 五雷轰顶没有 boltCooldown`
-                    + `（读到 ${params.boltCooldown ?? 'undefined'}）⇒ 这条车道整段不执行`);
+            // 同光环：没声明过任何 bolt* 字段 = 这张卡没有五雷轰顶，静默。
+            const declared = params.boltCooldown !== undefined || params.boltCount !== undefined
+                || params.boltDamageRate !== undefined || params.boltRadius !== undefined;
+            if (declared && zcSkillCastWatched(unit.unitId)) {
+                skillCastLogOnce(`bolt-params:${unit.unitId}`, '触发',
+                    `${unit.unitId}#${unit.id} 五雷轰顶参数不全：boltCooldown=${params.boltCooldown ?? 'undefined'}`
+                    + ' ⇒ 这条车道整段不执行');
             }
             return;
         }
@@ -1023,11 +1053,12 @@ export class ZCSkillTriggerSystem {
             if (backX === undefined || backY === undefined) { this.clearDashChain(unit); return; }
             const gap = Math.hypot(backX - self.x, backY - self.y);
             if (gap <= step || gap <= 1e-6) {
-                context.blinkTo(unit, backX, backY);
+                context.blinkTo(unit, backX, backY, ZC_EFFECT_BEHAVIOR_KEYS.dashChain);
                 this.clearDashChain(unit);
                 return;
             }
-            context.blinkTo(unit, self.x + (backX - self.x) / gap * step, self.y + (backY - self.y) / gap * step);
+            context.blinkTo(unit, self.x + (backX - self.x) / gap * step, self.y + (backY - self.y) / gap * step,
+                ZC_EFFECT_BEHAVIOR_KEYS.dashChain);
             return;
         }
 
@@ -1046,11 +1077,12 @@ export class ZCSkillTriggerSystem {
         const gap = Math.hypot(landX - self.x, landY - self.y);
 
         if (gap > step && gap > 1e-6) {
-            context.blinkTo(unit, self.x + (landX - self.x) / gap * step, self.y + (landY - self.y) / gap * step);
+            context.blinkTo(unit, self.x + (landX - self.x) / gap * step, self.y + (landY - self.y) / gap * step,
+                ZC_EFFECT_BEHAVIOR_KEYS.dashChain);
             return;
         }
 
-        context.blinkTo(unit, landX, landY);
+        context.blinkTo(unit, landX, landY, ZC_EFFECT_BEHAVIOR_KEYS.dashChain);
         const damageRate = Math.max(0, params.dashChainDamageRate ?? 0);
         const hitRadius = Math.max(1, Math.max(0, params.dashChainHitRadius ?? 40) * scale);
         if (damageRate > 0) {
@@ -1172,13 +1204,14 @@ export class ZCSkillTriggerSystem {
         }
         const cooldown = Math.max(0, params.trapCooldown ?? 0);
         if (!(cooldown > 0)) {
-            if (zcSkillCastWatched(unit.unitId)) {
-                const declared = Object.keys(params).some((key) => key.startsWith('trap'));
-                if (declared) {
-                    skillCastLogChanging(`trap-params:${unit.id}`, '触发',
-                        `${unit.unitId}#${unit.id} 精密陷阱没有 trapCooldown`
-                        + `（读到 ${params.trapCooldown ?? 'undefined'}）⇒ 这条车道整段不执行`);
-                }
+            // 同光环 / 五雷：没声明过任何 trap* 字段 = 这张卡没有陷阱，静默。
+            // 直接读字段而不是 `Object.keys(...).some()` —— 后者每帧为每个单位分配一条键数组。
+            const declared = params.trapEvery !== undefined || params.trapCooldown !== undefined
+                || params.trapRadius !== undefined || params.trapDamageRate !== undefined;
+            if (declared && zcSkillCastWatched(unit.unitId)) {
+                skillCastLogOnce(`trap-params:${unit.unitId}`, '触发',
+                    `${unit.unitId}#${unit.id} 精密陷阱参数不全：trapCooldown=${params.trapCooldown ?? 'undefined'}`
+                    + ' ⇒ 这条车道整段不执行');
             }
             return;
         }
@@ -1454,6 +1487,7 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
         release: boolean | (() => boolean),
+        runtime?: ZCSkillRuntimeDefinition,
     ): void {
         if (!context.strike || !params) return;
         const count = Math.max(0, params.strikeCount ?? 0);
@@ -1475,7 +1509,17 @@ export class ZCSkillTriggerSystem {
                 + ` nearest=${params.strikeNearest ?? 0} splash=${params.strikeSplashRadius ?? 0}`
                 + ` | 弹体=${missileFx.missilePrefabPath} 爆炸=${missileFx.impactPrefabPath}`);
         }
-        const fire = (): boolean => {
+        /**
+         * 这一发的作用中心（世界坐标），由 `fire` 通过 `options.centerOut` 回填。
+         * `Number.NaN` = 这一发没落地（0 目标且非保底），圈心退回施法者。
+         */
+        const strikeCenter = { x: Number.NaN, y: Number.NaN };
+        /**
+         * @param forceVisual 技能**已经放出去之后**的那几波带 `true`：敌人被打光 / 走光时
+         *   照样把这一批子弹抛完（`strikeTargets` 收 `options.forceVisual` 跳过 0 目标早退）。
+         *   首次施法不带 ⇒ 搜索半径内一个敌人都没有时整段不发、冷却不推进（「没目标不释放」）。
+         */
+        const fire = (forceVisual = false): boolean => {
             const options: IZCStrikeOptions = {
                 count: Math.round(count),
                 radius: searchRadius,
@@ -1491,6 +1535,10 @@ export class ZCSkillTriggerSystem {
                 arcOffset: missileFx?.arcOffset ?? 0,
                 missileSpeed: missileFx?.speed,
                 missileCount: missileFx?.count,
+                forceVisual: forceVisual || undefined,
+                //  这一发实际作用在哪 —— 范围指示白环的圆心（2026-11-26 第 57 批）。
+                //  由 `strikeTargets` 挑完人之后写回，与子弹**同一份计算结果**。
+                centerOut: strikeCenter,
             };
             const hits = context.strike!(unit, options);
             if (missileFx) {
@@ -1502,6 +1550,7 @@ export class ZCSkillTriggerSystem {
                         + `（包围盒内敌人不足 / 全在半径外）⇒ strike() 返回 0 ⇒ 冷却不推进，会每帧重试`);
             }
             if (hits > 0) this.markCastAction(unit, now, false);
+            if (hits > 0) context.announceCast?.(unit, ZC_EFFECT_BEHAVIOR_KEYS.randomStrike);
             return hits > 0;
         };
         const windowSeconds = Math.max(0, params.strikeSeconds ?? 0);
@@ -1510,8 +1559,14 @@ export class ZCSkillTriggerSystem {
         const until = unit.strikeUntil;
         if (until != null && now < until) {
             if (now < (unit.strikeNextAt ?? 0)) return;
-            fire();
+            //  窗口内的每一波都保底：圈已经画在地上了，这一波哪怕一个敌人都没有也要把箭抛出去，
+            //  否则玩家看到的是「圈还在、箭没了」。见 `IZCStrikeOptions.forceVisual`。
+            fire(true);
             unit.strikeNextAt = now + interval;
+            //  🔴 每波把圈**挪到这一波的散布中心**（2026-11-26 第 57 批）：敌人会走，
+            //  圈不跟就会出现「第一秒的圈、第五秒的箭」。`followCenter = true` ⇒
+            //  复用同一条事件（原地改坐标 + 续命），不会叠成年轮。
+            this.pushStrikeRangeRing(state, unit, params, radius, searchRadius, context, runtime, strikeCenter);
             return;
         }
         if (until != null) {
@@ -1547,6 +1602,7 @@ export class ZCSkillTriggerSystem {
             if (windowSeconds > 0) {
                 unit.strikeUntil = now + windowSeconds;
                 unit.strikeNextAt = now + interval;
+                this.pushStrikeRangeRing(state, unit, params, radius, searchRadius, context, runtime, strikeCenter);
             }
             return;
         }
@@ -1560,7 +1616,62 @@ export class ZCSkillTriggerSystem {
         if (windowSeconds > 0) {
             unit.strikeUntil = now + windowSeconds;
             unit.strikeNextAt = now + interval;
+            this.pushStrikeRangeRing(state, unit, params, radius, searchRadius, context, runtime, strikeCenter);
         }
+    }
+
+    /**
+     * 戈壁箭雨（`random_strike`，2026-11-25 前叫「戈壁狂箭」）的持续窗口
+     * 一开就画一圈范围指示（2026-11-25 第 45 批）。
+     *
+     * 🔴 半径取**实际搜索半径**换回表值，不是裸 `strikeRadius`：`applyRandomStrike` 里
+     * `searchRadius = min(strikeRadius × scale, attackReach)`，被射程闸门收窄时圈要跟着小，
+     * 否则会出现「圈画到 210、实际只打到射程内」的假圈。
+     * 🔴 寿命 = `strikeSeconds`（6/7/8 秒）：窗口一关圈就得没，否则玩家会对着空气等。
+     * 同一个单位在窗口内反复开火不会叠圈 —— 去重逻辑在 `pushSkillRangeRingEvent` 里。
+     *
+     * 🔴 **圆心是「这一发打在哪」，不是施法者脚下**（2026-11-26 第 57 批，用户口径）：
+     * 原来这里写死 `unitPosition(unit)`，于是戈壁箭雨的圈画在杰克藕身上、箭却撒在敌群里，
+     * 玩家看到的是「圈和技能不相干」。现在圆心由 `strikeTargets` 挑完人之后回填进
+     * `centerOut`（= 散布中心 / 挑中目标质心），与子弹**同一份计算结果** ——
+     * 在外面重算一遍会因随机挑人得到另一个质心，圈与箭又会错开。
+     * 没打出去（0 目标且非保底）时 `center` 是 `NaN` ⇒ 退回施法者，不留一个到处乱飘的圈。
+     */
+    private static pushStrikeRangeRing(
+        state: ZCSnapshot,
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        radiusTable: number,
+        searchRadiusWorld: number,
+        context: IZCSkillTriggerContext,
+        runtime?: ZCSkillRuntimeDefinition,
+        center?: { readonly x: number; readonly y: number },
+    ): void {
+        if (!zcRangeRingEnabledForUnit(unit.unitId)) return;
+        const seconds0 = Math.max(0, params?.strikeSeconds ?? 0);
+        if (!(seconds0 > 0)) return;
+        //  🔴 窗口内每波都会调到这里（为了跟随圆心），寿命必须取**剩余窗口**而不是整段
+        //  `strikeSeconds`：否则最后一波会把圈续到技能结束之后，玩家对着一个空圈继续等。
+        const remaining = unit.strikeUntil != null ? Math.max(0, unit.strikeUntil - state.elapsedSeconds) : undefined;
+        const seconds = remaining != null ? Math.min(seconds0, remaining) : seconds0;
+        if (!(seconds > 0)) return;
+        const scale = Math.max(1e-6, context.distanceScale ?? 1);
+        const centered = center != null && Number.isFinite(center.x) && Number.isFinite(center.y);
+        const position = centered
+            ? { x: center!.x, y: center!.y }
+            : (context.unitPosition ? context.unitPosition(unit) : { x: unit.freeX, y: unit.freeY });
+        const worldRadius = searchRadiusWorld > 0 ? searchRadiusWorld : radiusTable * scale;
+        pushSkillRangeRingEvent(state, {
+            x: position.x,
+            y: position.y,
+            logicRadius: worldRadius / scale,
+            worldRadius,
+            seconds,
+            owner: unit.owner,
+            sourceUnitId: unit.id,
+            skillId: runtime?.skillId ?? 0,
+            skillName: runtime?.behaviorKey ?? 'random_strike',
+        }, true);
     }
 
     private static applyBlinkStrike(
@@ -1656,13 +1767,13 @@ export class ZCSkillTriggerSystem {
             startedAt: now,
             durationSeconds: ZC_BLINK_CAST_EFFECT_SECONDS,
         });
-        context.blinkTo(unit, landX, landY);
+        context.blinkTo(unit, landX, landY, ZC_EFFECT_BEHAVIOR_KEYS.blinkStrike);
         this.markCastAction(unit, now, false);
         if (damageRate > 0) {
             context.strike(unit, { count: 1, radius: hitRadius, damageRate, nearest: true });
         }
         if ((params.blinkRoundTrip ?? 0) > 0) {
-            context.blinkTo(unit, self.x, self.y);
+            context.blinkTo(unit, self.x, self.y, ZC_EFFECT_BEHAVIOR_KEYS.blinkStrike);
             if (damageRate > 0) {
                 context.strike(unit, { count: 1, radius: hitRadius, damageRate, nearest: true });
             }
@@ -1742,7 +1853,7 @@ export class ZCSkillTriggerSystem {
             startedAt: now,
             durationSeconds: ZC_SINGLE_STRIKE_EFFECT_SECONDS,
         });
-        context.blinkTo(unit, landX, landY);
+        context.blinkTo(unit, landX, landY, ZC_EFFECT_BEHAVIOR_KEYS.singleStrike);
         this.markCastAction(unit, now, false);
 
         const stunSeconds = Math.max(0, params.singleStunSeconds ?? 0);
@@ -1809,7 +1920,7 @@ export class ZCSkillTriggerSystem {
         if (!destination) return;
         const origin = this.dashOrigin(unit, context);
         this.pushDashCastEvent(state, unit, origin, destination, now, 'charge_shield');
-        context.blinkTo(unit, destination.x, destination.y);
+        context.blinkTo(unit, destination.x, destination.y, ZC_EFFECT_BEHAVIOR_KEYS.chargeShield);
         this.markCastAction(unit, now, false);
 
         const shieldRatio = Math.max(0, params.chargeShieldRatio ?? 0);
@@ -1864,7 +1975,7 @@ export class ZCSkillTriggerSystem {
         if (!destination) return;
         const origin = this.dashOrigin(unit, context);
         this.pushDashCastEvent(state, unit, origin, destination, now, 'legacy_dash');
-        context.blinkTo(unit, destination.x, destination.y);
+        context.blinkTo(unit, destination.x, destination.y, ZC_EFFECT_BEHAVIOR_KEYS.legacyDash);
         this.markCastAction(unit, now, false);
 
         // 易伤对目标（damageTakenPct 正），自减伤对自己（damageTakenPct 负）
@@ -2001,6 +2112,9 @@ export class ZCSkillTriggerSystem {
             empowered: false,
             startedAt: now,
             durationSeconds: ZC_DASH_EFFECT_SECONDS,
+            //  剑气画布 123×141（≈1.4 个兵种高），压着冲锋线放会一半插进地面 ⇒ 抬到腰线。
+            //  见 `ZCDashFx.ZC_DASH_EFFECT_LIFT_PX`（屏幕竖直方向，不跟弹道转角）。
+            visualLiftPx: ZC_DASH_EFFECT_LIFT_PX,
         });
     }
 

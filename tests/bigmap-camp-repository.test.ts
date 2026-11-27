@@ -10,7 +10,7 @@ import { loadBigMapConfig, loadBigMapLayout } from './helpers/bigmap-fixtures';
 test('迁城强制刷新等待旧查询结束并再查，旧名单不能作为迁城后的最终事实', async () => {
     const releases: ((value: unknown) => void)[] = [];
     const repository = new BigMapCampRepository({ fetchSimple: async () => null, fetchDetail: async () => null,
-        requestMove: async () => null, fetchRoles: () => new Promise((resolve) => releases.push(resolve)) });
+        requestMove: async () => ({ status: 'unconfirmed' }), fetchRoles: () => new Promise((resolve) => releases.push(resolve)) });
     const old = repository.refreshRoles(101);
     const fresh = repository.refreshRoles(101, true);
     assert.equal(releases.length, 1);
@@ -42,7 +42,7 @@ function makeGateway() {
         fetchSimple: (ids) => { calls.push({ kind: 'simple', ids }); return simple.promise; },
         fetchDetail: (ids) => { calls.push({ kind: 'detail', ids }); return detail.promise; },
         fetchRoles: (campId) => { roleCalls.push(campId); return roles.promise; },
-        requestMove: (body) => { moveCalls.push({ ...body }); return move.promise; },
+        requestMove: (body) => { moveCalls.push({ ...body }); return move.promise.then(() => ({ status: 'unconfirmed' as const })); },
     };
     return { calls, roleCalls, moveCalls, simple, detail, roles, move, gateway };
 }
@@ -140,7 +140,7 @@ test('同一批可见据点反复上报时，整批刷新在新鲜窗口内不�
         fetchSimple: async (ids) => { sent.push([...ids]); return { infos: ids.map((campId) => ({ campId, opType: 0 })) }; },
         fetchDetail: async () => null,
         fetchRoles: async (campId) => ({ campId, infos: [] }),
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
     }, () => now);
     await repository.refreshSimple([304, 306, 505, 606, 706], true);
     assert.deepEqual(sent, [[304, 306, 505, 606, 706]], '首次整批查询');
@@ -170,7 +170,7 @@ test('整批撞上在途被跳过时，在途落地后按最新可见集合补�
         },
         fetchDetail: async () => null,
         fetchRoles: async (campId) => ({ campId, infos: [] }),
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
     });
     const loading = repository.refreshSimple([101], true);
     // 拖动中新进视野 102：这一轮整批撞上在途，当场不发（不拆包），但必须登记补发
@@ -398,7 +398,7 @@ test('真实配置 + 真实布局下，点城池必须真的发出详情请求',
         fetchSimple: async (ids) => { called.push(`simple:${ids.join(',')}`); return { infos: [] }; },
         fetchDetail: async (ids) => { called.push(`detail:${ids.join(',')}`); return { infos: [] }; },
         fetchRoles: async (campId) => ({ campId, infos: [] }),
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
     });
     const presenter = new BigMapModel({
         config, layout, storage: createMemoryBigMapStorage(), saveKey: 'camp-detail-wire',
@@ -416,7 +416,7 @@ test('视野补发名单：同城在新鲜窗口内只发一次，窗口过后�
     let clock = 0;
     const calls: number[] = [];
     const repository = new BigMapCampRepository({
-        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => null,
+        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => ({ status: 'unconfirmed' }),
         fetchRoles: async (campId) => { calls.push(campId); return { campId, infos: [] }; },
     }, () => clock);
     try {
@@ -435,7 +435,7 @@ test('视野补发的名单失败不占新鲜窗口，下一次滑动还能补�
     let fail = true;
     const calls: number[] = [];
     const repository = new BigMapCampRepository({
-        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => null,
+        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => ({ status: 'unconfirmed' }),
         fetchRoles: async (campId) => { calls.push(campId); return fail ? null : { campId, infos: [] }; },
     }, () => 0);
     try {
@@ -450,7 +450,7 @@ test('视野补发与点开城池共用同一把在途锁：同时触发只发�
     const pending: ((value: unknown) => void)[] = [];
     const calls: number[] = [];
     const repository = new BigMapCampRepository({
-        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => null,
+        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => ({ status: 'unconfirmed' }),
         fetchRoles: (campId) => { calls.push(campId); return new Promise((resolve) => { pending.push(resolve); }); },
     }, () => 0);
     try {

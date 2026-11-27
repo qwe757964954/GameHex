@@ -56,7 +56,7 @@ import { GUANKA_REWARD_TABLE, ITEM_TABLE, PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE
 import { toMillis } from '../../core/time/TimeMs';
 import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 福利月卡特权 `type`：无限次快速扫荡（老端 `PrivilegeType.NoCountSweep = 4`）。 */
-export const HJ_PRIVILEGE_NO_COUNT_SWEEP = 4;
+const HJ_PRIVILEGE_NO_COUNT_SWEEP = 4;
 
 /**
  * 广告位类型：扫荡（老端 `AdType.sweep = 11`）。

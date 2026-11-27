@@ -20,8 +20,8 @@ import { FW } from '../../framework/FW';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { loadArt } from '../card/CardLineupIcons';
+import { CHAT_ART_ROOT } from '../ArtPaths';
 import {
-    CHAT_ART_ROOT,
     CHAT_SHARED_TAB_OFF,
     CHAT_SHARED_TAB_ON,
     CHAT_SHARED_TAB_ROOT,

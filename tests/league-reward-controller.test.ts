@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { LeagueRewardController } from '../assets/script/app/league/LeagueRewardController';
-import { LeagueRewardEvent, type LeagueRewardAction, type ILeagueRewardCompletion } from '../assets/script/app/league/LeagueRewardEvents';
+import { LeagueRewardEvent, type LeagueRewardAction, type ILeagueRewardCompletion, type LeagueRewardOutput } from '../assets/script/app/league/LeagueRewardEvents';
 import type { ILeagueRepository, ILeagueRewardResult } from '../assets/script/app/league/LeagueRepository';
 import { createControllerContext } from './helpers/controller-context';
 import { readFileSync } from 'node:fs';
@@ -22,11 +22,20 @@ function fixture() {
     const completions: ILeagueRewardCompletion[] = [];
     const repository = Object.fromEntries(['buyStoreGoods', 'requestBargain', 'requestTaskReward', 'requestTaskProgressReward', 'requestSweep']
         .map(method => [method, (...args: unknown[]) => new Promise<ILeagueRewardResult>((resolve, reject) => calls.push({ method, args, resolve, reject }))])) as unknown as ILeagueRepository;
-    const controller = new LeagueRewardController(createControllerContext(), {
-        owner, repository, feedback: { reward: goods => shown.push(goods) },
-        requests: { removeCaller: caller => cancelled.push(caller) },
+    const controller = new LeagueRewardController(createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => cancelled.push(caller),
+        },
+    }), {
+        repository,
     });
     const observer = {};
+    EventMgr.instance.on(LeagueRewardEvent.Output, (output: LeagueRewardOutput, source: object) => {
+        if (source === controller && output.kind === 'reward') {
+            shown.push(output.rewards);
+        }
+    }, observer);
     EventMgr.instance.on(LeagueRewardEvent.Completed, (event: ILeagueRewardCompletion) => completions.push({ ...event }), observer);
     controller.start();
     return { owner, controller, calls, shown, cancelled, completions,

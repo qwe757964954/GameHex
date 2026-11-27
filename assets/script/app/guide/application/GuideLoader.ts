@@ -24,9 +24,9 @@ import { parseGuideSteps } from '../model/GuideStepConfig';
 import type { GuideStep } from '../model/GuideStepConfig';
 
 /** 表名（对应 `assets/remoteRef/guideStep.json`，不带后缀）。 */
-export const GUIDE_STEP_TABLE = 'guideStep';
+const GUIDE_STEP_TABLE = 'guideStep';
 /** 台词表（`assets/remoteRef/guideDialog.json`）。 */
-export const GUIDE_DIALOG_TABLE = 'guideDialog';
+const GUIDE_DIALOG_TABLE = 'guideDialog';
 
 /**
  * 读引导表。

@@ -5,7 +5,11 @@
 所以本脚本是**改写**而不是追加：
   · `armySkillLevelUp.json` 两份产物：`name` / `desc` / `modfiy`（修改器号指向 pvpSkillPlan 的三档）；
   · `K-卡牌升级.xlsx / 卡牌技能升级表`：B（技能名）/ C（技能描述）/ K（冷却列，主动技能统一 29）/
-    M（档位图标 I/II/III）。
+    L（修改器 = `[9401xxxx]`）/ M（档位图标 I/II/III）。
+
+🔴 **L 列必须一起写**：首版忘了 L，JSON 里 `modfiy` 是 `[94014031]`、Excel 里还是 `[]`，
+转表器以 Excel 为准 ⇒ 一跑就把 remoteRef 的修改器号清空（`zcds-fan-single-batch14` 的
+「两份产物逐格一致」正是这么红的）。格式抄 101301 那几行：`[94013011]`，方括号、无空格。
 
 为什么 B/C 要抄 pvpSkillPlan 的 desc：卡牌 UI 真读的是 `armySkillLevelUp.desc`
 （项目口径「desc 两份都改」）。只改 JSON 不写 xlsx 的话，转表器一跑（以 Excel 为准）
@@ -165,6 +169,7 @@ def patch_xlsx(plan):
                 'B%d' % row: name,
                 'C%d' % row: desc,
                 'K%d' % row: ACTIVE_COOLDOWN_CELL,
+                'L%d' % row: '[%d]' % modifier_id,
                 'M%d' % row: ICONS[tier],
             }
             for ref, value in sorted(wanted.items()):
@@ -175,7 +180,7 @@ def patch_xlsx(plan):
                 changed += 1
 
     if not changed:
-        print('[skip] K 表 B/C/K/M 已是目标值')
+        print('[skip] K 表 B/C/K/L/M 已是目标值')
         return
     os.makedirs(BACKUP_DIR, exist_ok=True)
     shutil.copy2(XLSX, os.path.join(BACKUP_DIR, 'K-卡牌升级.xlsx.bak-fan-single14'))
@@ -203,13 +208,14 @@ def verify(plan):
                 if value_of(xml, 'E%d' % row) != str(tier + 1):
                     continue
                 got = (value_of(xml, 'B%d' % row), value_of(xml, 'C%d' % row),
-                       value_of(xml, 'K%d' % row), value_of(xml, 'M%d' % row))
-                if got != (name, desc, str(ACTIVE_COOLDOWN_CELL), ICONS[tier]):
+                       value_of(xml, 'K%d' % row), value_of(xml, 'L%d' % row),
+                       value_of(xml, 'M%d' % row))
+                if got != (name, desc, str(ACTIVE_COOLDOWN_CELL), '[%d]' % modifier_id, ICONS[tier]):
                     bad.append((chain, tier + 1, got))
                 break
     if bad:
         raise SystemExit('[fail] K 表回读不一致：%s' % bad)
-    print('[ok] K 表回读通过：%d 行 × B/C/K/M' % (len(CHAINS) * 3))
+    print('[ok] K 表回读通过：%d 行 × B/C/K/L/M' % (len(CHAINS) * 3))
 
 
 def main():

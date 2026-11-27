@@ -16,6 +16,8 @@ import { loadTsModule } from './helpers/cc-sandbox';
 import * as RoleTable from '../assets/script/app/role/RoleTable';
 import { ROLE_TEXTS } from '../assets/script/app/role/RoleTexts';
 import * as RolePowerTable from '../assets/script/app/role/RolePowerTable';
+import * as RoleEquipRedDotTable from '../assets/script/app/role/RoleEquipRedDotTable';
+import * as EquipDecomposeTable from '../assets/script/app/role/EquipDecomposeTable';
 import * as RoleTypes from '../assets/script/app/role/RoleTypes';
 
 interface ISnapshotLike {
@@ -34,7 +36,14 @@ function loadRepository(power: number, cachedPower: number | null = null, missin
     const { exports, unresolved } = loadTsModule<{ roleRepository: IRepositoryLike }>('assets/script/app/role/RoleRepository.ts', {
         globals: { console: { warn: (message: string) => warnings.push(message) } },
         modules: {
-            '/RefUtil': { RefUtil: { instance: { getRefAllAsync: async (table: string) => table === 'head' ? [{ resId: 70001 }] : [] } } },
+            '/RefUtil': {
+                RefUtil: {
+                    instance: {
+                        getRefAllAsync: async (table: string) => table === 'head' ? [{ resId: 70001 }] : [],
+                        getRefAsync: async () => null,
+                    },
+                },
+            },
             '/CacheMgr': {
                 CacheMgr: {
                     instance: {
@@ -61,6 +70,8 @@ function loadRepository(power: number, cachedPower: number | null = null, missin
             '/ItemBag': { readItemCounts: async () => new Map<string, number>(missingConfig ? [['100001', 3], ['70001', 1]] : []) },
             '/TableNames': { ITEM_TABLE: 'item', HEAD_TABLE: 'head' },
             '/RoleTable': RoleTable,
+            '/RoleEquipRedDotTable': RoleEquipRedDotTable,
+            '/EquipDecomposeTable': EquipDecomposeTable,
             '/RolePowerTable': RolePowerTable,
             '/RoleTexts': { ROLE_TEXTS },
             '/RoleTypes': RoleTypes,

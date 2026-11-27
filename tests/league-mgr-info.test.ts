@@ -198,11 +198,11 @@ test('B5 ⚠️ 勾图复用 `image/sevenDay/sd_check`（工程内已有两处�
     assert.equal(LEAGUE_ART_CHECK_MARK, LEAGUE_SHARED_CHECK_NAME);
     // 图真的在那儿（漏盘就会出「勾选框点了不显示勾」）
     assert.ok(existsSync(`${SHARED_ART_ROOT}/sd_check.png`), '缺 image/sevenDay/sd_check.png');
-    // 复用先例还在（哪天有人「顺手」把它挪走，这条会红）
-    const friend = readFileSync('assets/script/app/friend/FriendArt.ts', 'utf8');
+    // 复用先例还在（好友 prefab 静态绑定 + 战令代码复用）
+    const checkMeta = JSON.parse(readFileSync(`${SHARED_ART_ROOT}/sd_check.png.meta`, 'utf8')) as { uuid: string };
+    const friendPrefab = readFileSync(assetPath('ui/Friend/Friend.prefab'), 'utf8');
     const token = readFileSync('assets/script/app/battletoken/BattleTokenArt.ts', 'utf8');
-    assert.ok((friend.includes("'image/sevenDay'") || /SEVEN_DAY_ART_ROOT/.test(friend)) && friend.includes("'sd_check'"),
-        'FriendArt 的复用先例被改动了');
+    assert.ok(friendPrefab.includes(`${checkMeta.uuid}@f9941`), 'Friend.prefab 的复用先例被改动了');
     assert.ok(token.includes("'image/sevenDay'") && token.includes("'sd_check'"), 'BattleTokenArt 的复用先例被改动了');
 });
 

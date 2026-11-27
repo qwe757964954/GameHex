@@ -13,12 +13,12 @@
  * | `upgradeCost` | **升到 `lv + 1`** 那行的 `monsterBoxUpCostCoins` |
  * | `successRate` | 同上那行的 `monsterBoxUpPro`（百分数） |
  * | `failLimit` | 同上那行的 `maxUpFailTimes` |
- * | `rewards` | **当前 `lv`** 那行的 `monsterBoxVictoryRwrad`（`pro` 万分比 → 百分比） |
+ * | `rewards` | **当前 `lv`** 那行的 `monsterBoxVictoryRwrad`（`pro` 万分比 → 百分比）；数量取**下限**，`addAmount` = 下一级同资源下限差 |
  * | `battleEnabled` | 这一格有没有绑到关卡行 |
  * | `guards[].headIcon` | **当前 `lv`** 那行的 `monsterBoxLevel` → `levelInfo.levelMonsterGroup` 前 N 只 → `monsterCard.headIcon` |
  * | `upgradeAttempt` | Model 记的最近一次升级回包结果（原样透传，这里不判成功） |
  *
- * @note 升级所需消耗取 grade = lv + 1 配置，奖励与守护怪取当前等级配置。
+ * @note 升级所需消耗与增量取 grade = lv + 1 配置，奖励与守护怪取当前等级配置。
  */
 
 import type { TerritoryCampaignStage, TerritoryGuardMonster } from './TerritoryCampaignConfig';
@@ -27,15 +27,37 @@ import { TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
 import { gradeOf, maxGradeOf, type ITerritoryMonsterBoxGroup } from './TerritoryMonsterBoxConfig';
 import { TERRITORY_MONSTER_BOX_SPEC } from './TerritoryMonsterBoxSpec';
 
-/** 一格奖励（与 `ITerritoryLevelDrop` 同形 + 概率/区间；Model 侧不引 application 层的类型）。 */
+/** 一格奖励（与 `ITerritoryLevelDrop` 同形 + 概率/增量；Model 侧不引 application 层的类型）。 */
 export interface ITerritoryMonsterBoxReward {
     readonly resId: number;
-    /** 代表数量（取该资源各档里的**最大值**，用于图标解析与排序）。 */
+    /**
+     * 当前等级该资源的数量 —— **只取该资源各档里的下限**（11-25 口径）。
+     *
+     * 原先是"区间文案 + 最大值做代表数"（`100~500`）；改成 `当前+增量` 之后区间读不出来，
+     * 统一取下限当基准（EXP 保底 300、银币 150 都是下限），玩家看到的就是"最少给多少"。
+     */
     readonly amount: number;
-    /** 数量区间文案（`100~500`）；同资源只有一档时不填，按 `amount` 显示。 */
-    readonly amountText?: string;
+    /**
+     * 下一等级比当前等级多给多少；`0` = 不显示。
+     *
+     * 只用同资源的**下限差**（与 {@link amount} 同口径），且**配表反向（下一级更少）按 0 处理** ——
+     * 不能让玩家看到 `150+-80` 这种读法。`monsterBox` 表当前有 5 处反向，见 §3.53。
+     */
+    readonly addAmount: number;
     /** 概率（百分比，`100` ⇒ 100%）；`0` = 不显示。 */
     readonly ratePercent: number;
+}
+
+/**
+ * 奖励卡上的数量文案：`300+100` / `300`。
+ *
+ * `+N` 只在下一级真的多给时出现（`addAmount <= 0` 一律只显示当前值）——
+ * 参考效果图里没变化的格子就是一个纯数字。
+ */
+export function monsterBoxRewardText(reward: Pick<ITerritoryMonsterBoxReward, 'amount' | 'addAmount'>): string {
+    const base = Math.max(0, Math.floor(Number(reward.amount) || 0));
+    const add = Math.max(0, Math.floor(Number(reward.addAmount) || 0));
+    return add > 0 ? `${base}+${add}` : String(base);
 }
 
 /** 守护怪格。 */
@@ -113,35 +135,53 @@ export interface ITerritoryMonsterBoxDetailContent {
 
 /**
  * 奖励池 → 面板格子：同一个 resId 的多档合并成单格展示。
- * 数量按区间汇总（如 100~500），概率取该资源的最高档展示。
  *
- * 合并口径：
- * - 数量写**区间**（`100~500`）—— 表里本来就是"抽到哪档给多少"；
+ * 合并口径（2026-11-25 改）：
+ * - 数量取该资源的**下限**（原先取最大值并写区间 `100~500`；改成「当前+增量」后区间读不出来）；
  * - 概率取该资源的**最高档**（`10000` ⇒ 100%）—— 玩家关心"至少有多大概率拿到"。
  *
  * 去重后正好覆盖全部资源种类（当前配置是 4 种：`10010` / `7` / `19350` / `19301`），
  * 与面板 4 个格子一一对应；将来种类超过格子数再加虚拟列表。
  */
-function mergeRewardsByResId(pool: readonly { resId: number; amount: number; pro: number }[]): ITerritoryMonsterBoxReward[] {
-    const byResId = new Map<number, { min: number; max: number; pro: number }>();
+function mergeRewardsByResId(
+    pool: readonly { resId: number; amount: number; pro: number }[],
+): { resId: number; amount: number; ratePercent: number }[] {
+    const byResId = new Map<number, { min: number; pro: number }>();
     for (const entry of pool) {
         const prev = byResId.get(entry.resId);
         if (!prev) {
-            byResId.set(entry.resId, { min: entry.amount, max: entry.amount, pro: entry.pro });
+            byResId.set(entry.resId, { min: entry.amount, pro: entry.pro });
             continue;
         }
         prev.min = Math.min(prev.min, entry.amount);
-        prev.max = Math.max(prev.max, entry.amount);
         prev.pro = Math.max(prev.pro, entry.pro);
     }
     return Array.from(byResId, ([resId, item]) => ({
         resId,
-        amount: item.max,
+        amount: item.min,
         // 万分比 → 百分比（`10000` ⇒ 100）
         ratePercent: Math.round(item.pro / 100),
-        // 单档时不写这个键（`undefined` 也会被 `deepEqual` 当成差异）
-        ...(item.min === item.max ? {} : { amountText: `${item.min}~${item.max}` }),
     }));
+}
+
+/** 当前级奖励 + 「下一级多给多少」（同资源下限差，反向按 0 处理）。 */
+function buildRewards(
+    current: readonly { resId: number; amount: number; pro: number }[] | null | undefined,
+    next: readonly { resId: number; amount: number; pro: number }[] | null | undefined,
+): ITerritoryMonsterBoxReward[] {
+    const currentRows = mergeRewardsByResId(current ?? []);
+    const nextByResId = new Map(mergeRewardsByResId(next ?? []).map(row => [row.resId, row.amount]));
+    return currentRows.map((row) => {
+        const nextAmount = nextByResId.get(row.resId);
+        const delta = nextAmount === undefined ? 0 : nextAmount - row.amount;
+        return {
+            resId: row.resId,
+            amount: row.amount,
+            // 反向（下一级更少）或下一级没有这种资源 ⇒ 不显示增量
+            addAmount: delta > 0 ? delta : 0,
+            ratePercent: row.ratePercent,
+        };
+    });
 }
 
 /**
@@ -200,7 +240,7 @@ export function buildTerritoryMonsterBoxDetail(
         });
     }
 
-    const rewards = mergeRewardsByResId(currentGrade?.rewards ?? []);
+    const rewards = buildRewards(currentGrade?.rewards, nextGrade?.rewards);
 
     const battleEnabled = stage !== null;
     let footerText: string = spec.footerText;

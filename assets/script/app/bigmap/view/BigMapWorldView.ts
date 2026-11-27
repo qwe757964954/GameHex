@@ -20,6 +20,7 @@ import {
 import {
     BIGMAP_COLORS, BIGMAP_TERRITORY_COLORS, BIGMAP_TERRITORY_FILL_ALPHA, BIGMAP_TERRITORY_OWNED_FILL_ALPHA,
     BIGMAP_TERRITORY_SELF_COLOR, BIGMAP_TERRITORY_ENEMY_COLOR, BIGMAP_TERRITORY_STROKE_ALPHA,
+    BIGMAP_TERRITORY_LOCKED_COLOR, BIGMAP_TERRITORY_LOCKED_FILL_ALPHA,
     BIGMAP_TERRITORY_NEIGHBOR_GAP,
 } from './BigMapTheme';
 import { BigMapWorldMarker } from './BigMapWorldMarker';
@@ -395,7 +396,13 @@ export class BigMapWorldView extends Component {
      *
      *口径（2026-10-28 用户要求）：
      *- 我占的城 = 绿；其他玩家占的城 = 红；这两种给更实的填充，压过中立的色板色；
-     *- 其余（无主）= 色板色，相邻两片不同色（`rebuildTerritorySlots` 保证）。
+     *- 未开放（`unavailable` / `locked`）= 中性灰（2026-11-26 用户口径：
+     *  「大地图未开放的据点用灰色填充」→ 追问后确认「只灰地块部分」，图标与名条不动）；
+     *- 其余（无主且已开放）= 色板色，相邻两片不同色（`rebuildTerritorySlots` 保证）。
+     *
+     *顺序有意：归属先判。服务器下发的据点必然是 `open` / `occupied`（见 `BigMapModel.cityView`），
+     *所以「灰」和「红 / 绿」不会同时成立；但真要撞上（配置把某座已占的城标成不开），
+     *玩家关心的是「这块地是谁的」⇒ 归属胜。
      *
      *没查到这座城的视图（理论上不会）时按无主处理，绝不返回 null 让调用点判空。
      */
@@ -405,6 +412,13 @@ export class BigMapWorldView extends Component {
         }
         if (city?.territoryOwner === 'other') {
             return { color: BIGMAP_TERRITORY_ENEMY_COLOR, alpha: BIGMAP_TERRITORY_OWNED_FILL_ALPHA };
+        }
+        //「打不了」的据点整片铺灰（2026-11-26 用户口径：*「这类不可攻打的城池据点的势力范围
+        //都要使用灰色」*）。判据用 `unplayable`（配置层：本期未开放 / 未解锁），**不用 `state`**：
+        //联机档一收到服务器快照，`state` 就被改写成 `open` / `occupied`，那片灰会当场变回色板色
+        //（用户报的「拖动地图以后灰色消失、变回原本的颜色」就是这条）。`state` 的两个值只留作兜底。
+        if (city && (city.unplayable || city.state === 'unavailable' || city.state === 'locked')) {
+            return { color: BIGMAP_TERRITORY_LOCKED_COLOR, alpha: BIGMAP_TERRITORY_LOCKED_FILL_ALPHA };
         }
         const slot = this.territorySlots.get(cityId) ?? 0;
         return {
@@ -665,15 +679,17 @@ export class BigMapWorldView extends Component {
         //不带上它就会因为「其它内容没变」而早退，染色永远停在上一次。
         //`territoryOwner` 与 `occupyRoleName` 同理：名条贴图按归属四选一、占据者名字写在名条上方，
         //少任一字段都会出现「详情包已到、名字却停在空」的静默不刷新。
+        //`unplayable` 也进 key：它是「势力范围铺不铺灰」的唯一判据，章节 / 前置城池一变就必须重绘。
         const key = `${this.selectedHexId}|${data.playerCampId}|${this.focusedCityHexId}|`
-            + cities.map((c) => `${c.cityId}:${c.state}:${c.territoryOwner}:${c.campInfo?.opType}:${c.campInfo?.occupyRoleName}:`
+            + cities.map((c) => `${c.cityId}:${c.state}:${c.unplayable ? 'L' : 'O'}:${c.territoryOwner}:${c.campInfo?.opType}:${c.campInfo?.occupyRoleName}:`
                 + (c.rankEntries ?? []).filter((row) => row.rank === 1).map((row) => `${row.roleId}:${row.avatarId}`).join(';')).join(',')
             + '|' + monsters.map((m) => m ? `${m.instanceId}:${m.unlocked}:${m.respawnInSeconds > 0}` : '').join(',')
             + '|' + roleKey;
         if (key === this.contentKey) return;
         this.contentKey = key;
         this.markerLayer.clear();
-        //每片势力范围整片铺色：无主走色板（相邻不同色），己方绿、他人红（见 `territoryPaint`）。
+        //每片势力范围整片铺色：未开放灰、己方绿、他人红、其余无主走色板（相邻不同色）。
+        //四选一见 `territoryPaint`。
         for (const region of data.territories) {
             const paint = this.territoryPaint(region.id, data.cities.get(region.id));
             this.paintTerritory(region.hexIds, paint.color,

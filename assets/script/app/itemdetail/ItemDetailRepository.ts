@@ -29,7 +29,7 @@ import type {
     IItemRow,
 } from './ItemDetailTable';
 
-import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
+import { GAME_CONFIG_TABLE, ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 /** 一次界面刷新要的全部数据。 */
 export interface IItemDetailSnapshot {
     /** 物品行；item 未命中时读取 roleProperty，两表均未命中为 null。 */
@@ -63,7 +63,7 @@ const readRows = (table: string): Promise<unknown[]> => readRefRowsSafe(RefUtil.
  */
 async function readQualityNameCsv(): Promise<string> {
     try {
-        const row = await RefUtil.instance.getRefAsync('gameConfig', 'key', 'qualityname');
+        const row = await RefUtil.instance.getRefAsync(GAME_CONFIG_TABLE, 'key', 'qualityname');
         const value = (row as { value?: unknown } | null)?.value;
         return typeof value === 'string' ? value : '';
     } catch (error) {

@@ -68,7 +68,7 @@ export const TERRITORY_CLOUD_SCALE = 1;
  * 高 **21.5px**。这个数是**美术事实**，不随显示倍率变；真正写进节点的偏移要乘倍率
  * （见 {@link territoryCloudArtOffsetY}）。
  */
-export const TERRITORY_CLOUD_ART_CENTER_Y = 21.5;
+const TERRITORY_CLOUD_ART_CENTER_Y = 21.5;
 
 /**
  * 云节点相对「格面中心」的 y 偏移（地图像素）—— **必须按显示倍率算**。

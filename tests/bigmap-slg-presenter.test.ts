@@ -9,7 +9,10 @@ afterEach(() => { controllers.splice(0).forEach(c => c.dispose()); });
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
-import { BigMapSlgRepository, type IBigMapSlgGateway } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
+import {
+    BigMapSlgRepository, type IBigMapSlgGateway, type IBigMapSlgRequestBody, type IBigMapSlgRequestName,
+    type IBigMapSlgRequestOutcome,
+} from '../assets/script/app/bigmap/application/BigMapSlgRepository';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 
 const config = loadBigMapConfig();
@@ -19,12 +22,16 @@ function harness(itemCounts?: () => ReadonlyMap<string, number>) {
     let now = 1000;
     const calls: { name: string; body: Readonly<Record<string, number>> }[] = [];
     const home = { buildInstId: ID, buildingId: config.mainBuildingId, position: 0, level: 1, state: 0 };
-    let reply: IBigMapSlgGateway['request'] = async (name) => name === 'CmdSlgBuildInfoReqMsg'
+    /** 回包内容；`null` = 请求没有结论（超时 / 断线）。 */
+    let reply: (name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody) => Promise<unknown> = async (name) => name === 'CmdSlgBuildInfoReqMsg'
         ? { info: { builds: [home], queues: [], unlockQueue: 1 } }
         : name === 'CmdSlgActionUpdateReqMsg' ? { info: { nextRevertTime: 20 } }
             : name === 'CmdSlgGameInfoReqMsg' ? { info: { maxMonsterLevel: 0, toCampId: 0 } } : {};
     const gateway: IBigMapSlgGateway = {
-        request(name, body) { calls.push({ name, body }); return reply(name, body); },
+        request(name, body) {
+            calls.push({ name, body });
+            return reply(name, body).then((response): IBigMapSlgRequestOutcome => ({ status: 'ok', response }));
+        },
     };
     const repo = new BigMapSlgRepository(gateway, config, () => now);
     const presenter = new BigMapModel({ config, storage: { read: () => { throw new Error('联机不能读取离线基地'); },

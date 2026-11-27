@@ -15,7 +15,7 @@ import { completeBigMapCampLayout } from '../model/BigMapCampWorld';
  *其余世界沿用 `config/bigmap-maps/world_<worldId 两位>`。
  *不走配置表额外加列：多一列就多一处「导表漏填导致整图不见」的静默失效点。
  */
-export const BIGMAP_LAYOUT_DIR = 'config/bigmap-maps';
+const BIGMAP_LAYOUT_DIR = 'config/bigmap-maps';
 
 export function bigMapLayoutPath(worldId: number): string {
     return worldId === 1 ? `${BIGMAP_LAYOUT_DIR}/bigMap`

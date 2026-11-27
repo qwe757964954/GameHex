@@ -93,6 +93,18 @@ export function formatNumberToKMBT(value: number): string {
     return value < 1e4 ? String(Math.floor(value)) : formatCompact(value, KMBT, floorScaled);
 }
 
+/**
+ * 资源 / 货币读数：1 万以下原样，1 万起按 K/M/B/T 保留一位小数（向下取整）。
+ *
+ * 与老端资源栏 `BigNum.shortNum(value, 1)`（`bigNum` 表：9999 / 9999999 / 9999999999 / 1e12）
+ * 同口径。货币读数不能按整数档截断 —— 1,900,000 必须读成 `1.9M`，`formatNumberToKMBT`
+ * 那种整数截断会把它写成 `1M`，账面对不上。
+ */
+export function formatResourceAmount(value: number): string {
+    const amount = Math.max(0, finiteOrZero(value));
+    return amount < 1e4 ? String(Math.floor(amount)) : formatCompact(amount, KMBT, floorScaledTenth);
+}
+
 /** 旧版榜单按绝对值选档，缩放后的带符号数值向下取整。 */
 export function formatLegacyRankAmount(value: number): string {
     return formatCompact(value, RANKING, floorScaled, undefined, Math.abs(value));

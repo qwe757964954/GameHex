@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主角单位 · 设计图</title>
+<style>
+  :root{
+    --ink:#2a2118;
+    --sub:#7a6a57;
+    --gold:#b4884a;
+    --deep:#3d2f22;
+    --line:#d8c9b4;
+    --paper:#fbf7f0;
+    --card:#fffdf9;
+    --red:#b04a3a;
+    --green:#4f7a5a;
+    --blue:#3f6480;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1480px;margin:0 auto;padding:56px 40px 80px}
+  header{border-bottom:2px solid var(--line);padding-bottom:26px;margin-bottom:36px}
+  .kicker{font-size:12px;letter-spacing:.18em;color:var(--gold);text-transform:uppercase}
+  h1{font-size:34px;margin:10px 0 8px;font-weight:700;letter-spacing:.01em}
+  .lede{color:var(--sub);font-size:15px;line-height:1.8;max-width:980px}
+  .badge{display:inline-block;font-size:12px;color:var(--deep);background:#f0e3cc;border:1px solid #e3d0b0;border-radius:999px;padding:5px 12px;margin-right:8px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px 30px 24px;margin:0 0 28px;box-shadow:0 10px 30px rgba(61,47,34,.05)}
+  .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:14px}
+  .no{font-size:13px;color:#fff;background:var(--gold);border-radius:8px;padding:4px 9px;letter-spacing:.06em}
+  h2{font-size:21px;margin:0}
+  .note{color:var(--sub);font-size:13px;line-height:1.75;margin:10px 0 0}
+  svg{display:block;width:100%;height:auto}
+  .legend{display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-top:10px}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .kpi{border:1px solid var(--line);border-radius:14px;padding:16px 18px;background:#fff}
+  .kpi b{display:block;font-size:26px;color:var(--deep);line-height:1.2}
+  .kpi span{font-size:12px;color:var(--sub)}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border-bottom:1px solid #eadfce;padding:9px 10px;text-align:left;vertical-align:top}
+  th{color:var(--sub);font-weight:600;background:#faf3e6}
+  .mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+  footer{color:var(--sub);font-size:12px;border-top:1px solid var(--line);padding-top:18px;margin-top:8px}
+  .ui-grid{display:grid;grid-template-columns:1fr;gap:18px;margin-top:6px}
+  figure{margin:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+  figure img{display:block;width:100%;height:auto}
+  figcaption{padding:12px 16px;font-size:12.5px;color:var(--sub);border-top:1px solid #eadfce}
+  figcaption b{color:var(--ink);font-weight:600;margin-right:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="kicker">CAPTAIN · DESIGN BOARD · 2026-11-26</div>
+  <h1>主角单位 · 设计图</h1>
+  <p class="lede">对齐《主角单位规则与研发说明》第 6 版。四张结构图说明「三条线怎么解耦、主角怎么活、成长长什么样、数据怎么流」；后附三张 UI 概念图。</p>
+  <div style="margin-top:16px">
+    <span class="badge">张数 → 属性</span>
+    <span class="badge">星级 → 技能</span>
+    <span class="badge">使用中 → 打法</span>
+    <span class="badge">属性 / 技能 / 打法 互不引用</span>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="no">图 01</span><h2>三条线怎么解耦</h2></div>
+  <p class="note">收集、重复、使用是三种不同的玩家行为，各给一条互不干扰的收益。任何一条改动都不应牵动另外两条。</p>
+  <svg viewBox="0 0 1360 560" role="img" aria-label="三线解耦图">
+    <defs>
+      <marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+        <path d="M0,0 L10,4 L0,8 Z" fill="#b4884a"/>
+      </marker>
+      <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#f7ecd8"/><stop offset="1" stop-color="#f0dfc2"/>
+      </linearGradient>
+    </defs>
+
+    <!-- 三张输入卡 -->
+    <g>
+      <rect x="60" y="40" width="360" height="120" rx="14" fill="url(#gold)" stroke="#d8bd93"/>
+      <text x="84" y="76" font-size="15" fill="#7a5a2f" letter-spacing="1">行为 · 收集</text>
+      <text x="84" y="108" font-size="22" font-weight="700" fill="#2a2118">已拥有皮肤「张数」</text>
+      <text x="84" y="136" font-size="13" fill="#7a6a57">按 id 去重；重复获得不增张数</text>
+    </g>
+    <g>
+      <rect x="500" y="40" width="360" height="120" rx="14" fill="url(#gold)" stroke="#d8bd93"/>
+      <text x="524" y="76" font-size="15" fill="#7a5a2f" letter-spacing="1">行为 · 重复</text>
+      <text x="524" y="108" font-size="22" font-weight="700" fill="#2a2118">该皮肤的「星级」</text>
+      <text x="524" y="136" font-size="13" fill="#7a6a57">1~5 星；超出记溢出，不再升档</text>
+    </g>
+    <g>
+      <rect x="940" y="40" width="360" height="120" rx="14" fill="url(#gold)" stroke="#d8bd93"/>
+      <text x="964" y="76" font-size="15" fill="#7a5a2f" letter-spacing="1">行为 · 使用</text>
+      <text x="964" y="108" font-size="22" font-weight="700" fill="#2a2118">当前佩戴的皮肤</text>
+      <text x="964" y="136" font-size="13" fill="#7a6a57">外观 + 普攻方式 + 1 个技能</text>
+    </g>
+
+    <!-- 箭头 -->
+    <path d="M240,160 L240,250" stroke="#b4884a" stroke-width="3" marker-end="url(#ar)"/>
+    <path d="M680,160 L680,250" stroke="#b4884a" stroke-width="3" marker-end="url(#ar)"/>
+    <path d="M1120,160 L1120,250" stroke="#b4884a" stroke-width="3" marker-end="url(#ar)"/>
+
+    <!-- 三张输出卡 -->
+    <g>
+      <rect x="60" y="270" width="360" height="170" rx="14" fill="#fff" stroke="#e3d3b9"/>
+      <text x="84" y="306" font-size="14" fill="#7a6a57">查 captainSkinCollect</text>
+      <text x="84" y="342" font-size="24" font-weight="700" fill="#2a2118">攻击% / 生命%</text>
+      <text x="84" y="374" font-size="13" fill="#7a6a57">只跟张数有关；与是哪几张、几星、</text>
+      <text x="84" y="396" font-size="13" fill="#7a6a57">戴哪张都无关</text>
+      <text x="84" y="422" font-size="12" fill="#b04a3a">→ 进 unitRates['2003']</text>
+    </g>
+    <g>
+      <rect x="500" y="270" width="360" height="170" rx="14" fill="#fff" stroke="#e3d3b9"/>
+      <text x="524" y="306" font-size="14" fill="#7a6a57">查 pvpSkillPlan</text>
+      <text x="524" y="342" font-size="24" font-weight="700" fill="#2a2118">技能档位 1~5</text>
+      <text x="524" y="374" font-size="13" fill="#7a6a57">skillLevel = 星级；progressionMode</text>
+      <text x="524" y="396" font-size="13" fill="#7a6a57">= replace，高档整行替换低档</text>
+      <text x="524" y="422" font-size="12" fill="#b04a3a">→ 进 unitProfiles['2003']</text>
+    </g>
+    <g>
+      <rect x="940" y="270" width="360" height="170" rx="14" fill="#fff" stroke="#e3d3b9"/>
+      <text x="964" y="306" font-size="14" fill="#7a6a57">查 armySkin + pvpSkill</text>
+      <text x="964" y="342" font-size="24" font-weight="700" fill="#2a2118">近战 / 远程 + 技能</text>
+      <text x="964" y="374" font-size="13" fill="#7a6a57">attackSkillId 决定 mode；射程/间隔</text>
+      <text x="964" y="396" font-size="13" fill="#7a6a57">按皮肤覆盖主城行</text>
+      <text x="964" y="422" font-size="12" fill="#b04a3a">→ 按席位覆盖，不能全局改</text>
+    </g>
+
+    <!-- 中间公式条 -->
+    <rect x="60" y="480" width="1240" height="56" rx="12" fill="#3d2f22"/>
+    <text x="84" y="514" font-size="15" fill="#f5e7cf">一句话记法：</text>
+    <text x="200" y="514" font-size="18" font-weight="700" fill="#f7d9a5">张数管属性 · 星级管技能 · 使用中管打法</text>
+    <text x="760" y="514" font-size="13" fill="#d8c9b4">三条线各有各输入，不许交叉引用</text>
+  </svg>
+</section>
+
+<section>
+  <div class="sec-head"><span class="no">图 02</span><h2>主角怎么活：生命周期与对局时间轴</h2></div>
+  <p class="note">开局立即产出；死亡后主城重新倒计时 30s。主城被毁后不再复活，但已存在的主角继续存活，改以最近的己方建筑为锚点。</p>
+  <svg viewBox="0 0 1360 620" role="img" aria-label="生命周期图">
+    <defs>
+      <marker id="ar2" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+        <path d="M0,0 L10,4 L0,8 Z" fill="#3f6480"/>
+      </marker>
+    </defs>
+
+    <!-- 时间轴 -->
+    <text x="60" y="46" font-size="13" fill="#7a6a57">对局时间轴（180s）</text>
+    <line x1="60" y1="120" x2="1300" y2="120" stroke="#d8c9b4" stroke-width="2"/>
+    <g font-size="12" fill="#7a6a57">
+      <line x1="60" y1="112" x2="60" y2="128" stroke="#7a6a57"/>
+      <text x="52" y="150">0s</text>
+      <line x1="270" y1="112" x2="270" y2="128" stroke="#7a6a57"/>
+      <text x="258" y="150">30s</text>
+      <line x1="480" y1="112" x2="480" y2="128" stroke="#7a6a57"/>
+      <text x="468" y="150">60s</text>
+      <line x1="690" y1="112" x2="690" y2="128" stroke="#7a6a57"/>
+      <text x="678" y="150">90s</text>
+      <line x1="900" y1="112" x2="900" y2="128" stroke="#7a6a57"/>
+      <text x="888" y="150">120s</text>
+      <line x1="1110" y1="112" x2="1110" y2="128" stroke="#7a6a57"/>
+      <text x="1098" y="150">150s</text>
+      <line x1="1290" y1="112" x2="1290" y2="128" stroke="#7a6a57"/>
+      <text x="1266" y="150">180s</text>
+    </g>
+
+    <!-- 生命 1 -->
+    <rect x="60" y="175" width="200" height="46" rx="10" fill="#eef3ea" stroke="#a9c1a5"/>
+    <text x="76" y="204" font-size="13" fill="#3f5a3c">① 产出 · 巡逻</text>
+    <rect x="260" y="175" width="120" height="46" rx="10" fill="#f7e7dd" stroke="#d8a48e"/>
+    <text x="276" y="204" font-size="13" fill="#8a4a30">锁定 · 追击</text>
+    <rect x="380" y="175" width="60" height="46" rx="10" fill="#efe6f2" stroke="#b9a0c4"/>
+    <text x="394" y="204" font-size="13" fill="#5f4568">阵亡</text>
+
+    <!-- 重置 -->
+    <path d="M440,198 L520,198" stroke="#3f6480" stroke-width="3" marker-end="url(#ar2)" stroke-dasharray="6 5"/>
+    <text x="440" y="244" font-size="12" fill="#3f6480">计时器清零</text>
+
+    <!-- 生命 2 -->
+    <rect x="520" y="175" width="200" height="46" rx="10" fill="#eef3ea" stroke="#a9c1a5"/>
+    <text x="536" y="204" font-size="13" fill="#3f5a3c">② 30s 后重新产出</text>
+    <rect x="720" y="175" width="120" height="46" rx="10" fill="#f7e7dd" stroke="#d8a48e"/>
+    <text x="736" y="204" font-size="13" fill="#8a4a30">锁定 · 追击</text>
+    <rect x="840" y="175" width="60" height="46" rx="10" fill="#efe6f2" stroke="#b9a0c4"/>
+    <text x="854" y="204" font-size="13" fill="#5f4568">阵亡</text>
+
+    <path d="M900,198 L980,198" stroke="#3f6480" stroke-width="3" marker-end="url(#ar2)" stroke-dasharray="6 5"/>
+    <rect x="980" y="175" width="200" height="46" rx="10" fill="#eef3ea" stroke="#a9c1a5"/>
+    <text x="996" y="204" font-size="13" fill="#3f5a3c">③ 再产出（循环）</text>
+    <rect x="1180" y="175" width="120" height="46" rx="10" fill="#f7e7dd" stroke="#d8a48e"/>
+    <text x="1196" y="204" font-size="13" fill="#8a4a30">…直到结束</text>
+
+    <!-- 状态机 -->
+    <g>
+      <rect x="60" y="330" width="150" height="56" rx="12" fill="#fff" stroke="#cbb89c"/>
+      <text x="82" y="364" font-size="15" font-weight="600">patrol</text>
+      <text x="82" y="380" font-size="11" fill="#7a6a57">圈内随机走 / 停留</text>
+
+      <rect x="330" y="330" width="150" height="56" rx="12" fill="#fff" stroke="#cbb89c"/>
+      <text x="352" y="364" font-size="15" font-weight="600">combat</text>
+      <text x="352" y="380" font-size="11" fill="#7a6a57">锁定 · 不换目标</text>
+
+      <rect x="600" y="330" width="150" height="56" rx="12" fill="#fff" stroke="#cbb89c"/>
+      <text x="622" y="364" font-size="15" font-weight="600">return</text>
+      <text x="622" y="380" font-size="11" fill="#7a6a57">圈外回锚点</text>
+
+      <rect x="870" y="330" width="150" height="56" rx="12" fill="#f4ece2" stroke="#cbb89c"/>
+      <text x="892" y="364" font-size="15" font-weight="600">dead</text>
+      <text x="892" y="380" font-size="11" fill="#7a6a57">等主城再产</text>
+
+      <path d="M210,358 L326,358" stroke="#3f6480" stroke-width="2" marker-end="url(#ar2)"/>
+      <text x="214" y="322" font-size="11" fill="#3f6480">120px 内发现敌人</text>
+
+      <path d="M480,358 L596,358" stroke="#3f6480" stroke-width="2" marker-end="url(#ar2)"/>
+      <text x="486" y="322" font-size="11" fill="#3f6480">目标死 / 失效</text>
+
+      <path d="M675,330 C675,285 135,285 135,326" stroke="#3f6480" stroke-width="2" marker-end="url(#ar2)" fill="none"/>
+      <text x="330" y="278" font-size="11" fill="#3f6480">回到圈内</text>
+
+      <path d="M450,386 C560,430 800,430 866,386" stroke="#3f6480" stroke-width="2" marker-end="url(#ar2)" fill="none"/>
+      <text x="606" y="424" font-size="11" fill="#3f6480">hp ≤ 0</text>
+
+      <path d="M900,386 C900,474 135,474 135,392" stroke="#b04a3a" stroke-width="2" marker-end="url(#ar2)" fill="none" stroke-dasharray="6 5"/>
+      <text x="292" y="466" font-size="11" fill="#b04a3a">主城存活 → 30s 后重新产；主城已毁 → 永久消失</text>
+    </g>
+
+    <!-- 主城被毁分支 -->
+    <rect x="60" y="520" width="1240" height="66" rx="12" fill="#f6efe4" stroke="#d8c9b4"/>
+    <text x="84" y="548" font-size="13" fill="#7a6a57">主城被毁</text>
+    <text x="180" y="548" font-size="15" font-weight="600" fill="#2a2118">主角继续存活，但不再复活</text>
+    <text x="520" y="548" font-size="13" fill="#7a6a57">锚点 = 最近的己方建筑；己方建筑全没 → 无锚点，全图自由巡逻</text>
+    <text x="84" y="572" font-size="12" fill="#b04a3a">设计建议：给这段"无家可归"一个可见状态（游侠 / 复仇），它是免费的情绪价值</text>
+  </svg>
+</section>
+
+<section>
+  <div class="sec-head"><span class="no">图 03</span><h2>成长长什么样：天赋曲线</h2></div>
+  <p class="note">数据来自 <span class="mono">armyLevel</span> 66014 的 201 级实际节点：40 次生命 +10%、40 次伤害 +5%、40 次暴伤 +2%、19 次攻速 +2%、6 次移速 +5%。满级约 生命×5.0 / 攻击×3.0。</p>
+  <svg viewBox="0 0 1360 640" role="img" aria-label="天赋成长曲线">
+    <!-- 坐标系 -->
+    <g stroke="#e6d8c4" stroke-width="1">
+      <line x1="120" y1="100" x2="120" y2="520"/>
+      <line x1="120" y1="520" x2="1060" y2="520"/>
+      <line x1="120" y1="500" x2="1060" y2="500" stroke-dasharray="4 6"/>
+      <line x1="120" y1="400" x2="1060" y2="400" stroke-dasharray="4 6"/>
+      <line x1="120" y1="300" x2="1060" y2="300" stroke-dasharray="4 6"/>
+      <line x1="120" y1="200" x2="1060" y2="200" stroke-dasharray="4 6"/>
+      <line x1="120" y1="100" x2="1060" y2="100" stroke-dasharray="4 6"/>
+      <line x1="340" y1="100" x2="340" y2="520" stroke-dasharray="4 6"/>
+      <line x1="565" y1="100" x2="565" y2="520" stroke-dasharray="4 6"/>
+      <line x1="790" y1="100" x2="790" y2="520" stroke-dasharray="4 6"/>
+      <line x1="1020" y1="100" x2="1020" y2="520" stroke-dasharray="4 6"/>
+    </g>
+    <g font-size="12" fill="#8a7a67">
+      <text x="82" y="105">5.0×</text>
+      <text x="82" y="205">4.0×</text>
+      <text x="82" y="305">3.0×</text>
+      <text x="82" y="405">2.0×</text>
+      <text x="82" y="505">1.0×</text>
+      <text x="118" y="545">Lv1</text>
+      <text x="325" y="545">50</text>
+      <text x="548" y="545">100</text>
+      <text x="773" y="545">150</text>
+      <text x="1000" y="545">201</text>
+      <text x="530" y="580" font-size="12" fill="#7a6a57">天赋等级（armyLevel 66014）</text>
+    </g>
+
+    <!-- 生命 -->
+    <polyline fill="none" stroke="#b04a3a" stroke-width="3"
+      points="120,500 205.5,460 295.5,420 385.5,380 475.5,340 565.5,300 655.5,260 745.5,220 835.5,180 925.5,140 1020,100"/>
+    <!-- 攻击 -->
+    <polyline fill="none" stroke="#3f6480" stroke-width="3"
+      points="120,500 205.5,480 295.5,460 385.5,440 475.5,420 565.5,400 655.5,380 745.5,360 835.5,340 925.5,320 1020,300"/>
+    <!-- 攻速 -->
+    <polyline fill="none" stroke="#4f7a5a" stroke-width="2.5"
+      points="120,500 205.5,498 295.5,494 385.5,490 475.5,486 565.5,482 655.5,478 745.5,474 835.5,470 925.5,466 1020,462"/>
+    <!-- 移速 -->
+    <polyline fill="none" stroke="#b4884a" stroke-width="2.5" stroke-dasharray="7 5"
+      points="120,500 790.5,500 835.5,495 925.5,485 1020,470"/>
+
+    <!-- 标注点 -->
+    <circle cx="1020" cy="100" r="5" fill="#b04a3a"/>
+    <rect x="1030" y="82" width="250" height="46" rx="8" fill="#fbf1ea" stroke="#e0b6a3"/>
+    <text x="1042" y="102" font-size="13" fill="#8a4a30">满级生命 +400%（×5.0）</text>
+    <text x="1042" y="119" font-size="11" fill="#8a4a30">40 个节点 × 10%</text>
+
+    <circle cx="1020" cy="300" r="5" fill="#3f6480"/>
+    <rect x="1030" y="282" width="250" height="46" rx="8" fill="#eaf0f4" stroke="#a8bccb"/>
+    <text x="1042" y="302" font-size="13" fill="#2f4f68">满级攻击 +200%（×3.0）</text>
+    <text x="1042" y="319" font-size="11" fill="#2f4f68">40 个节点 × 5%</text>
+
+    <!-- 注释 -->
+    <rect x="124" y="120" width="420" height="110" rx="10" fill="#fffdf9" stroke="#e3d3b9"/>
+    <text x="140" y="146" font-size="13" fill="#2a2118">读法</text>
+    <text x="140" y="170" font-size="12" fill="#7a6a57">· 曲线是阶梯状：只在带节点的等级跳一档</text>
+    <text x="140" y="192" font-size="12" fill="#7a6a57">· 生命节点最多，所以血线比攻击更陡</text>
+    <text x="140" y="214" font-size="12" fill="#7a6a57">· 移速 150 级后才开始给，前期手感不变</text>
+  </svg>
+  <div class="legend">
+    <span><i class="dot" style="background:#b04a3a"></i>生命倍率</span>
+    <span><i class="dot" style="background:#3f6480"></i>攻击倍率</span>
+    <span><i class="dot" style="background:#4f7a5a"></i>攻速倍率</span>
+    <span><i class="dot" style="background:#b4884a"></i>移速倍率</span>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="no">图 04</span><h2>数据怎么流：协议 → 入局编译 → 战斗 → 表现</h2></div>
+  <p class="note">所有数值在入局时冻结成纯数据，战斗层不认识"星级"、也不读全局表；这样多端一致、回放可复现。</p>
+  <svg viewBox="0 0 1360 560" role="img" aria-label="数据流图">
+    <defs>
+      <marker id="ar3" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+        <path d="M0,0 L10,4 L0,8 Z" fill="#7a5a2f"/>
+      </marker>
+    </defs>
+
+    <!-- 服务端 -->
+    <rect x="40" y="60" width="250" height="150" rx="14" fill="#eef1f5" stroke="#aebccb"/>
+    <text x="64" y="94" font-size="13" fill="#3f6480">服务端（唯一真源）</text>
+    <text x="64" y="122" font-size="12" fill="#2a2118">ownedSkins[{ skinId, star }]</text>
+    <text x="64" y="146" font-size="12" fill="#2a2118">usedSkinId</text>
+    <text x="64" y="170" font-size="12" fill="#2a2118">overflow[{ skinId, count }]</text>
+    <text x="64" y="194" font-size="11" fill="#b04a3a">校验：star ≤ 5 / used ∈ owned</text>
+
+    <!-- 客户端仓库 -->
+    <rect x="380" y="60" width="250" height="150" rx="14" fill="#fbf5e9" stroke="#d8bd93"/>
+    <text x="404" y="94" font-size="13" fill="#7a5a2f">role · CaptainSkinRepository</text>
+    <text x="404" y="122" font-size="12" fill="#2a2118">去重张数 → 查分档表</text>
+    <text x="404" y="146" font-size="12" fill="#2a2118">star → 技能档位</text>
+    <text x="404" y="170" font-size="12" fill="#2a2118">used → 打法档案</text>
+    <text x="404" y="194" font-size="11" fill="#7a6a57">纯数据，不 import cc</text>
+
+    <!-- 入局编译 -->
+    <rect x="720" y="60" width="270" height="150" rx="14" fill="#f6efe4" stroke="#d8c9b4"/>
+    <text x="744" y="94" font-size="13" fill="#7a5a2f">application · ZCClientCombatConfig</text>
+    <text x="744" y="122" font-size="12" fill="#2a2118">unitRates[owner]['2003']</text>
+    <text x="764" y="142" font-size="11" fill="#7a6a57">= 天赋 × 收集（攻击/生命）</text>
+    <text x="744" y="168" font-size="12" fill="#2a2118">unitProfiles[owner]['2003']</text>
+    <text x="764" y="188" font-size="11" fill="#7a6a57">= 射程 / 间隔 / 技能档位</text>
+
+    <!-- 战斗 -->
+    <rect x="1080" y="60" width="240" height="150" rx="14" fill="#eef3ea" stroke="#a9c1a5"/>
+    <text x="1104" y="94" font-size="13" fill="#3f5a3c">战斗 · ZCUnitSystem</text>
+    <text x="1104" y="122" font-size="12" fill="#2a2118">巡逻 / 索敌 / 锁定 / 追击</text>
+    <text x="1104" y="146" font-size="12" fill="#2a2118">不读全局表</text>
+    <text x="1104" y="170" font-size="12" fill="#2a2118">不认识「星级」这件事</text>
+
+    <path d="M290,135 L376,135" stroke="#7a5a2f" stroke-width="3" marker-end="url(#ar3)"/>
+    <path d="M630,135 L716,135" stroke="#7a5a2f" stroke-width="3" marker-end="url(#ar3)"/>
+    <path d="M990,135 L1076,135" stroke="#7a5a2f" stroke-width="3" marker-end="url(#ar3)"/>
+
+    <!-- 战斗内部 -->
+    <rect x="1080" y="250" width="240" height="120" rx="14" fill="#fff" stroke="#a9c1a5"/>
+    <text x="1104" y="282" font-size="12" fill="#3f5a3c">ZCUnitView</text>
+    <text x="1104" y="308" font-size="12" fill="#2a2118">按使用中皮肤 model 加载</text>
+    <text x="1104" y="332" font-size="12" fill="#7a6a57">无皮肤 → 回落 prefabPath</text>
+    <text x="1104" y="356" font-size="11" fill="#b04a3a">头顶标识 / 复活倒计时</text>
+    <path d="M1200,210 L1200,246" stroke="#3f5a3c" stroke-width="3" marker-end="url(#ar3)"/>
+
+    <!-- 三条禁止线 -->
+    <rect x="40" y="270" width="980" height="230" rx="14" fill="#fdf6f3" stroke="#e5c2b6"/>
+    <text x="64" y="302" font-size="13" fill="#b04a3a">三条不许越过的线</text>
+    <text x="64" y="332" font-size="12" fill="#7a6a57">① 星级不进任何数值公式 —— star 只读给技能档位</text>
+    <text x="64" y="358" font-size="12" fill="#7a6a57">② 皮肤不能全局改 2003 的 definition —— 必须 unitProfiles[owner] 按席位覆盖</text>
+    <text x="64" y="384" font-size="12" fill="#7a6a57">③ 战斗层不读全局表 —— 天赋/收集在入局时算完，冻结成 unitRates</text>
+    <text x="64" y="416" font-size="12" fill="#7a6a57">④ pvpSkillBinding 的 targetUnitId 固定 2003，不同皮肤技能必须按席位注入</text>
+    <text x="64" y="442" font-size="12" fill="#7a6a57">⑤ armySkinStar 必须先清 modify，否则升星偷偷送属性</text>
+  </svg>
+</section>
+
+<section>
+  <div class="sec-head"><span class="no">图 05–07</span><h2>UI 概念图</h2></div>
+  <p class="note">用于对齐信息层级与氛围，不代表最终美术精度。三张图分别回答：玩家在哪看主角、在哪选皮肤、局内怎么认出它。</p>
+  <div class="ui-grid">
+    <figure>
+      <img src="assets/captain/captain-role-panel.jpg" alt="角色页主角卡片">
+      <figcaption><b>图 05 角色页 · 主角卡</b>信息层级：收集 3/8 → 属性 +9% / +9% → 当前皮肤（技能 3/5）→ 天赋 Lv.120 / 溢出 0 次；切换入口放在角色页，不进战斗内。</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/captain/captain-skin-gallery.jpg" alt="皮肤图鉴">
+      <figcaption><b>图 06 皮肤图鉴</b>每张卡只展示「星级 + 技能档位」，不写属性——避免玩家误以为升星会变强。</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/captain/captain-battle-hud.jpg" alt="局内主角标识">
+      <figcaption><b>图 07 局内标识</b>巡逻圈、锁敌线、主城上的复活倒计时，是自动单位全部的「可读性」。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<footer>
+  <div>数据来源：<span class="mono">assets/remoteRef/armyLevel.json</span>（66014 共 201 级）、<span class="mono">armySkin.json</span>（3 行旧占位）、<span class="mono">armySkinStar.json</span>（每星带属性，需清空）、<span class="mono">pvpGlobal.json</span>（unitHpPerTier=0.18 / unitAttackPerTier=0.16）。</div>
+  <div style="margin-top:8px">配套文档：<span class="mono">docs/design/主角单位-设计评审与落地方案-v6.md</span>　·　UI 概念图：<span class="mono">docs/design/assets/captain/</span></div>
+</footer>
+</div>
+</body>
+</html>

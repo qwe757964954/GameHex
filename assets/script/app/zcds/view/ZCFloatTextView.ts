@@ -35,6 +35,10 @@ const { ccclass, property } = _decorator;
  * 停一下、原地缩小消失；不使用 riseDistance / driftDistance / popScale。
  * · `goldincome`（主城 / 金矿的产出）—— `floatTextGoldRise`：有数字，硬币 + 数字一起从
  * 建筑顶部往上升 50px 并淡出。锚点仍是格心，建筑高度由 FLOAT_TEXT_GOLD_INCOME_TOP_PX 补。
+ *
+ * **治疗（`heal`）自成一档**（2026-11-25 第 47 批）：绿字带 `+`、字号与伤害一致，
+ * 轨迹是**竖直向上的直线 75px**、0.2s 匀速走完 —— 不套伤害那套「按 id 散横轨 + 方向符号」。
+ * 距离在 `healRiseDistance`，时长在模型侧 `FLOAT_TEXT_HEAL_SECONDS`（视图只管比例）。
 */
 @ccclass('ZCFloatTextView')
 export class ZCFloatTextView extends Component {
@@ -159,8 +163,11 @@ export class ZCFloatTextView extends Component {
      * 两个同时出现时以 `takenFromPlayer` 为准 —— 挨打那条的样式是「我掉了多少血」，
      * 方向跟着它走才和颜色 / 字号 / 负号是同一档语义。
      *
-     * 无标记（`heal` / `miss` / 测试里的裸伤害文本）保持旧行为：向下坠。
+     * 无标记（`miss` / 测试里的裸伤害文本）保持旧行为：向下坠。
      * 运行时不会出现「无标记的伤害」—— 非玩家互打模型侧直接不推飘字。
+     *
+     * 2026-11-25 起 `heal` **不再走这里**：治疗是「直线上升 75px、0.2s」，见 `render` 的
+     * `heal` 分支（它连横轨与摇摆都不用）。这条判据只剩伤害类语义。
      */
     private static damageTravelSign(text: Readonly<ZCFloatText>): 1 | -1 {
         return text.dealtByPlayer === true && text.takenFromPlayer !== true ? 1 : -1;
@@ -204,6 +211,15 @@ export class ZCFloatTextView extends Component {
      */
     @property({ group: '数值表现', tooltip: '伤害数字的纵向位移距离：我方造成向上飞 / 挨打向下坠（同一距离、方向相反）' })
     damageDropDistance = 100;
+
+    /**
+     * 治疗数字的直线上升距离（像素），0.2s 内匀速走完（2026-11-25 第 47 批）。
+     *
+     * 与伤害的 `damageDropDistance` 拆开：治疗是**直线**上浮、不分轨道、不摇摆、不回落，
+     * 而且距离由需求指定 75px。合用一个字段会让「改伤害下坠距离」顺手改掉治疗。
+     */
+    @property({ group: '数值表现', tooltip: '治疗数字的直线上升距离（像素）：匀速走完整条时长，不分轨道不摇摆' })
+    healRiseDistance = 75;
 
     @property({ group: '数值表现', tooltip: '同位置连续伤害的横向轨道间距' })
     damageLaneSpacing = 24;
@@ -293,6 +309,23 @@ export class ZCFloatTextView extends Component {
             return;
         }
         {
+            //  治疗（2026-11-25 第 47 批，用户口径「移动轨迹是直线上移 75px，持续 0.2s」）：
+            //  **只有一条竖直向上的直线** —— 不分横轨、不摇摆、不回落。
+            //
+            //  🔴 不能落到下面那段伤害通用逻辑里：那里 `damageTravelSign` 对无标记的 kind 返回 −1
+            //  （向下坠），还会按 `text.id` 散到 5 条横向轨道上。治疗套进去的症状是
+            //  「一半治疗数字往地里钻、并且每次位置都偏一点」，不报错、只是读起来像 bug。
+            //  起点仍取 `headY`（角色头顶），与伤害数字同一基线 —— 需求要的就是「字号 / 位置同伤害」。
+            if (text.kind === 'heal') {
+                const headY = this.damageTargetSize * 0.5 + this.damageHeadPadding;
+                //  匀速走完整条时长：`progress` 而不是 `enter` —— 入场段走完就该正好 75px，
+                //  用 enter 会在入场结束时就停住，后半段变成原地不动地淡出。
+                const rise = this.healRiseDistance * progress;
+                const scale = 1 + (this.popScale - 1) * (1 - enter);
+                this.textLabel.node.setPosition(0, headY + rise, 0);
+                this.textLabel.node.setScale(scale, scale, 1);
+                return;
+            }
             const drift = floatTextDrift(progress, this.entranceProgress);
             const sequence = Math.max(0, text.id - 1);
             const lane = ZCFloatTextView.DAMAGE_LANES[sequence % ZCFloatTextView.DAMAGE_LANES.length];

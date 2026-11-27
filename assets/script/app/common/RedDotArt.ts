@@ -36,7 +36,7 @@ export const RED_DOT_ART_NAMES: Readonly<Record<RedDotArtKey, string>> = {
 export const RED_DOT_ART_KEYS: readonly RedDotArtKey[] = ['ordinary', 'number', 'new'];
 
 /** 每张图在界面上该占的尺寸：`[宽, 高]`。 */
-export const RED_DOT_ICON_SIZES: Readonly<Record<RedDotArtKey, readonly [number, number]>> = {
+const RED_DOT_ICON_SIZES: Readonly<Record<RedDotArtKey, readonly [number, number]>> = {
     ordinary: [30, 29],
     number: [30, 30],
     new: [30, 29],
@@ -55,12 +55,6 @@ export function redDotIconSize(key: RedDotArtKey): readonly [number, number] {
 
 /** 动画名就长这样，别「修正」它：写成 `animation` 会静默不播。 */
 export const RED_DOT_SPINE_ANIMATION = 'anmation';
-
-/** spine 节点的显示尺寸（骨架自然尺寸）。 */
-export const RED_DOT_SPINE_SIZE: { readonly width: number; readonly height: number } = {
-    width: 33,
-    height: 38.4,
-};
 
 const frameCache = createRoutedSpriteFrameCache('RedDot');
 

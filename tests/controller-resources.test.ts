@@ -7,7 +7,7 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 
 class Controller extends ControllerBase {
     constructor(context: ReturnType<typeof createControllerContext>) { super(context, 'test-controller'); }
-    register(stop: () => void): void { this.own(stop); }
+    register(stop: () => void): () => void { return this.own(stop); }
     subscribe(event: string, handler: () => void): void { this.listen(event, handler); }
 }
 
@@ -112,4 +112,43 @@ test('component controller can be constructed before runtime setup and disposed 
     assert.equal(active.resources, active.resources);
     assert.equal(resolutions, 1);
     active.dispose();
+});
+
+test('own returns an unregister handle and dispose releases callbackOwners once', () => {
+    const cancelled: object[] = [];
+    const calls: string[] = [];
+    const controller = new Controller(createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: owner => cancelled.push(owner),
+        },
+    }));
+    const detachTransient = controller.register(() => calls.push('transient'));
+    controller.register(() => calls.push('persistent'));
+    detachTransient();
+    detachTransient();
+    assert.deepEqual(calls, []);
+    controller.dispose();
+    controller.dispose();
+    assert.deepEqual(calls, ['persistent']);
+    assert.deepEqual(cancelled, [controller]);
+});
+
+test('lazy controller resolves and releases callbackOwners once resources are used', () => {
+    const cancelled: object[] = [];
+    class LazyOwnedController extends ControllerBase {
+        constructor() {
+            super(() => createControllerContext({
+                callbackOwners: {
+                    addCallerCleanup: () => () => {},
+                    removeCallerListener: owner => cancelled.push(owner),
+                },
+            }), 'lazy-owned');
+        }
+    }
+    const controller = new LazyOwnedController();
+    assert.ok(controller.resources.assets);
+    controller.dispose();
+    controller.dispose();
+    assert.deepEqual(cancelled, [controller]);
 });

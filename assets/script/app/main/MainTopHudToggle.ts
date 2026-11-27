@@ -36,6 +36,8 @@ export class MainTopHudToggle extends Component {
     arrow: Button = null;
 
     private expanded = true;
+    /** 新手引导 5-4 之前门控收起整组右上入口，防止 TopHud 重启时被 applyState 翻回可见。 */
+    private guideLocked = false;
 
     onEnable(): void {
         this.arrow.node.on(Button.EventType.CLICK, this.toggle, this);
@@ -46,19 +48,28 @@ export class MainTopHudToggle extends Component {
         this.arrow.node.off(Button.EventType.CLICK, this.toggle, this);
     }
 
+    /** 由引导组合层按进度设置右上角入口整组锁定状态。 */
+    setGuideLocked(locked: boolean): void {
+        if (this.guideLocked === locked) return;
+        this.guideLocked = locked;
+        this.applyState();
+    }
+
     private toggle(): void {
         this.expanded = !this.expanded;
         this.applyState();
     }
 
     private applyState(): void {
+        const visible = !this.guideLocked && this.expanded;
         for (const node of [
             this.entryBar,
             this.friend, this.mail, this.rank, this.invite,
             this.friendLabel, this.mailLabel, this.rankLabel, this.inviteLabel,
         ]) {
-            node.active = this.expanded;
+            node.active = visible;
         }
+        this.arrow.node.active = !this.guideLocked;
         this.arrow.node.angle = this.expanded ? 0 : 180;
     }
 }

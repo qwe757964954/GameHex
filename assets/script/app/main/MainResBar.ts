@@ -58,11 +58,9 @@ import { CardLineupEvent } from '../card/CardLineupEvents';
 import { formatPowerText } from '../card/CardLineupPower';
 import { readRoleRow } from './MainRoleRow';
 import { buildResBarView, LevelRow, ResBarView } from './MainResBarTypes';
+import { LEVEL_TABLE } from '../../core/config/TableNames';
 
 const { ccclass, property } = _decorator;
-
-/** 等级表（角色等级 → 升到下一级所需经验）。键 = `remoteRef/level.json`。 */
-const LEVEL_TABLE = 'level';
 
 @ccclass('MainResBar')
 export class MainResBar extends Component {

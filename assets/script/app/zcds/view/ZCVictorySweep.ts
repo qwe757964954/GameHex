@@ -133,6 +133,17 @@ export class ZCVictorySweep {
     }
 
     /**
+     * 整段扫场的总时长（秒）；没在播返回 0。
+     *
+     * 给「与本段同步播放的其它表现」用（结算胜负 UI 特效，见 `ZCGame.playOutcomeEffect`）。
+     * 口径就是 {@link isPlaying} 用的那一个 —— 别在调用方另算一份。
+     */
+    get durationSeconds(): number {
+        const sweep = this.state;
+        return sweep ? victorySweepDuration(sweep.stepCount) : 0;
+    }
+
+    /**
      * 把当前步号和回正游标写进各格视图；地块重绘由调用方统一驱动。
      *
      * 每格的颜色由两个量决定（`ZCGameViewUtil.victorySweepRevertMix`）：

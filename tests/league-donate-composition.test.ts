@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import * as ts from 'typescript';
-import { PopupCompositionHost, type IPopupComposition } from '../assets/script/framework/ui/PopupCompositionHost';
+import { PopupCompositionHost, PopupSession, type IPopupComposition } from '../assets/script/framework/ui/PopupCompositionHost';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { LeagueDonateController } from '../assets/script/app/league/LeagueDonateController';
 import { LeagueDonateModel } from '../assets/script/app/league/LeagueDonateModel';
@@ -136,12 +136,15 @@ function harness() {
     const { createLeagueDonatePopupComposition } = load<{
         createLeagueDonatePopupComposition: (context: ReturnType<typeof createControllerContext>, view: object) => IPopupComposition | null;
     }>(COMPOSITION_TS, {
+        PopupCompositionHost: { PopupSession },
+        EventMgr: { EventMgr },
         FW: { FW: { showTip: (text: string) => tips.push(text), ShowReward: () => {} } },
         CommonTips: { CommonTips: { open: ({ userData }: { userData: { content: string; onSure: () => void } }) => {
             confirms.push(userData); return Promise.resolve();
         } } },
         LeagueAd: { playLeagueAd: async () => { adPlayed += 1; return true; } },
         LeagueDonateController: { LeagueDonateController },
+        LeagueDonateEvents: { LeagueDonateEvent },
         LeagueDonateModel: { LeagueDonateModel },
         LeagueDonatePage: { LeagueDonatePage },
         LeagueRepository: {
@@ -151,9 +154,13 @@ function harness() {
                     donateCalls.push({ adv, caller, resolve: status => resolve({ status, rewards: [] }) })),
             },
         },
-        GameNet: { GameNet: { instance: { removeCaller: (caller: object) => cancelled.push(caller) } } },
     });
-    const context = createControllerContext();
+    const context = createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => cancelled.push(caller),
+        },
+    });
     const host = new PopupCompositionHost<object>(view => createLeagueDonatePopupComposition(context, view));
     return {
         LeagueDonatePage, host, context, tips, cancelled, confirms, loadCalls, donateCalls,

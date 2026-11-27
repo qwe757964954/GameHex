@@ -49,7 +49,7 @@ const CHAIN = 101404;
 const SKILL_ID = 30216;
 const MAX_ALIVE = 12;
 const TIERS = [
-    { count: 3, inherit: 0.3, unlock: 9 },
+    { count: 3, inherit: 0.3, unlock: 7 },
     { count: 4, inherit: 0.5, unlock: 18 },
     { count: 6, inherit: 0.8, unlock: 27 },
 ];

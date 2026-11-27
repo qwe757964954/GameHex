@@ -167,7 +167,7 @@ const HEX_FRAME_NODE_NAME = 'Frame';
  * 锁挂在格子里会被建筑图、银币数字、关卡编号整片压住 ⇒ 只剩空地上看得见锁。
  * 这一层排在 `StationBadgeLayer` 之前（压住建筑/价格/编号）、`StationHitLayer` 之前（不挡点击）。
  */
-export const TERRITORY_HEX_LOCK_LAYER = 'HexLockLayer';
+const TERRITORY_HEX_LOCK_LAYER = 'HexLockLayer';
 
 /** 运行时补在 `MainRoot` 下的「飞舞奖励图标」顶层宿主（不进 prefab）。 */
 const TERRITORY_REWARD_FX_NODE = 'TerritoryRewardFx';
@@ -189,7 +189,7 @@ const TERRITORY_REWARD_FX_NODE = 'TerritoryRewardFx';
  * 虚影**不能**直接用站点自己的 `Icon`：那一层（`StationIconLayer`）是所有站点元素里**最低**的，
  * 共享层是"整层一个渲染序"，没有"这一颗盖住那一颗"的粒度。
  */
-export const TERRITORY_GHOST_LAYER = 'StationGhostLayer';
+const TERRITORY_GHOST_LAYER = 'StationGhostLayer';
 
 /** 虚影壳（装 `Caption` / `Text` / `Badge` / 命中根节点的容器，恒 `active = false`）。 */
 const TERRITORY_GHOST_SHELL = 'Shell';

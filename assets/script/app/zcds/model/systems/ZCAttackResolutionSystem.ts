@@ -16,15 +16,15 @@ import {
 } from '../ZCSplashShotFx';
 import { ZC_BURST_IMPACT_PREFAB_PATH, zcBurstEffectScale } from '../ZCBurstFx';
 import {
-    ZC_FAN_SWEEP_BURSTS, ZC_FAN_SWEEP_BURST_DISTANCE_RATIO, ZC_FAN_SWEEP_BURST_RADIUS_RATIO,
-    ZC_FAN_SWEEP_BURST_SPREAD,
-} from '../ZCFanSweepFx';
+    pushSkillRangeRingEvent, zcRangeRingEnabledForUnit,
+} from '../ZCSkillRangeRingFx';
 import {
     ZC_DASH_GUARD_PREFAB_PATH, ZC_DASH_GUARD_SECONDS, pushDashGuardVisualEvent,
 } from '../ZCDashFx';
 import { zcImpactEffectAnchor } from '../ZCImpactEffectFx';
 import { pushQuakeStrikeVisualEvent, zcEmpoweredFxOverrideOf, ZC_QUAKE_STRIKE_SECONDS } from '../ZCQuakeFx';
 import { zcEffectDurationOf } from '../ZCEffectCatalog';
+import { zcLanceEffectPrefabPath } from '../ZCLanceFx';
 import { ZC_STORM_PREFAB_PATH } from '../ZCStormFx';
 import { ZC_RAY_BEAM_PREFAB_PATH, zcRayBeamEffectScale } from '../ZCRayBeamFx';
 import { ZC_FIRE_ZONE_PREFAB_PATH, ZC_FIRE_ZONE_TINT } from '../ZCFireZoneFx';
@@ -56,7 +56,7 @@ import type { IZCModelServices } from './ZCModelServices';
 import { ZCTargetingSystem } from './ZCTargetingSystem';
 
 /**
- * 投枪（`破阵投枪`，2026-11-17）的缺省参数。
+ * 投枪（`破阵术`，2026-11-25 前的名字是「破阵投枪」，2026-11-17 落地）的缺省参数。
  *
  * 设计口径「穿透 3 个目标，依次承受 70% / 45% / 30%」= 首目标 `0.7 × 面板`，
  * 之后每穿一人 ×(1 − 0.35)：0.7 → 0.455 → 0.296（四舍五入正是 70% / 45% / 30%）。
@@ -73,8 +73,6 @@ const ZC_LANCE_DEFAULT_PIERCE_FALLOFF = 0.35;
 const ZC_LANCE_DEFAULT_PIERCE_COUNT = 3;
 /** 投枪是「掷出去的枪」，比普攻弹速快一档（逻辑 px/秒）。 */
 const ZC_LANCE_DEFAULT_SPEED = 700;
-/** 没有专属投枪美术时的占位弹体（可在行参数里用 `lanceEffectPrefabPath` 覆盖）。 */
-export const ZC_LANCE_DEFAULT_EFFECT_PREFAB_PATH = 'units/projectiles/子弹_新怪物/通用箭矢';
 
 /**
  * 三叶小丑「飓风」102004 的入场起点占比（2026-11-20 第 28 批）。
@@ -196,9 +194,34 @@ export interface IZCStrikeOptions {
     readonly missileSpeed?: number;
     /**
      * 导弹一次施法的恒定发数（覆盖 `count`）；缺省听 `count`。
-     * 只对导弹分支生效，戈壁狂箭那种立即结算的多点打击不受影响。
+     * 只对导弹分支生效，戈壁箭雨（原「戈壁狂箭」）那种立即结算的多点打击不受影响。
     */
     readonly missileCount?: number;
+    /**
+     * 「没目标也把表现放完」的保底开关（2026-11-26 第 55 批）。
+     *
+     * 0 目标时默认整段不发（`return 0`，调用点据此不推进冷却、每帧重试）；
+     * 但**技能已经放出去之后**（戈壁箭雨的 6 秒窗口里）敌人可能被打光 / 走光，
+     * 那一刻如果也停手，玩家会看到「圈还在、箭没了」——用户口径：
+     * 「有目标释放后，即使目标死亡，也会继续播放，一定是整个技能动作做完」。
+     *
+     * 所以窗口内的每一波都带 `forceVisual: true`：没有敌人照样把这一批子弹抛出去
+     * （落点退回散布中心），只是不再产生伤害。首次施法**不带**这个开关，
+     * 「没有目标不释放技能」这条因此不受影响。
+     */
+    readonly forceVisual?: boolean;
+    /**
+     * 回填「这一发实际作用在哪」（世界坐标），2026-11-26 第 57 批。
+     *
+     * 用途只有一个：`random_strike` 的**范围指示白环**要画在箭落下的地方，而不是施法者脚下。
+     * 圈心必须与子弹同源 —— 挑人带随机（`nearest: false` 时），调用方在外面重算一遍必然算出
+     * 另一个质心，于是「圈在这头、箭落那头」。所以由 `strikeTargets` 在挑完之后把中心写回来。
+     *
+     * 传进来的是一个**可变**对象（不是返回值）：`strikeTargets` 有两条分支（导弹 / 立即结算），
+     * 改返回类型会牵动所有调用点，而这里只有 `applyRandomStrike` 一家在用。
+     * 没写 ⇒ 这一发没落地（0 目标且没有 `forceVisual`），调用方按施法者位置兜底。
+     */
+    readonly centerOut?: { x: number; y: number };
 }
 
 /**
@@ -646,7 +669,7 @@ export class ZCAttackResolutionSystem {
     }
 
     /**
-     * 这一拍是不是「投枪」（`破阵投枪`，2026-11-17 第 7 批）。
+     * 这一拍是不是「投枪」（`破阵术`，2026-11-25 前叫「破阵投枪」，2026-11-17 第 7 批）。
      *
      * 节拍读 `skillParamJson.lanceEvery`（4 / 3 / 2，按档位缩短），按**累计普攻次数**取模；
      * `completedAttackCount` 在 `consumeEmpoweredAttack` 里已经自增过，所以第 4 次出手时
@@ -674,16 +697,17 @@ export class ZCAttackResolutionSystem {
      *
      * ⚠️ 弹体特效只能是常量：`skillParamJson` 的参数袋按 statId/operation/value 解析，
      * 值域是 number（`Record<string, number>`），字符串路径进去会被丢掉。要按卡换皮，
-     * 得新增表列或走 `pvpSkill.effectPrefabPath`，不能塞参数袋。
+     * 走下面的 {@link ZC_LANCE_EFFECT_PREFAB_BY_UNIT}（2026-11-26 第 57 批起）。
      */
     private static lanceProfileOf(base: ZCAttackProfile,
-        skillRuntime: ZCSkillRuntimeDefinition | undefined): ZCAttackProfile {
+        skillRuntime: ZCSkillRuntimeDefinition | undefined,
+        unitId: string): ZCAttackProfile {
         const params = skillRuntime ? skillRuntime.parameters : undefined;
         return {
             ...base,
             mode: ZCCombatEventType.Projectile,
             projectileSpeed: Math.max(1, (params ? params.lanceSpeed : undefined) ?? ZC_LANCE_DEFAULT_SPEED),
-            effectPrefabPath: ZC_LANCE_DEFAULT_EFFECT_PREFAB_PATH,
+            effectPrefabPath: zcLanceEffectPrefabPath(unitId),
             onHitStatusId: undefined,
             impactEffectPrefabPath: undefined,
             //  气浪的落点比例一并清掉：没有命中附加特效时它没有意义，留着容易让人以为「投枪也有气浪」。
@@ -946,7 +970,7 @@ export class ZCAttackResolutionSystem {
                 onHitStatusId, legacyTargetBuffs, floatTextKind, context);
             return;
         }
-        //  单体护盾（亡者护盾）：只罩自己、且带到期时刻。与上面的 `shieldRatio`（全队光环盾）
+        //  单体护盾（巨力护盾，2026-11-25 前叫「亡者护盾」）：只罩自己、且带到期时刻。与上面的 `shieldRatio`（全队光环盾）
         //  是两个互不影响的参数，缺省 0 ⇒ 整段不执行。
         //  🔴 这条以前**只加数值、不加表现** ⇒ 玩家看到的是「巨力坚果凭空变硬」（2026-11-21 第 37 批，
         //  用户原话「巨力坚果没有释放刀盾兵的护盾效果」）。表现走 `pushSelfShieldVisual`。
@@ -1018,7 +1042,7 @@ export class ZCAttackResolutionSystem {
             }
             return null;
         }
-        //  投枪（`破阵投枪`）：每 N 次普攻把本次攻击替换成一枚远程穿透弹。
+        //  投枪（`破阵术`，2026-11-25 前叫「破阵投枪」）：每 N 次普攻把本次攻击替换成一枚远程穿透弹。
         //  与「强化那一击」互斥（撞拍时强化优先），详见 `lanceBeatOf`。
         const lance = this.lanceBeatOf(unit, skillRuntime, empowered);
         //  「这一击固定发几颗」的显式声明（`skillParamJson.projectileCount`，只服务强化那一击）。
@@ -1041,7 +1065,7 @@ export class ZCAttackResolutionSystem {
         // 武将技行（36xxx），不再沿用普攻行（301xx）。否则冰法师普攻是 projectile、武将技冰雕
         // 是 area，强化触发时会把冰雕当成投射物从法师位置飞到目标点 —— 冰雕应在目标点就地生成。
         const activeProfile = lance
-            ? this.lanceProfileOf(profile, skillRuntime)
+            ? this.lanceProfileOf(profile, skillRuntime, unit.unitId)
             : ((empowered && definition.empoweredProfile) ? definition.empoweredProfile : profile);
         //  命中挂状态的节拍闸门（2026-10-30 火焰树妖「点燃」：每 3 次普攻的第 3 次才附带）。
         //  闸门盖住的是「本次出手挂不挂状态」整件事，所以 `skillRuntime.statusId`（计划行声明）
@@ -1443,6 +1467,28 @@ export class ZCAttackResolutionSystem {
             : activeProfile.slowRatio ?? 0;
         const areaRadius = effectiveAreaRadius;
 
+        //  🔴 「以目标为圆心」的区域必须有**实体敌方单位**当靶子（2026-11-25 第 53 批，篮球火）。
+        //
+        //  背景：`context.currentTarget` 在敌方单位全没了的时候不会返回 `null`，而是退化成
+        //  「打城墙 / 打建筑」（`ZCUnitTargeting.current` 的 `kind: 'wall' | 'building'` 两支）。
+        //  区域照建就会落在**城墙坐标**上 —— 而地面区域只结算单位（`resolveWave` 只遍历
+        //  `unitsInRadius`），砸在墙上一个单位也伤不到，纯属白放一次 + 占掉 14 秒 CD。
+        //  用户口径（2026-11-25）：「以敌方为目标…**没有目标就不释放**」。
+        //
+        //  只盖「原地 · 以目标为圆心」这一档（`!moving && !selfCentered`）：
+        //  · `selfCentered`（斗气爆发 / 迪斯科旋风 / 死亡摇滚）本来就落在自己脚下，不需要靶子；
+        //  · `moving`（暴风 / 鹿神守护小鹿）从施法者出发沿中轴飞，拆墙时也有意义，不动。
+        const zoneSelfCenteredEarly = skillParams ? (skillParams.zoneSelfCentered ?? 0) > 0 : false;
+        const zoneMovingEarly = empowered && skillParams ? (skillParams.zoneMoveSpeed ?? 0) > 0 : false;
+        if (!zoneMovingEarly && !zoneSelfCenteredEarly && target.kind !== 'unit') {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`ground-zone-target:${unit.id}`, '施法',
+                    `${unit.unitId}#${unit.id} 区域技能没有敌方单位目标（目标 = ${target.kind}#${target.id}）`
+                    + ` ⇒ 不建区域、不结算；命中状态与伤害一并不发`);
+            }
+            return;
+        }
+
         // 持续区域（暴风雪）：命中后在目标点建 zone，分波结算；不再立即打主目标/溅射。
         const waveInterval = durationSeconds / waves;
         //  区域技能同样是「一次出手」：命中状态照挂。
@@ -1501,15 +1547,23 @@ export class ZCAttackResolutionSystem {
             const angle = moving ? axis + fanOffset
                 : (zoneCount === 1 ? 0 : unit.facingRadians + Math.PI * 2 * index / zoneCount);
             const offset = zoneCount === 1 || moving || selfCentered ? 0 : areaRadius * .45;
+            //  出生点先落成局部变量：下面要拿同一个坐标去画范围圈（两处各算一遍迟早写歪）。
+            //  🔴 「以目标为圆心」的区域（`!moving && !selfCentered`）圆心**只认 `target.x/y`**
+            //  （2026-11-25 第 53 批复述）：`zoneCount === 1` 时 `offset` 恒 0 ⇒ 圆心就是目标本身。
+            //  上面那道 `target.kind !== 'unit'` 闸门保证这里的 `target` 一定是敌方单位，
+            //  所以「圆形落在自己脚下」只剩两种合法来源：`zoneSelfCentered`（配表开关）
+            //  或目标本身就贴脸站在同一格。
+            const zoneX = moving
+                ? from.x + Math.cos(angle) * spawnForward
+                : (selfCentered ? from.x : target.x + Math.cos(angle) * offset);
+            const zoneY = moving
+                ? from.y + Math.sin(angle) * spawnForward
+                : (selfCentered ? from.y : target.y + Math.sin(angle) * offset);
             state.groundZones.push({
                 //  移动区域的出生点 = 施法者坐标沿中轴前移 `zoneSpawnForward`
                 //  （「小鹿在魔术师前进方向 30px」）。`zoneSpawnForward` 缺省 0 ⇒ 就是施法者本身。
-                x: moving
-                    ? from.x + Math.cos(angle) * spawnForward
-                    : (selfCentered ? from.x : target.x + Math.cos(angle) * offset),
-                y: moving
-                    ? from.y + Math.sin(angle) * spawnForward
-                    : (selfCentered ? from.y : target.y + Math.sin(angle) * offset),
+                x: zoneX,
+                y: zoneY,
                 radius: areaRadius,
                 owner: unit.owner,
                 sourceUnitId: unit.id,
@@ -1562,6 +1616,25 @@ export class ZCAttackResolutionSystem {
                 sprintSpeed: approachSpeed > 0 ? moveSpeed * context.rules.combatDistanceScale : undefined,
                 sprinting: approachSpeed > 0 ? false : undefined,
             });
+            //  2026-11-25 第 45 批：篮球天才「篮球火」的区域技能画一圈范围指示（用户口径）。
+            //  按单位白名单（`ZC_SKILL_RANGE_RING_UNITS`）：同样走 `mode: area` + `durationSeconds`
+            //  的暴风雪 / 灼热地带一个都不多出这个圈。
+            //  🔴 半径取**这个区域自己的** `areaRadius`（世界）÷ `combatDistanceScale` 换回表值，
+            //  不读 `pvpSkill.areaRadius` 的裸值 —— 两者靠 `effectiveAreaRadius` 才相等。
+            if (zcRangeRingEnabledForUnit(unit.unitId)) {
+                const distanceScale = Math.max(1e-6, context.rules.combatDistanceScale);
+                pushSkillRangeRingEvent(state, {
+                    x: zoneX,
+                    y: zoneY,
+                    logicRadius: areaRadius / distanceScale,
+                    worldRadius: areaRadius,
+                    seconds: moving ? movingDuration : durationSeconds,
+                    owner: unit.owner,
+                    sourceUnitId: unit.id,
+                    skillId: event.skillId,
+                    skillName: event.skillName,
+                });
+            }
         }
     }
 

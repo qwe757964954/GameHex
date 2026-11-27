@@ -8,6 +8,7 @@
 
 import { _decorator, Button, Component, Label, Node, Tween, tween, Vec3 } from 'cc';
 import { EventMgr } from '../../framework/event/EventMgr';
+import { RedDot } from '../common/RedDot';
 import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryRenderEvent } from '../territory/application/TerritoryEvents';
 import { TERRITORY_IDLE_REWARD_INTERVAL_MS } from '../territory/model/TerritoryIdleReward';
 import { HangPage } from './HangPage';
@@ -33,10 +34,10 @@ export class HangEntryButton extends Component {
     timeLabel: Label = null!;
 
     @property({
-        type: Node,
-        tooltip: 'RedDot：红点占位（FGUI `com_rd`）。老端从不点亮，本轮不接；接的时候用 setRedDot()。',
+        type: RedDot,
+        tooltip: 'RedDot：红点（工程通用 RedDot）。老端从不点亮，本轮不接；接的时候用 setRedDot()。',
     })
-    redDot: Node = null!;
+    redDot: RedDot = null!;
 
     private _startMs: number | null = null;
     private maxMs = 0;
@@ -96,7 +97,7 @@ export class HangEntryButton extends Component {
 
     /** 红点显隐的唯一入口（本轮不接，接口先留好）。 */
     setRedDot(visible: boolean): void {
-        this.redDot.active = visible;
+        this.redDot.setRedDot(visible);
     }
 
     // 内部

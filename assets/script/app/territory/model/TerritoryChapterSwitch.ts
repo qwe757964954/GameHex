@@ -20,7 +20,7 @@ export const TERRITORY_CHAPTER_SWITCH_REVEAL_SECONDS = 0.58;
 export const TERRITORY_CHAPTER_SWITCH_RISE_RATIO = 0.45;
 
 /** 相机先行段地图下移距离占 rise 的比例。 */
-export const TERRITORY_CHAPTER_SWITCH_SINK_RATIO = 0.25;
+const TERRITORY_CHAPTER_SWITCH_SINK_RATIO = 0.25;
 
 /** 等待新章加载的上限（秒），避免云层永远盖着。 */
 export const TERRITORY_CHAPTER_SWITCH_WAIT_MAX_SECONDS = 6;

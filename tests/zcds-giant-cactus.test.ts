@@ -240,7 +240,7 @@ test('102104 三档：每秒 50% / 6 秒 / 体型 30 / 反弹 50·51·52', () =>
             assert.equal(bag.auraBodySizePct, 30, '百分点，写成 0.3 就等于没变');
             assert.equal(bag.auraReflectPct, [50, 51, 52][index]);
             assert.equal(row.behaviorKey, 'self_aura');
-            assert.equal(Number(row.unlockHeroLevel), [12, 24, 36][index]);
+            assert.equal(Number(row.unlockHeroLevel), [7, 24, 36][index]);
             assert.match(String(row.desc), new RegExp(`反弹 ${[50, 51, 52][index]}% 伤害`));
         });
     }

@@ -6,10 +6,10 @@
     "units/projectiles/风法师_龙卷风/风法师_龙卷风": 0.5,
     "units/projectiles/鹿神守护/鹿神守护": 0.145985401459854,
     "units/projectiles/大拳飞冲子弹类特效/大拳飞冲子弹类特效": 2.5,
-    "units/projectiles/持续光环伤害效果/持续光环伤害效果": 2.0709859913793105,
+    "units/projectiles/持续光环伤害效果/持续光环伤害效果": 1,
     "units/projectiles/雷弹攻击/雷弹攻击": 0.35,
     "units/projectiles/雷弹命中/雷弹命中": 0.5,
-    "units/projectiles/磁电菇_子弹命中/磁电菇_子弹命中": 0.5,
+    "units/projectiles/磁电菇_子弹命中/磁电菇_子弹命中": 1,
     "units/projectiles/轻骑兵_冲锋/轻骑兵_冲锋": 0.4,
     "units/projectiles/刀盾兵_护盾/刀盾兵_护盾": 0.55
   },

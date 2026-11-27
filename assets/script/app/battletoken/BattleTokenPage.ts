@@ -5,12 +5,12 @@ import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { routedLoad } from '../common/RoutedResource';
 import { spriteFramePath } from '../ArtPaths';
 import { QUALITY_FRAME_NAMES, QUALITY_FRAME_ROOT, qualityFrameName, qualityFramePath } from '../common/QualityFrameArt';
+import { resolveRewardIconRef } from '../common/RewardIcon';
 import {
     BT_SHARED_CHECK,
     BT_SHARED_LOCK_MASK,
     btPageArtPath,
     btSharedPath,
-    resolveRewardIconRef,
 } from './BattleTokenArt';
 import {
     BT_DEFAULT_TYPE,

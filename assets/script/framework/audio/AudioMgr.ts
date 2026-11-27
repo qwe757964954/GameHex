@@ -56,10 +56,10 @@ import {
 } from './AudioSettingTable';
 
 /** 音频配置表名（`assets/remoteRef/audioConfig.json`）。 */
-export const AUDIO_CONFIG_TABLE = 'audioConfig';
+const AUDIO_CONFIG_TABLE = 'audioConfig';
 
 /** 常驻音频节点名（探针按这个名字找）。 */
-export const AUDIO_ROOT_NODE_NAME = 'AudioRoot';
+const AUDIO_ROOT_NODE_NAME = 'AudioRoot';
 
 export class AudioMgr {
     static __cname: string = 'AudioMgr';

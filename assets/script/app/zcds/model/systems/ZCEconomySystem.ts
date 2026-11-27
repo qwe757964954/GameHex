@@ -1,4 +1,4 @@
-import type { ZCDeckBonuses, ZCDeckCard, ZCUnitDefinition } from '../ZCCombatCatalog';
+import { findCatalogCard, type ZCDeckBonuses, type ZCDeckCard, type ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 import type { ZCBuildingCooldownState, ZCBuildingType, ZCHexState, ZCSnapshot } from '../ZCGameTypes';
 import { ZCBuildingPhase } from '../ZCGameTypes';
@@ -70,7 +70,7 @@ export class ZCEconomySystem {
         for (const hex of state.hexes) {
             if (hex.building !== 'barracks' || hex.owner === 'neutral' || !hex.cardId || !this.isBuildingOperational(hex)) continue;
             if (context.unitCount(hex.owner) >= rules.unitCapPerSide) continue;
-            const card = context.cardById(hex.owner, hex.cardId);
+            const card = context.cardById(hex.owner, hex.cardId) ?? findCatalogCard(hex.cardId);
             if (!card?.unitId) continue;
             const key = this.cycleKey(hex);
             const interval = this.recruitIntervalSeconds(hex, card, context);
@@ -92,7 +92,7 @@ export class ZCEconomySystem {
 
     static spawnFirstBarracksUnit(hex: ZCHexState, context: ZCEconomyContext): void {
         if (hex.building !== 'barracks' || hex.owner === 'neutral' || !hex.cardId || !this.isBuildingOperational(hex)) return;
-        const card = context.cardById(hex.owner, hex.cardId);
+        const card = context.cardById(hex.owner, hex.cardId) ?? findCatalogCard(hex.cardId);
         if (!card?.unitId) return;
         this.spawnBarracksBatch(hex, card, context);
     }

@@ -109,7 +109,7 @@ export class MatchingController extends ControllerBase {
         const ready = this.session?.ready;
         // 加载卡住时仍切场，由战场页展示加载态。
         this.wait = { phase: 'handoff', secondsRemaining: timeout };
-        EventMgr.instance.emit(MATCHING_EVENTS.HANDOFF);
+        EventMgr.instance.emit(MATCHING_EVENTS.HANDOFF, undefined, this);
         if (!ready) {
             this.wait = null;
             this.enterBattle();
@@ -144,7 +144,7 @@ export class MatchingController extends ControllerBase {
                 pve: entry?.pve,
                 battleType: entry?.battleType,
             },
-        } satisfies IMatchingLeave);
+        } satisfies IMatchingLeave, this);
     }
 
     private fail(error: unknown): void {
@@ -157,11 +157,11 @@ export class MatchingController extends ControllerBase {
     private returnToMain(error: unknown): void {
         EventMgr.instance.emit(MATCHING_EVENTS.LEAVE, {
             destination: 'main', error,
-        } satisfies IMatchingLeave);
+        } satisfies IMatchingLeave, this);
     }
 
     private render(): void {
-        EventMgr.instance.emit(MATCHING_EVENTS.STATE, this.options.model.snapshot());
+        EventMgr.instance.emit(MATCHING_EVENTS.STATE, this.options.model.snapshot(), this);
     }
 
     private logFailure(error: unknown): void {

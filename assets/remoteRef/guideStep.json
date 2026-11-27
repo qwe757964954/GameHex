@@ -240,7 +240,7 @@ null
 "8-1",
 "收尾",
 "prevDone",
-"hole",
+"holeThrough",
 "Main/TaskEntry",
 "click",
 "pageOpened:task",

@@ -406,12 +406,84 @@ export interface ZCCombatEvent {
     growFrom?: number;
     /** 指定播放的 Spine 动画名；缺省保留预制体默认动画。 */
     spineAnimation?: string;
+    /**
+     * `spineAnimation` 是否循环。缺省 `true`（既有行为逐字不变）。
+     *
+     * 一次性演出（通用治疗光环）必须给 `false`：循环会让「播完」这件事不存在，
+     * 事件寿命一到节点回池，中途那次重播就是一次肉眼可见的抽帧。
+     */
+    spineLoop?: boolean;
     /** 是否点亮叠加层子节点；缺省不改变预制体自身状态。 */
     overlayFx?: boolean;
     /** 特效朝向角度（度，逆时针，0 为 +X 方向）。 */
     angleDegrees?: number;
     /** 特效竖直抬升高度（屏幕 px）。 */
     visualLiftPx?: number;
+    /**
+     * 「从上方落下」的起始竖直高度（**屏幕 px**）。
+     *
+     * 给定时视图按 `progress` 从 `+dropFromPx` 线性降到 0 —— 观感是这颗子弹从区域上方
+     * 掉到 `to` 那一点（`to` 与伤害判定完全不变）。
+     *
+     * 缺省不给 ⇒ 逐字沿用「贴着 `to` 原地播」（存量全部如此）。
+     * 口径与名单见 `ZCProjectileDropStyle`（2026-11-25 第 52 批）。
+     */
+    dropFromPx?: number;
+    /**
+     * 飞入段的起点（世界坐标，2026-11-25 第 53 批，篮球天才「篮球火」）。
+     *
+     * 给 `flyInSeconds` + 这一对起点，视图就把特效从这儿沿直线插值到 `to`（再叠
+     * `flyArcPx` 的抛物线抬升）—— 观感是「球从施法者手里飞向命中区域」。
+     * 🔴 起点是**施法者当时的坐标**，不是 `from`：区域事件的 `from` 与 `to` 恒同坐标
+     * （见 `ZCGroundZoneSystem.resolveWave`），拿它当起点会飞 0 距离。
+     * 缺省不给 ⇒ 逐字沿用「贴着 `to` 原地播 / 按 `dropFromPx` 下落」。
+     * 口径与名单见 `ZCProjectileDropStyle`。
+     */
+    flyFromX?: number;
+    flyFromY?: number;
+    /** 飞入时长（秒）；到点后钉在 `to` 上，剩下的事件寿命原地播。缺省 0 = 不飞。 */
+    flyInSeconds?: number;
+    /** 飞入段的抛物峰高（**屏幕 px**）；缺省 0 = 直线飞。 */
+    flyArcPx?: number;
+    /**
+     * **表现落点**（世界坐标，2026-11-26 第 55 批「弹道雨」）。
+     *
+     * 与 `to` 的关系：`to` 是区域判定圆心，改它等于改结算；
+     * 这两格只管「子弹看起来落在哪」。缺省不给 ⇒ 落点仍是 `to`（存量行为逐字不变）。
+     *
+     * 一批子弹各自给不同的 `flyTo*` 就成了「箭雨 / 冰锥 / 火球散在圈里」。
+     * 口径见 `ZCProjectileDropStyle.ZC_BULLET_RAIN_UNITS`。
+     */
+    flyToX?: number;
+    flyToY?: number;
+    /**
+     * 贝塞尔控制点的**横向**偏移（屏幕 px，相对起终点连线中点，2026-11-26 第 55 批）。
+     *
+     * 正值向连线右侧摆、负值向左侧摆（屏幕坐标，y 向上）。
+     * 配合 `flyArcPx`（竖直偏移）构成二次贝塞尔的唯一控制点：
+     * 控制点 = 中点 + `(2·flySwayPx, 2·flyArcPx)` ⇒ 中点处实际偏移正好是 `(flySwayPx, flyArcPx)`。
+     *
+     * 缺省 0 ⇒ 与既有「竖直抛物线」逐字一致。
+     */
+    flySwayPx?: number;
+    /**
+     * 定点表现「平移过去」的起点 + 时长（世界坐标 / 秒，2026-11-26 第 58 批）。
+     *
+     * 只服务**技能范围指示白环**：戈壁箭雨每换一批目标，圈要「快速移过去」而不是瞬移
+     * （用户口径：「光圈切换到下个目标是快速移动（150px 速度），不要直接瞬移」）。
+     *
+     * 与 `flyFrom*` / `flyInSeconds` 分开而不是复用：那一套是**一次性子弹**的飞入段，
+     * 视图到 t=1 会把节点藏掉（§56「命中即摘」）；白环要活满整个技能窗口，飞到之后
+     * 还得一直停在新位置上。两者语义相反，混用会让圈在第一次移动后直接消失。
+     *
+     * 缺省不写 ⇒ 直接出现在 `to`（存量行为逐字不变）。
+     */
+    slideFromX?: number;
+    slideFromY?: number;
+    /** 这一段滑动的起始时刻（秒）；缺省退回 `startedAt`。 */
+    slideStartAt?: number;
+    /** 这一段滑动要花多久（秒）= 距离 ÷ 150px。0 / 缺省 = 不滑动。 */
+    slideSeconds?: number;
     /** 特效整体尺寸缩放倍率；缺省为 1。 */
     effectScale?: number;
     /** 特效整体透明度（0~1）；缺省为 1（不透明）。 */
@@ -556,6 +628,28 @@ export interface ZCHitFx {
     /** 受击方体型缩放，特效按此等比适配。 */
     targetScale: number;
     /** 特效世界坐标。 */
+    x: number;
+    y: number;
+    startedAt: number;
+    durationSeconds: number;
+}
+
+/**
+ * 大招通报展示项（纯表现，不进快照）。
+ *
+ * 玩家方传说卡（`pvpCard.rarity` 顶档）本局**第一次**放主动技能时，在施法者位置播一次
+ * 「卡面形象 + 技能名」。一张卡一局只播一次 —— 由 `ZCGameModel` 按 `cardId` 记账，
+ * 不靠视图去重（视图要是丢了节点就会重播，而模型记账不受任何渲染失败影响）。
+ */
+export interface ZCSkillAnnounce {
+    id: number;
+    /** 施法者所属卡 id；视图按它取 `icons/cardHead` 的卡面图。 */
+    cardId: string;
+    /** 真正放出去的那条技能行 id（武将技 `empoweredSkillId` / 副轨 / 普攻行之外的主动技能）。 */
+    skillId: number;
+    /** 技能表里的真名（武将技取 `empoweredProfile.name`，不带「·强化」后缀）。 */
+    skillName: string;
+    /** 施法者所在位置的棋盘逻辑坐标（视图按地图位移换算成节点坐标）。 */
     x: number;
     y: number;
     startedAt: number;

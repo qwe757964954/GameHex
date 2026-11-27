@@ -1,4 +1,5 @@
 import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { RedDot } from '../common/RedDot';
 
 const { ccclass, property } = _decorator;
 
@@ -49,8 +50,8 @@ export class LimitTimeActItem extends Component {
     @property({ type: Label, tooltip: 'PriceLabel：价格文字（礼包 / 限购行用）' })
     priceLabel: Label = null!;
 
-    @property({ type: Node, tooltip: 'RedDot：可领取红点' })
-    redDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'RedDot：可领取红点（工程通用红点）' })
+    redDot: RedDot = null!;
 
     @property({ type: Node, tooltip: 'TakenStamp：已领取印章（任务行用）' })
     takenStamp: Node = null!;
@@ -73,7 +74,7 @@ export class LimitTimeActItem extends Component {
         this.actionButton.node.active = opts.phase !== 'taken';
         this.actionButton.interactable = opts.phase !== 'taken' && opts.phase !== 'undone';
         this.takenStamp.active = opts.phase === 'taken';
-        this.redDot.active = opts.phase === 'claimable';
+        this.redDot.setRedDot(opts.phase === 'claimable');
         // 任务行不显示礼包字段
         this.limitLabel.node.active = false;
         this.discountLabel.node.active = false;
@@ -98,7 +99,7 @@ export class LimitTimeActItem extends Component {
         this.actionLabel.string = opts.soldout ? '售罄' : '购买';
         this.actionButton.node.active = true;
         this.takenStamp.active = false;
-        this.redDot.active = false;
+        this.redDot.setRedDot(false);
         this.limitLabel.node.active = opts.limitText.length > 0;
         this.limitLabel.string = opts.limitText;
         this.discountLabel.node.active = opts.discountText.length > 0;

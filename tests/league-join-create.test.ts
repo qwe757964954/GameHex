@@ -962,8 +962,8 @@ test('E4 ⚠️ 加入页：刷新列表必须 defer 一帧（虚拟列表槽位
     assert.ok(/scheduleOnce|nextFrame|setTimeout|defer|setTimeoutFrame/i.test(before.slice(-1200)) ||
         /refreshList\s*\(\s*\)\s*\{[\s\S]{0,400}?scheduleOnce/.test(src),
         'refreshList 前要有让帧（本工程口径：defer 一帧，否则列表空白）');
-    assert.ok(stripComments(readFileSync(JOIN_CONTROLLER_TS, 'utf8')).includes('notifyJoined'),
-        '加入成功后由控制器通知容器');
+    assert.ok(stripComments(readFileSync(JOIN_CONTROLLER_TS, 'utf8')).includes("kind: 'joined'"),
+        '加入成功后由控制器输出事件通知容器');
     assert.ok(stripComments(readFileSync(MAIN_COMPOSITION_TS, 'utf8')).includes('LeagueTabEvent.Joined'),
         '通知落到容器已有的 Joined 事件（由活动的联盟页消费）');
 });
@@ -994,8 +994,8 @@ test('E5 ⚠️ 创建页：勾选框同步 + 名字守卫 + 消耗两态换色 
         '要按兄弟名取 label（getComponentInChildren 在盒子里找不到）');
     // 建盟成功：不再让视图持有容器回调，改由 Controller 触发 LeagueTabEvent.Joined
     assert.ok(!src.includes('onCreated'), '视图不再穿透容器回调');
-    assert.ok(stripComments(readFileSync(CREATE_CONTROLLER_TS, 'utf8')).includes('notifyJoined'),
-        '成功通知由 LeagueCreateController 收口');
+    assert.ok(stripComments(readFileSync(CREATE_CONTROLLER_TS, 'utf8')).includes("kind: 'joined'"),
+        '成功通知由 LeagueCreateController 输出事件收口');
     assert.ok(stripComments(readFileSync(CREATE_COMPOSITION_TS, 'utf8')).includes('LeagueTabEvent.Joined'),
         '成功通知必须落到容器已有的 Joined 事件（由活动的联盟页消费）');
     assert.ok(!stripComments(readFileSync(CREATE_CONTROLLER_TS, 'utf8')).includes('onCreated'),

@@ -51,6 +51,7 @@ const GUARD_TESTS = [
     'tests/sprite-frame-null.test.ts',
     'tests/definition-integrity.test.ts',
     'tests/function-body-layout.test.ts',
+    'tests/constant-guard.test.ts',
     'tests/verify-gate.test.ts',
 ];
 

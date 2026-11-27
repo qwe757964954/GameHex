@@ -51,11 +51,10 @@ import { TERRITORY_CHEST_TIER, territoryChestTierOfRewards, type TerritoryChestT
 import { territoryMonsterBoxArtPath } from '../territory/model/TerritoryMonsterBoxSpec';
 import { TERRITORY_CHEST_OPEN_FRAMES } from '../territory/model/TerritoryChestAnimation';
 import type { ITerritoryChestIconEntry } from '../territory/view/TerritoryChestView';
+import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import {
-    ITEM_TABLE,
     resBarCellOfRefId,
     resBarIconSpritePath,
-    ROLE_PROPERTY_TABLE,
     type IItemRefRow,
     type IResPropertyRow,
 } from '../common/ResTypes';
@@ -1743,8 +1742,17 @@ export class MainTerritoryMap extends Component {
      * 现在认 `victoryBattleCells`：模型直接从「这局战斗的结算存档」落的一次性边沿，
      * 与「有没有新收地」无关（重复挑战 / 已通关的据点也照样该掉宝箱）。
      *
-     * 优先挑 `asyncPvp` 那一格（用户口径就是异步 PVP）；挑不到就用第一格兜底：
-     * 战斗掉落宝箱对任何据点战斗胜利都成立，不能因为类型没配上就让动画静默消失。
+     * 🔴 11-23 深夜修（用户：「塔防模式结束后回到领地，也播放了战斗宝箱飞入 icon 的动画，
+     *    只有 pvp 异步据点才需要播放」）：**白名单只认 `asyncPvp`**，挑不到就整条不发。
+     *
+     *    上一版是 `pvpCell ?? claimCells[0]` 兜底（「战斗掉落宝箱对任何据点胜利都成立」），
+     *    这个前提被证伪了：`TerritorySaveStore.resolveBattle()` 是**所有**带 `pve` 上下文的
+     *    战斗共用的收尾口（`ZCBattlePreparation.resolvePveResult`），塔防（`mode = defence`）
+     *    与普通关（`mode = match`）打赢回城时 `victoryBattleCells` 同样非空 ⇒ 兜底会把它们
+     *    一起演成宝箱掉落。宝箱是异步 PVP 的奖励表现，别的模式不许蹭。
+     *
+     *    注意是**白名单**不是黑名单：`TERRITORY_SITE_TYPE` 还有 `stage` / `boss` /
+     *    `fixedResource` / `bonus` / `patrolChest`，将来加类型也不该自动获得宝箱动画。
      *
      * 页面只负责「哪个格子」，坐标换算 / 建节点 / 排兄弟序全在视图层
      * （架构守卫 `territory-page-split` / `territory-battle-intro`）。
@@ -1759,7 +1767,13 @@ export class MainTerritoryMap extends Component {
         const cells = sites ?? [];
         const pvpCell = claimCells.find((cellId) => cells.some(
             (site) => site.cellId === cellId && site.type === TERRITORY_SITE_TYPE.asyncPvp));
-        const cellId = pvpCell ?? claimCells[0];
+        if (pvpCell === undefined) {
+            // 实机排查锚点：塔防 / 普通关回城走这一行是**正常**的。
+            // 异步 PVP 打赢也走这里 ⇒ 那一格的 `type` 没配成 `asyncPvp`（配表问题，不是表现问题）。
+            console.info(`[ChestDrop] 回城边沿：格 ${claimCells.join('/')} 不是异步 PVP 据点，不播宝箱飞行`);
+            return;
+        }
+        const cellId = pvpCell;
         const origin = this.mapView?.cellWorldPoint(cellId) ?? null;
         // 实机「宝箱没飞」的排查锚点：这一行出现 ⇒ 模型的边沿到了、事件发了；
         // 一行都没有 ⇒ 问题在模型侧（`applyStoredBattleResult` 没读到胜利记录）。

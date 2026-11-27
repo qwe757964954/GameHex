@@ -45,16 +45,20 @@ DEER_ANIMATION = 'idle'
 # ---- 火特效：火法师_火船 的 Sprite + Animation ----
 FIRE_CLIP_UUID = 'f73e3359-a8ff-40e2-92c6-62893d672d6b'        # 火法师_火船-loop（17 帧 / 1.4167s / wrapMode 2 = Loop）
 FIRE_FRAME_UUID = '622b6694-f270-4f00-bec3-7301fd277720@f9941'  # 首帧
-FIRE_UI_WIDTH = 402
-FIRE_UI_HEIGHT = 364
-FIRE_SCALE = 1.2          # 原 prefab 烘焙的是 1.733；缩到 1.2 免得整块火盖住小鹿
+#  2026-11-26：火船散图已裁空边（402×364 → 396×126），UI 尺寸跟着改；
+#  FIRE_SCALE 1.2 是**绝对**倍率（原 prefab 烘焙 1.733 时写成 1.2 免得整块火盖住小鹿），
+#  ⇒ 火船基准收到 1 之后 1.2 保持不动，小鹿身上那团火一个像素都不变。
+FIRE_UI_WIDTH = 396
+FIRE_UI_HEIGHT = 126
+FIRE_SCALE = 1.2
 #  摆位推导（不是拍的）：
 #  小鹿 UITransform 宽 657、锚点 x = 0.3595 ⇒ 它的视觉横向中心在节点原点的
 #  (0.5 - 0.3595) * 657 ≈ +92.2；纵向锚点 0.009 ⇒ 视觉底边在原点上 -6.2、顶边 +678.8，
 #  身体中心约 +336。火特效贴在小鹿腰腹以下（约 0.45 倍身高的位置）读作「小鹿踏火而行」，
 #  所以 y 取 150。要调「火多大 / 多低」只改这两个数，别动结构。
-FIRE_OFFSET_X = 92.2
-FIRE_OFFSET_Y = 150
+#  画布裁空边后内容中心微移 2.5 px（×1.2 = 3 px），位置跟着补回来（原 92.2 / 150）。
+FIRE_OFFSET_X = 88.6
+FIRE_OFFSET_Y = 153.6
 
 
 def file_id():

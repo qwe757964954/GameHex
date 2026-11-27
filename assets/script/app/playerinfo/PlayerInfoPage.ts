@@ -1,6 +1,7 @@
 import { _decorator, Button, EditBox, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
+import { RedDot } from '../common/RedDot';
 import { Toast } from '../common/Toast';
 import { HeadArt } from '../HeadArt';
 import { ChangeHeadPage } from './ChangeHeadPage';
@@ -58,8 +59,8 @@ export class PlayerInfoPage extends PopupBase {
     @property({ type: Node, tooltip: 'ChangeHeadBtn：「更换头像」按钮' })
     changeHeadButton: Node = null;
 
-    @property({ type: Node, tooltip: 'ChangeHeadBtn/RedDot：新头像红点（本工程恒隐藏，见文件头 ②）' })
-    changeHeadDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'ChangeHeadBtn/RedDot：新头像红点（工程通用红点；本工程恒隐藏，见文件头 ②）' })
+    changeHeadDot: RedDot = null!;
 
     @property({ type: Node, tooltip: 'SettingBtn：「设置」按钮' })
     settingButton: Node = null;
@@ -238,7 +239,7 @@ export class PlayerInfoPage extends PopupBase {
 
     /** 红点：本工程不接头像红点变量类，一律隐藏（见文件头 ②）。 */
     private presentRedDots(): void {
-        this.changeHeadDot.active = false;
+        this.changeHeadDot.setRedDot(false);
     }
 
     // ============================================================

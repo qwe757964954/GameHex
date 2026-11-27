@@ -152,8 +152,8 @@ export interface IChestOpenCardVisual {
 }
 
 /** 卡片起始缩放 / 上升距离。 */
-export const CHEST_OPEN_CARD_FROM_SCALE = 0.72;
-export const CHEST_OPEN_CARD_RISE = 16;
+const CHEST_OPEN_CARD_FROM_SCALE = 0.72;
+const CHEST_OPEN_CARD_RISE = 16;
 
 export function chestOpenCardVisualOf(elapsed: number, index: number): IChestOpenCardVisual {
     const progress = chestOpenCardProgressOf(elapsed, index);
@@ -180,7 +180,7 @@ export interface IChestOpenChestVisual {
     readonly opacity: number;
 }
 
-export const CHEST_OPEN_CHEST_FROM_SCALE = 0.82;
+const CHEST_OPEN_CHEST_FROM_SCALE = 0.82;
 
 export function chestOpenChestVisualOf(elapsed: number): IChestOpenChestVisual {
     const progress = chestOpenChestProgressOf(elapsed);
@@ -193,7 +193,7 @@ export function chestOpenChestVisualOf(elapsed: number): IChestOpenChestVisual {
 }
 
 /** 橙卡（金/传说）在 `pvpCard.rarity` 里的数值；1..4 依次 绿/蓝/紫/金。 */
-export const CHEST_LEGEND_CARD_RARITY = 4;
+const CHEST_LEGEND_CARD_RARITY = 4;
 
 /**
  * 提取奖励中的橙卡英雄 ID（按卡牌 ID 升序去重）。

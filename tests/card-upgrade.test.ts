@@ -319,17 +319,16 @@ test('按钮文案只有一个来源：页面不得自己拼「升级」', () =>
     assert.equal(CARD_LINEUP_TEXTS.upgradeConfirm, '升级');
 });
 
-test('升级 loading 由组合根提供，控制器登记退出回收', () => {
+test('升级 loading 由组合根消费事件并负责退出回收', () => {
     const composition = readFileSync('assets/script/app/bootstrap/card/CardPopupComposition.ts', 'utf8');
     const controller = readFileSync('assets/script/app/card/CardUpgradeController.ts', 'utf8');
     const page = readFileSync('assets/script/app/card/CardUpgradePage.ts', 'utf8');
     assert.doesNotMatch(page, /LoadingPopup|submitUpgrade/);
     assert.match(composition, /LoadingPopup.show\(/);
-    assert.match(composition, /return \(\) => LoadingPopup.hide\(\)/);
+    assert.match(composition, /LoadingPopup.hide\(\)/);
     assert.match(composition, /upgradeUnlocking/);
     assert.match(composition, /upgradeSending/);
-    assert.match(controller, /this.own\(\(\) => this.stopLoading\(\)\)/);
-    // 请求成功、失败和退出时的 loading 回收由 CardUpgradeController 行为用例覆盖。
+    assert.doesNotMatch(controller, /LoadingPopup/);
 });
 
 test('卡牌名称：表里每行都带名，且与卡牌表 pvpCard 完全一致', () => {

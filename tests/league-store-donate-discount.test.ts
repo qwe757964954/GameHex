@@ -754,8 +754,8 @@ test('E2d 捐献：响应 `ret` 为真 ⇒ 「捐献成功」提示 + 本地算�
         'requestDonate 必须消费响应（原来走 `this.send` 把响应整个丢掉 ⇒ 既无提示也无奖励窗）');
     assert.ok(/if \(!rsp\.ret\) return null;/.test(src), '只有 `ret` 为真才算成功');
     const controller = read('assets/script/app/league/LeagueDonateController.ts');
-    assert.ok(controller.includes('feedback.tip(LEAGUE_DONATE_SUCCESS)'), '控制器展示成功提示');
-    assert.ok(controller.includes('feedback.reward(result.rewards)'), '控制器展示返回奖励');
+    assert.ok(controller.includes("emitOutput({ kind: 'tip', text: LEAGUE_DONATE_SUCCESS })"), '控制器展示成功提示');
+    assert.ok(controller.includes("emitOutput({ kind: 'reward', goods: result.rewards })"), '控制器展示返回奖励');
     assert.ok(src.includes('LEAGUE_UNION_COIN_RES_ID') && src.includes('LEAGUE_UNION_CONTRI_RES_ID'),
         '奖励两件 = 联盟金币(11) + 联盟贡献(13)');
 
@@ -787,7 +787,7 @@ test('E4 捐献：点「免费」= **先播广告**、播完才发 `requestDonat
     const src = strip(read(DONATE_CONTROLLER_TS));
     const wiring = strip(read(DONATE_COMPOSITION_TS));
     // ⚠️ 核心守护：`RequestUnionDonate(true)` 的凭据就是「广告放完了」，必须先播后发。
-    assert.ok(/ads\.play\(\)[\s\S]{0,220}?requestDonate\(true/.test(src), '必须播完广告再发捐献请求');
+    assert.ok(/ads\.play\(\)[\s\S]{0,300}?requestDonate\(true/.test(src), '必须播完广告再发捐献请求');
     assert.ok(/if \(!watched\)[\s\S]{0,140}?return/.test(src), '没看完广告 ⇒ 直接退出、一个包都不发');
     assert.ok(!/RequestUnionDonate/.test(src), '控制器不直接构造协议对象（走 repository.requestDonate）');
     assert.ok(/ads: \{ play: \(\) => playLeagueAd\(\) \}/.test(wiring), '广告端口必须真的接到 playLeagueAd()');
@@ -798,12 +798,12 @@ test('E4 捐献：点「免费」= **先播广告**、播完才发 `requestDonat
 });
 
 test('E5 捐献：金币按钮三道关的顺序是「次数 → 钱 → 确认」，且扣的是金币(10)', () => {
-    // 三道关的编排真源迁到 Controller；确认框实现由 Composition 注入；按钮图标仍由 View 渲染。
+    // 三道关的编排真源迁到 Controller；确认框由会话响应输出事件接 CommonTips；按钮图标仍由 View 渲染。
     const src = strip(read(DONATE_CONTROLLER_TS));
     const view = strip(read(DONATE_PAGE_TS));
     assert.ok(/!snapshot\.hasTimes[\s\S]{0,160}?LEAGUE_TIP_DONATE_LIMIT/.test(src));
     assert.ok(/!snapshot\.enough[\s\S]{0,200}?LEAGUE_TIP_NOT_ENOUGH_TEMPLATE/.test(src));
-    assert.ok(/feedback\.confirm[\s\S]{0,240}?sendDonate\(false\)/.test(src), '确认后才发金币捐献');
+    assert.ok(/emitOutput\(\{ kind: 'confirm', content \}\)[\s\S]{0,260}?sendDonate\(false\)/.test(src), '确认后才发金币捐献');
     assert.ok(/CommonTips\.open/.test(strip(read(DONATE_COMPOSITION_TS))), '确认框端口必须真的接到 CommonTips');
     assert.ok(/LEAGUE_COIN_RES_ID/.test(view), '按钮图标取 coin(10)');
     assert.ok(!view.includes('LEAGUE_UNION_COIN_RES_ID'), '11 是奖励，不该出现在「扣钱 / 按钮图标」处');

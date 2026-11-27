@@ -1,10 +1,14 @@
-import { toCount, withTimeout } from '../../net/RequestGuard';
+import { ResourceScope } from '../../../core/asset/ResourceScope';
+import { type ScopedRequestOutcome, toCount, withTimeout } from '../../net/RequestGuard';
 import {
     bigMapServerInstanceId, bigMapServerRecord, bigMapServerUint, normalizeBigMapBuild,
     normalizeBigMapBuildInfo, normalizeBigMapBuildQueue, normalizeBigMapGameInfo, projectBigMapServerBase,
+    type BigMapSlgActionKind, type BigMapSlgResultStatus,
     type IBigMapServerBuild, type IBigMapServerBuildInfo, type IBigMapServerGameInfo,
 } from '../model/BigMapServerState';
 import type { IBigMapBaseState, IBigMapConfig } from '../model/BigMapTypes';
+
+export type { BigMapSlgActionKind, BigMapSlgResultStatus };
 
 export type IBigMapSlgRequestName = 'CmdSlgActionUpdateReqMsg' | 'CmdSlgGameInfoReqMsg' | 'CmdSlgBuildInfoReqMsg'
     | 'CmdSlgBuildReqMsg' | 'CmdSlgBuildUpgradeReqMsg' | 'CmdSlgBuildCancelReqMsg' | 'CmdSlgBuildMoveReqMsg'
@@ -13,33 +17,34 @@ export type IBigMapSlgRequestName = 'CmdSlgActionUpdateReqMsg' | 'CmdSlgGameInfo
 /** 请求体只承载标量与实例 ID 列表，批量协议（领取产出）用数组。 */
 export type IBigMapSlgRequestBody = Readonly<Record<string, number | readonly number[]>>;
 
+/**
+ *单次请求的结论，四态。不能压成「回包 / null」：服务端拒绝写请求时下发的是 `CmdTips` 而不是对应 `Rsp`，
+ *网络层已经把原因弹给玩家，仓储必须把它和「没发出去」「发了没回音」分开处理。
+ */
+export type IBigMapSlgRequestOutcome = ScopedRequestOutcome;
+
 export interface IBigMapSlgGateway {
     dispose?(): void;
-    request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<unknown>;
+    request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<IBigMapSlgRequestOutcome>;
 }
 
 export interface IBigMapSlgReward { readonly resId: number; readonly amount: number }
-export interface IBigMapSlgResult {
-    readonly ok: boolean;
-    readonly message: string;
-    readonly rewards?: readonly IBigMapSlgReward[];
-}
-
-const SLG_TEXT = {
-    failed: '服务器未确认操作，请刷新后重试', loading: '正在同步基地信息', busy: '操作处理中，请稍候',
-    /**
-     *首帧同步确实失败过（不是还在路上）时的文案。
-     *
-     *只用 `loading` 的话，玩家看到的是「正在同步基地信息」，等十秒也没变化，
-     *既不知道是不是卡死、也不知道该不该重试 —— 2026-11-11 用户反馈的正是这个。
-     */
-    syncFailed: '基地信息同步失败，请检查网络后重试',
-    disposed: '页面已关闭', invalid: '操作参数无效', built: '已提交建造', upgraded: '已提交升级',
-    cancelled: '已取消建造或升级', moved: '建筑已移动', collected: '已领取产出', unlocked: '建造队列已解锁',
-} as const;
+/** 仓储写操作只输出结构化状态与奖励；UI 提示文案与弹窗由 Controller 统一决策。 */
+export type IBigMapSlgResult =
+    | {
+        readonly ok: true;
+        readonly status: 'ok';
+        readonly action: BigMapSlgActionKind;
+        readonly rewards?: readonly IBigMapSlgReward[];
+    }
+    | {
+        readonly ok: false;
+        readonly status: Exclude<BigMapSlgResultStatus, 'ok'>;
+    };
 
 /** 页级服务端状态。超时不重试写请求，不本地结算资源或完成队列。 */
 export class BigMapSlgRepository {
+    readonly scope: ResourceScope;
     private info: IBigMapServerBuildInfo | null = null;
     private game: IBigMapServerGameInfo | null = null;
     private base: IBigMapBaseState | null = null;
@@ -51,11 +56,10 @@ export class BigMapSlgRepository {
     private refreshAfterWrite = false;
     private revision = 0;
     private isWriting = false;
-    private isDisposed = false;
     private isBuildDirty = false;
     private actionRecoverAt: number | null = null;
     private nextPollAt = 0;
-    /** 首帧同步是否确实失败过（区别于「还在路上」），决定 `write` 该说哪句话。 */
+    /** 首帧同步是否确实失败过（区别于「还在路上」），决定 `write` 上报 `syncFailed` 还是 `loading`。 */
     private hasSyncFailed = false;
     /** 回包被丢弃的诊断只打一次，避免 500ms 轮询刷屏。 */
     private snapshotReported = false;
@@ -64,11 +68,23 @@ export class BigMapSlgRepository {
     /** `实例 id → 已同步过的 finishAt`：倒计时到点只拉一次，避免对着同一完成时间反复请求。 */
     private readonly syncedFinishAt = new Map<number, number>();
 
-    constructor(private readonly gateway: IBigMapSlgGateway, private readonly config: IBigMapConfig,
-        private readonly now: () => number, private readonly timeoutMs = 5000) {}
+    constructor(
+        private readonly gateway: IBigMapSlgGateway,
+        private readonly config: IBigMapConfig,
+        private readonly now: () => number,
+        private readonly timeoutMs = 5000,
+        scope?: ResourceScope,
+    ) {
+        this.scope = scope ?? new ResourceScope('bigmap-slg-repository');
+        this.scope.defer(() => {
+            this.gateway.dispose?.();
+            this.revision += 1;
+            this.listeners.clear();
+        });
+    }
 
     invalidate(kind: 'game' | 'build'): void {
-        if (this.isDisposed) return;
+        if (this.scope.disposed) return;
         this.revision += 1;
         if (this.isWriting) this.refreshAfterWrite = true;
         else void this.refreshBuildInfo(true);
@@ -106,8 +122,8 @@ export class BigMapSlgRepository {
         const [game, builds, action] = await Promise.all([
             this.refreshGame(), this.refreshBuildInfo(), this.refreshAction(),
         ]);
-        const ok = !this.isDisposed && game && builds && action;
-        //记住「确实失败过」：`write` 据此把「正在同步」换成「同步失败，请检查网络后重试」。
+        const ok = !this.scope.disposed && game && builds && action;
+        //记住「确实失败过」：`write` 据此上报 `syncFailed` 而非 `loading`。
         this.hasSyncFailed = !ok;
         return ok;
     }
@@ -119,15 +135,15 @@ export class BigMapSlgRepository {
      *否则一次超时就能把「我在哪座城」从界面上抹掉。
      */
     refreshGame(force = false): Promise<boolean> {
-        if (this.isDisposed) return Promise.resolve(false);
+        if (this.scope.disposed) return Promise.resolve(false);
         if (this.gameTask) return force ? this.gameTask.then(() => this.refreshGame()) : this.gameTask;
         this.gameTask = this.loadGame().finally(() => { this.gameTask = null; });
         return this.gameTask;
     }
 
     private async loadGame(): Promise<boolean> {
-        const response = bigMapServerRecord(await this.request('CmdSlgGameInfoReqMsg', {}));
-        if (this.isDisposed) return false;
+        const response = await this.fetch('CmdSlgGameInfoReqMsg', {});
+        if (this.scope.disposed) return false;
         const info = normalizeBigMapGameInfo(response?.info);
         if (!info) return false;
         this.game = info;
@@ -136,7 +152,7 @@ export class BigMapSlgRepository {
     }
 
     refreshBuildInfo(invalidated = false): Promise<boolean> {
-        if (this.isDisposed) return Promise.resolve(false);
+        if (this.scope.disposed) return Promise.resolve(false);
         if (this.buildTask) {
             if (invalidated) this.refreshAgain = true;
             return this.buildTask;
@@ -175,16 +191,15 @@ export class BigMapSlgRepository {
         do {
             this.refreshAgain = false;
             const revision = this.revision;
-            const raw = await this.request('CmdSlgBuildInfoReqMsg', {});
-            if (this.isDisposed) return false;
-            const response = bigMapServerRecord(raw);
+            const response = await this.fetch('CmdSlgBuildInfoReqMsg', {});
+            if (this.scope.disposed) return false;
             const info = normalizeBigMapBuildInfo(response?.info);
             if (!info) this.reportSnapshotRejected(response);
             if (info && revision === this.revision && !this.isWriting) {
                 applied = this.apply(info);
                 if (!applied) this.reportProjectRejected(info);
             }
-        } while (this.refreshAgain && !this.isDisposed);
+        } while (this.refreshAgain && !this.scope.disposed);
         return applied;
     }
 
@@ -213,16 +228,16 @@ export class BigMapSlgRepository {
     }
 
     refreshAction(): Promise<boolean> {
-        if (this.isDisposed) return Promise.resolve(false);
+        if (this.scope.disposed) return Promise.resolve(false);
         if (this.actionTask) return this.actionTask;
         this.actionTask = this.loadAction().finally(() => { this.actionTask = null; });
         return this.actionTask;
     }
 
     private async loadAction(): Promise<boolean> {
-        const response = bigMapServerRecord(await this.request('CmdSlgActionUpdateReqMsg', {}));
+        const response = await this.fetch('CmdSlgActionUpdateReqMsg', {});
         const remaining = bigMapServerUint(bigMapServerRecord(response?.info)?.nextRevertTime);
-        if (this.isDisposed || remaining === null) return false;
+        if (this.scope.disposed || remaining === null) return false;
         //`nextRevertTime` 是剩余秒数，不是 Unix 时间，也不代表当前行动力数量 ——
         //协议里没有余额字段，界面只展示倒计时，不拿它反推总量。
         //`0` = 当前没有恢复计划（体力满）⇒ `actionRecoverAt` 置 0，`tick` 据此停止轮询。
@@ -252,7 +267,7 @@ export class BigMapSlgRepository {
      *   旧时间戳原地不动）⇒ 下一轮 tick 自然重试，不会把倒计时抹成 0 或 NaN。
      */
     tick(): void {
-        if (this.isDisposed || this.now() < this.nextPollAt) return;
+        if (this.scope.disposed || this.now() < this.nextPollAt) return;
         this.nextPollAt = this.now() + 5;
         if (this.actionRecoverAt === null || (this.actionRecoverAt > 0 && this.now() >= this.actionRecoverAt)) void this.refreshAction();
         this.syncFinishedQueue();
@@ -291,7 +306,7 @@ export class BigMapSlgRepository {
         return this.write('CmdSlgBuildReqMsg', { buildingId, position, instant: instant ? 1 : 0 }, (rsp) => {
             const build = normalizeBigMapBuild(rsp.build);
             return build && build.buildingId === buildingId && build.position === position && this.applyBuildResponse(build, rsp.queue);
-        }, SLG_TEXT.built);
+        }, 'built');
     }
 
     upgrade(instanceId: number, instant = false): Promise<IBigMapSlgResult> {
@@ -299,7 +314,7 @@ export class BigMapSlgRepository {
         return this.write('CmdSlgBuildUpgradeReqMsg', { buildInstId: instanceId, instant: instant ? 1 : 0 }, (rsp) => {
             const build = normalizeBigMapBuild(rsp.build);
             return build && build.instanceId === instanceId && this.applyBuildResponse(build, rsp.queue);
-        }, SLG_TEXT.upgraded);
+        }, 'upgraded');
     }
 
     cancel(instanceId: number): Promise<IBigMapSlgResult> {
@@ -314,7 +329,7 @@ export class BigMapSlgRepository {
             const builds = this.info.builds.filter((item) => item.instanceId !== instanceId);
             if (build) builds.push(build);
             return this.apply({ ...this.info, builds, queues: this.info.queues.filter((queue) => queue.instanceId !== instanceId) });
-        }, SLG_TEXT.cancelled);
+        }, 'cancelled');
     }
 
     move(instanceId: number, position: number): Promise<IBigMapSlgResult> {
@@ -322,7 +337,7 @@ export class BigMapSlgRepository {
         return this.write('CmdSlgBuildMoveReqMsg', { buildInstId: instanceId, position }, (rsp) => {
             const build = normalizeBigMapBuild(rsp.build);
             return build && build.instanceId === instanceId && build.position === position && this.replaceBuild(build);
-        }, SLG_TEXT.moved);
+        }, 'moved');
     }
 
     /** 批量领取：服务端按实例列表一次结算，并回写这些建筑的权威状态。 */
@@ -355,7 +370,7 @@ export class BigMapSlgRepository {
             if (updated.size === 0) return true;
             return this.apply({ ...this.info,
                 builds: this.info.builds.map((build) => updated.get(build.instanceId) ?? build) });
-        }, SLG_TEXT.collected).then((result) => result.ok ? { ...result, rewards } : result);
+        }, 'collected').then((result) => result.ok ? { ...result, rewards } : result);
     }
 
     unlockQueue(queueId: number): Promise<IBigMapSlgResult> {
@@ -363,15 +378,11 @@ export class BigMapSlgRepository {
         return this.write('CmdSlgBuildUnlockQueueReqMsg', { queueId }, (rsp) => {
             const count = bigMapServerUint(rsp.unlockQueue);
             return this.info && count === queueId && this.apply({ ...this.info, unlockQueue: count });
-        }, SLG_TEXT.unlocked);
+        }, 'unlocked');
     }
 
     dispose(): void {
-        if (this.isDisposed) return;
-        this.isDisposed = true;
-        this.gateway.dispose?.();
-        this.revision += 1;
-        this.listeners.clear();
+        this.scope.dispose();
     }
 
     private validPosition(position: number): boolean {
@@ -380,43 +391,74 @@ export class BigMapSlgRepository {
     private hasInstance(id: number): boolean {
         return bigMapServerInstanceId(id) !== null && !!this.info?.builds.some((build) => build.instanceId === id);
     }
-    private invalid(): Promise<IBigMapSlgResult> { return Promise.resolve({ ok: false, message: SLG_TEXT.invalid }); }
+    private fail(status: Exclude<BigMapSlgResultStatus, 'ok'>): IBigMapSlgResult {
+        return { ok: false, status };
+    }
+    private invalid(): Promise<IBigMapSlgResult> {
+        return Promise.resolve(this.fail('invalid'));
+    }
 
-    private async request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<unknown> {
-        if (this.isDisposed) return null;
-        try { return await withTimeout(this.gateway.request(name, body), this.timeoutMs, () => null); }
-        catch { return null; }
+    /** 超时 / 异常都没有结论：服务端可能已执行，按「未确认」交给写链路只重拉、不重发。 */
+    private async request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<IBigMapSlgRequestOutcome> {
+        if (this.scope.disposed) return { status: 'offline' };
+        try {
+            return await withTimeout(this.gateway.request(name, body), this.timeoutMs,
+                (): IBigMapSlgRequestOutcome => ({ status: 'unconfirmed' }));
+        } catch {
+            return { status: 'unconfirmed' };
+        }
+    }
+
+    /** 读请求只关心回包；没有结论或回包不是对象，一律当「这次没拿到」。 */
+    private async fetch(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<Record<string, unknown> | null> {
+        const outcome = await this.request(name, body);
+        return outcome.status === 'ok' ? bigMapServerRecord(outcome.response) : null;
     }
 
     private async write(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody,
-        apply: (rsp: Record<string, unknown>) => unknown, message: string): Promise<IBigMapSlgResult> {
-        if (this.isDisposed) return { ok: false, message: SLG_TEXT.disposed };
+        apply: (rsp: Record<string, unknown>) => unknown, action: BigMapSlgActionKind): Promise<IBigMapSlgResult> {
+        if (this.scope.disposed) {
+            return this.fail('disposed');
+        }
         if (!this.ready) {
             //还没拿到权威快照：可能是首帧 `initialize()` 没回，也可能是上次写失败置了 `isBuildDirty`。
-            //只回一句「正在同步基地信息」就完事，玩家看到的是「点了没反应、服务器也没收到」——
+            //只回一句状态就完事，玩家看到的是「点了没反应、服务器也没收到」——
             //所以这里主动补拉一次（`refreshBuildInfo` 自己有 in-flight 合并，不会打爆服务器）。
             void this.refreshBuildInfo(true);
-            return { ok: false, message: this.hasSyncFailed ? SLG_TEXT.syncFailed : SLG_TEXT.loading };
+            return this.fail(this.hasSyncFailed ? 'syncFailed' : 'loading');
         }
-        if (this.isWriting) return { ok: false, message: SLG_TEXT.busy };
+        if (this.isWriting) {
+            return this.fail('busy');
+        }
         this.isWriting = true;
         this.revision += 1;
         try {
-            const response = bigMapServerRecord(await this.request(name, body));
-            if (this.isDisposed) return { ok: false, message: SLG_TEXT.disposed };
+            const outcome = await this.request(name, body);
+            if (this.scope.disposed) {
+                return this.fail('disposed');
+            }
+            if (outcome.status === 'rejected') {
+                //服务端明确拒绝（`CmdTips` 已把原因弹给玩家）：基地状态没变，不置脏、不重拉；
+                //Controller 据此不补发第二条提示。
+                return this.fail('rejected');
+            }
+            if (outcome.status === 'offline') {
+                return this.fail('offline');
+            }
+            const response = outcome.status === 'ok' ? bigMapServerRecord(outcome.response) : null;
             if (!response || !apply(response)) {
                 //服务端可能已执行但回包丢失，只重拉事实，禁止重新发送这次写操作。
                 this.isBuildDirty = true;
                 this.revision += 1;
                 this.refreshAfterWrite = true;
-                return { ok: false, message: SLG_TEXT.failed };
+                return this.fail('failed');
             }
             this.revision += 1;
             this.emit();
-            return { ok: true, message };
+            return { ok: true, status: 'ok', action };
         } finally {
             this.isWriting = false;
-            if (this.refreshAfterWrite && !this.isDisposed) {
+            if (this.refreshAfterWrite && !this.scope.disposed) {
                 this.refreshAfterWrite = false;
                 void this.refreshBuildInfo(true);
             }

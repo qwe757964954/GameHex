@@ -13,7 +13,7 @@ export const GUIDE_TEXTS = {
      * 必须由客户端补：引导奖励是**后端在这一步完成时发的**，`guideStep.rewardJson`
      * 客户端只解析、没有任何消费方（`grep rewards assets/script/app/guide` 会命中这一点），
      * 所以「发了奖励」这件事没有别的出口可以挂提示 —— 见 `GuideComposition` 里对
-     * `GuideEvent.Complete` 的监听（判 `pageOpened:task` + `stepId === '8-1'`）。
+     * `GuideEvent.Output` 完成 `8-1` 信号的监听。
      */
     finishRewardTip: '新手引导完成，获得奖励',
 } as const;

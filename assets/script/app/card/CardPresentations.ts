@@ -1,5 +1,5 @@
 import type { SpriteFrame } from 'cc';
-import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 import type {
     LineupBoardData
 } from './CardRepository';

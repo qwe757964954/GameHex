@@ -119,7 +119,7 @@ function makeGateway(rosters: ReadonlyMap<number, readonly ReturnType<typeof rol
         fetchSimple: async () => null,
         fetchDetail: async (ids) => ({ infos: ids.map((campId) => ({ campId, opType: 0, state: 1 })) }),
         fetchRoles: async (campId) => ({ campId, infos: [...(rosters.get(campId) ?? [])] }),
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
     };
     return {
         gateway,
@@ -224,7 +224,7 @@ test('★Presenter：广播按 pos 反查据点，详情面板角色列表实时
             roster.campId = campId;
             return { campId, infos: roster.infos };
         },
-        requestMove: async () => null,
+        requestMove: async () => ({ status: 'unconfirmed' }),
     };
     const repository = new BigMapCampRepository(gateway);
     const presenter = new BigMapModel({

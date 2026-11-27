@@ -1,13 +1,12 @@
-import type { Prefab, SpriteFrame } from 'cc';
 import type { ResourceScope } from '../../core/asset/ResourceScope';
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
 import { EventMgr } from '../../framework/event/EventMgr';
 import type { ICardRepository } from './CardRepository';
-import type { ICardMaterialIcon, ICardUpgradeMaterials, ICardUpgradeViewState, ICardSkillOpenData } from './CardPresentations';
+import type { ICardMaterialIcon, ICardUpgradeMaterials } from './CardPresentations';
 import type { ZCUpgradeStatus } from './CardUpgradeCost';
 import type { ICardDetailArt } from './CardArtProvider';
 import type { ICardLineupCatalog } from './CardArtConfig';
-import type { ICardUpgradedChrome } from './CardUpgradedArt';
+import type { ICardUpgradedArtBundle } from './CardUpgradedArt';
 import type { ICardUpgradedContent } from './CardUpgradedPresentation';
 import type { CardDetailPresentation } from './CardDetailPresenter';
 import { formatCritDamageGain } from './CardDetailCritDamage';
@@ -15,41 +14,18 @@ import { resolveDetailNeighbor } from './CardDetailPresenter';
 import { cardClassName, resolveCardClass, resolveCardDisplayLevel } from './CardLineupTypes';
 import type { ZCCardClass } from './CardLineupTypes';
 import { CardUpgradeModel } from './CardUpgradeModel';
-import { CardPopupEvent, type CardUpgradeIntent } from './CardPopupEvents';
+import { CardPopupEvent, type CardUpgradeIntent, type CardUpgradeOutput } from './CardPopupEvents';
 import { CardLineupEvent } from './CardLineupEvents';
-import type { ZCCardRarity, ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 
 export interface ICardUpgradeControllerOptions {
-    readonly owner: object;
     readonly model: CardUpgradeModel;
     readonly repository: Pick<ICardRepository, 'loadUpgradeStatus' | 'loadCardDetail' | 'upgradeHero' | 'applyHeroLevel' | 'loadDetailNavigation' | 'loadDetailArt' | 'loadArtConfig' | 'loadMaterialIcon'>;
-    readonly failed: (error: unknown) => void;
-    readonly view: {
-        readonly render: (state: ICardUpgradeViewState) => void;
-    };
-    readonly loading: {
-        readonly beginLoading: () => () => void;
-    };
-    readonly requests: {
-        readonly removeCaller: (caller: object) => void;
-    };
-    readonly popups: {
-        readonly openSkills: (data: ICardSkillOpenData) => void;
-        readonly openUpgraded?: (content: ICardUpgradedContent) => void;
-    };
-    /** 成功弹窗的按品质背景/属性框与职业图标；测试或纯数据场景可省略。 */
-    readonly upgradedArt?: {
-        readonly loadChrome: (rarity: ZCCardRarity) => Promise<ICardUpgradedChrome>;
-        readonly loadClassIcon: (cardClass: ZCCardClass) => Promise<SpriteFrame | null>;
-        /** 按兵种 prefab 路径加载骨骼；作用域由控制器传入，弹窗关闭时一起释放。 */
-        readonly loadHeroPrefab?: (path: string, scope: ResourceScope) => Promise<Prefab | null>;
-    };
-}
-/** 成功弹窗的美术三件套（`loadUpgradedArt` 的产物，可提前起跑）。 */
-interface ICardUpgradedArtBundle {
-    readonly chrome: ICardUpgradedChrome;
-    readonly classIcon: SpriteFrame | null;
-    readonly heroPrefab: Prefab | null;
+    readonly loadUpgradedArt?: (
+        card: ZCDeckCard,
+        cardClass: ZCCardClass,
+        scope: ResourceScope,
+    ) => Promise<ICardUpgradedArtBundle>;
 }
 
 export class CardUpgradeController extends ControllerBase {
@@ -58,18 +34,13 @@ export class CardUpgradeController extends ControllerBase {
     private materials: ICardUpgradeMaterials = { card: null, exp: null };
     private materialKey: string | null = null;
     private materialTask: Promise<[ICardMaterialIcon | null, ICardMaterialIcon | null]> | null = null;
-    private started = false;
     private switching = false;
+    private submitting = false;
     private refreshRevision = 0;
-    private releaseLoading: (() => void) | null = null;
     constructor(context: IControllerContext, private readonly options: ICardUpgradeControllerOptions) {
         super(context, 'card-upgrade');
-        this.own(() => options.requests.removeCaller(this));
-        this.own(() => this.stopLoading());
     }
     async start(): Promise<void> {
-        if (this.started || this.isDisposed) return;
-        this.started = true;
         this.listen(CardPopupEvent.UpgradeIntent, this.onIntent);
         const revision = ++this.refreshRevision;
         const [art, config] = await Promise.all([
@@ -82,8 +53,14 @@ export class CardUpgradeController extends ControllerBase {
         this.publish();
         await this.refresh();
     }
+    private emitOutput(output: CardUpgradeOutput): void {
+        EventMgr.instance.emit(CardPopupEvent.UpgradeOutput, output, this);
+    }
     private publish(): void {
-        this.options.view.render({ ...this.options.model.snapshot, art: this.art, lineup: this.lineup, materials: this.materials });
+        this.emitOutput({
+            kind: 'render',
+            state: { ...this.options.model.snapshot, art: this.art, lineup: this.lineup, materials: this.materials },
+        });
     }
     private async refreshMaterials(status: ZCUpgradeStatus): Promise<void> {
         const cardId = status.requirements.find(row => row.key === 'card')?.itemId ?? '';
@@ -142,7 +119,7 @@ export class CardUpgradeController extends ControllerBase {
                         return;
                     }
                     model.setPhase('failed');
-                    this.options.failed(error);
+                    this.emitOutput({ kind: 'failed', error });
                     this.publish();
                 }),
             repository.loadCardDetail(cardId, level)
@@ -186,7 +163,7 @@ export class CardUpgradeController extends ControllerBase {
             return;
         }
         const data = { heroId: model.heroId, skillId: event.skillId };
-        this.options.popups.openSkills(data);
+        this.emitOutput({ kind: 'openSkills', data });
     }
     private async switchDetail(direction: -1 | 1): Promise<void> {
         this.switching = true;
@@ -203,11 +180,11 @@ export class CardUpgradeController extends ControllerBase {
             ]);
             if (this.isDisposed) return;
             if (status.status === 'rejected') {
-                this.options.failed(status.reason);
+                this.emitOutput({ kind: 'failed', error: status.reason });
                 return;
             }
             if (art.status === 'rejected') {
-                this.options.failed(art.reason);
+                this.emitOutput({ kind: 'failed', error: art.reason });
                 return;
             }
             if (detail.status === 'rejected') {
@@ -222,34 +199,29 @@ export class CardUpgradeController extends ControllerBase {
             void this.refreshMaterials(status.value);
             this.publish();
         } catch (error) {
-            if (!this.isDisposed) this.options.failed(error);
+            if (!this.isDisposed) this.emitOutput({ kind: 'failed', error });
         } finally { this.switching = false; }
     }
-    private stopLoading(): void {
-        const release = this.releaseLoading;
-        this.releaseLoading = null;
-        release?.();
-    }
-    /**
-     * 升级弹窗英雄位的兵种骨骼 prefab。
-     *
-     * 走控制器自己的资源作用域：弹窗关闭、控制器释放时，prefab 与 Spine 依赖一起归还。
-     * 建造卡没有 unitPrefabPath，或骨骼加载失败时返回 null，由视图退回静态立绘。
-     */
-    private loadUnitPrefab(
-        card: ZCDeckCard,
-        provider: ICardUpgradeControllerOptions['upgradedArt'] | undefined,
-    ): Promise<Prefab | null> {
-        const path = card.unitPrefabPath;
-        const load = provider?.loadHeroPrefab;
-        if (!path || !load) return Promise.resolve(null);
-        return load(path, this.scope)
-            .catch((error: unknown) => {
-                console.warn(`[CardUpgradeController] 升级弹窗骨骼加载失败：${path}`, error);
-                return null;
+    /** 在当前提交流程作用域内发出并托管 loading 状态，确保销毁或结束时至多收起一次。 */
+    private async withLoading<T>(level: number, task: (hideLoading: () => void) => Promise<T>): Promise<T> {
+        let released = false;
+        const release = (): void => {
+            if (released) return;
+            released = true;
+            this.emitOutput({ kind: 'loading', level: null });
+        };
+        const detach = this.own(release);
+        this.emitOutput({ kind: 'loading', level });
+        try {
+            return await task(() => {
+                release();
+                detach();
             });
+        } finally {
+            release();
+            detach();
+        }
     }
-
     /**
      * 升级成功后的展示弹窗。
      *
@@ -260,48 +232,19 @@ export class CardUpgradeController extends ControllerBase {
      * `consumed` 是提交前的材料状态，`previousDetail` 包含旧属性和本次升级的预览增量。
      * 下一级的材料行取升级后的 `snapshot.status` —— 刷光后进度条从满格退到它。
      */
-    /**
-     * 成功弹窗要用的美术三件套（背景 / 职业图标 / 兵种骨骼）。
-     *
-     * 这三样只取决于「哪张卡 + 什么品级 + 什么职业」，与升级结果无关 ⇒ 可以在
-     * `upgradeHero` 请求还在飞的时候就起跑，把两段等待叠起来（见 `submit`）。
-     * 不预取的话，用户点完升级要串行等「请求 + 刷新 + 三张图」才看得到弹窗。
-     */
-    private loadUpgradedArt(): Promise<ICardUpgradedArtBundle> {
-        const provider = this.options.upgradedArt;
-        const empty: ICardUpgradedArtBundle = {
-            chrome: { background: null, frame: null }, classIcon: null, heroPrefab: null,
-        };
-        const card = this.options.model.snapshot.data.card;
-        if (!provider || !card) return Promise.resolve(empty);
-        const lineup = this.lineup;
-        const cardClass: ZCCardClass = lineup ? resolveCardClass(card, lineup) : 'tank';
-        return Promise.all([
-            provider.loadChrome(card.rarity),
-            provider.loadClassIcon(cardClass),
-            this.loadUnitPrefab(card, provider),
-        ]).then(([chrome, classIcon, heroPrefab]) => ({ chrome, classIcon, heroPrefab }))
-            .catch((error: unknown) => {
-                console.warn('[CardUpgradeController] 升级弹窗美术加载失败', error);
-                return empty;
-            });
-    }
-
     private async openUpgraded(
         level: number,
         consumed: ZCUpgradeStatus | null,
         previousDetail: CardDetailPresentation | null,
-        prefetchedArt?: Promise<ICardUpgradedArtBundle>,
+        prefetchedArt: Promise<ICardUpgradedArtBundle>,
     ): Promise<void> {
-        const open = this.options.popups.openUpgraded;
         const snapshot = this.options.model.snapshot;
         const card = snapshot.data.card;
-        if (!open || this.isDisposed || !card) return;
+        if (this.isDisposed || !card) return;
         const lineup = this.lineup;
         const cardClass: ZCCardClass = lineup ? resolveCardClass(card, lineup) : 'tank';
         const className = lineup ? cardClassName(cardClass, lineup) : card.traits?.attack ?? '';
-        // 提交那一刻就已经起跑的预取（拿不到就现load，行为与老路径一致）。
-        const { chrome, classIcon, heroPrefab } = await (prefetchedArt ?? this.loadUpgradedArt());
+        const { chrome, classIcon, heroPrefab } = await prefetchedArt;
         if (this.isDisposed) return;
         if (!chrome.background) {
             console.warn('[CardUpgradeController] 升级弹窗背景缺失，跳过展示');
@@ -335,7 +278,7 @@ export class CardUpgradeController extends ControllerBase {
         const previousHp = previousDetail?.stats.find(line => line.key === 'hp');
         const previousAttack = previousDetail?.stats.find(line => line.key === 'attack');
         const bonus = formatCritDamageGain(previousDetail?.critDamageGain ?? 0);
-        open({
+        const data: ICardUpgradedContent = {
             background: chrome.background,
             frame: chrome.frame,
             hero: this.art?.hero ?? null,
@@ -357,58 +300,64 @@ export class CardUpgradeController extends ControllerBase {
             previousHpValue: previousHp?.value || undefined,
             previousAttackValue: previousAttack?.value || undefined,
             bonusText: bonus ? `所有单位暴击伤害提升<color=#1E9007>${bonus}</color>` : '',
-        });
+        };
+        this.emitOutput({ kind: 'openUpgraded', data });
     }
     private async submit(): Promise<void> {
         const { model, repository } = this.options;
-        if (!model.canSubmit || this.releaseLoading || this.isDisposed) {
+        if (!model.canSubmit || this.submitting || this.isDisposed) {
             return;
         }
+        this.submitting = true;
         this.refreshRevision++;
         model.setPhase('submitting');
-        this.publish();
-        const releaseLoading = this.options.loading.beginLoading();
-        this.releaseLoading = releaseLoading;
         try {
-            const { status: consumed, detail, cardId, level } = model.snapshot;
-            // 成功弹窗的美术与升级请求**并行**起跑：它只取决于卡 / 品级 / 职业，与升级结果无关。
-            // 串行等的话，点完升级要依次等「请求 + 刷新 + 三张图」才见到弹窗，体感就是「进弹窗很慢」。
-            const upgradedArt = this.loadUpgradedArt();
-            const result = await repository.upgradeHero(model.heroId, this);
-            if (this.isDisposed) {
-                return;
-            }
-            if (result.kind === 'success') {
-                model.confirm(result.level);
-                repository.applyHeroLevel(result.heroId, result.level);
-                EventMgr.instance.emit(CardLineupEvent.HeroUpgraded, { heroId: result.heroId, level: result.level });
+            this.publish();
+            if (this.isDisposed) return;
+            await this.withLoading(model.snapshot.level, async (hideLoading) => {
+                if (this.isDisposed) return;
+                const { data: { card }, status: consumed, detail, cardId, level } = model.snapshot;
+                // 成功弹窗的美术与升级请求**并行**起跑：它只取决于卡 / 品级 / 职业，与升级结果无关。
+                // 串行等的话，点完升级要依次等「请求 + 刷新 + 三张图」才见到弹窗，体感就是「进弹窗很慢」。
+                const upgradedArt = card && this.options.loadUpgradedArt?.(
+                    card, this.lineup ? resolveCardClass(card, this.lineup) : 'tank', this.scope,
+                );
+                const result = await repository.upgradeHero(model.heroId, this);
                 if (this.isDisposed) {
                     return;
                 }
-                this.publish();
-                // 升级按钮可早于详情就绪，缺旧详情时与新等级刷新并行补读。
-                const previousDetail = this.options.popups.openUpgraded && result.level === level + 1
-                    ? detail ?? repository.loadCardDetail(cardId, level).catch(() => null)
-                    : null;
-                const [, upgradedFrom] = await Promise.all([this.refresh(), previousDetail]);
-                if (this.isDisposed || model.snapshot.cardId !== cardId || model.snapshot.level !== result.level) {
-                    return;
+                if (result.kind === 'success') {
+                    model.confirm(result.level);
+                    repository.applyHeroLevel(result.heroId, result.level);
+                    EventMgr.instance.emit(CardLineupEvent.HeroUpgraded, { heroId: result.heroId, level: result.level });
+                    if (this.isDisposed) {
+                        return;
+                    }
+                    this.publish();
+                    // 升级按钮可早于详情就绪，缺旧详情时与新等级刷新并行补读。
+                    const previousDetail = upgradedArt && result.level === level + 1
+                        ? detail ?? repository.loadCardDetail(cardId, level).catch(() => null)
+                        : null;
+                    const [, upgradedFrom] = await Promise.all([this.refresh(), previousDetail]);
+                    if (this.isDisposed || model.snapshot.cardId !== cardId || model.snapshot.level !== result.level) {
+                        return;
+                    }
+                    // 先收起“升级中”，让成功弹窗自己承担出入场；刷新失败也不改升级结果。
+                    hideLoading();
+                    if (upgradedArt) await this.openUpgraded(result.level, consumed, upgradedFrom, upgradedArt);
+                } else {
+                    model.setPhase(result.kind);
+                    this.publish();
                 }
-                // 先收起“升级中”，让成功弹窗自己承担出入场；刷新失败也不改升级结果。
-                this.stopLoading();
-                await this.openUpgraded(result.level, consumed, upgradedFrom, upgradedArt);
-            } else {
-                model.setPhase(result.kind);
-                this.publish();
-            }
+            });
         } catch (error) {
             if (!this.isDisposed) {
                 model.setPhase('failed');
                 this.publish();
-                this.options.failed(error);
+                this.emitOutput({ kind: 'failed', error });
             }
         } finally {
-            if (this.releaseLoading === releaseLoading) this.stopLoading();
+            this.submitting = false;
         }
     }
 }

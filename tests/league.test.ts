@@ -38,6 +38,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
+import { LEAGUE_ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
     LEAGUE_ART_BANNER_BASE,
     LEAGUE_ART_BANNER_FRAME,
@@ -48,7 +49,6 @@ import {
     LEAGUE_ART_BTN_TITLE,
     LEAGUE_ART_HELP,
     LEAGUE_ART_INFO_BG,
-    LEAGUE_ART_ROOT,
     LEAGUE_ART_SLICED,
     LEAGUE_BANNER_COLOR_COUNT,
     LEAGUE_BANNER_COLORS,

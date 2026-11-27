@@ -258,15 +258,21 @@ test('⑤ 重击柱登记：target 锚点（落在目标坐标）+ 落点即圆�
     const prefab = JSON.parse(readFileSync(
         assetPath('units/projectiles/仙桃行者_重击技能/仙桃行者_重击技能.prefab'), 'utf8',
     )) as Array<Record<string, any>>;
-    //  两级节点：根只做容器，缩放与落点补偿挂在 `offset` 子节点上（生成脚本的固定骨架）。
+    //  两级节点：根只做容器，落点补偿挂在 `offset` 子节点上（生成脚本的固定骨架）。
     const root = prefab.find((entry) => entry.__type__ === 'cc.Node' && entry._parent === null);
     assert.ok(root, 'prefab 要有根节点');
     const offset = prefab.find((entry) => entry.__type__ === 'cc.Node' && entry._name === 'offset');
     assert.ok(offset, 'prefab 要有 offset 子节点（美术居中补偿就挂在这里）');
-    assert.ok(Math.abs(offset!._lscale.x - 0.56) < 1e-9,
-        `offset 缩放应为 0.56，实际 ${offset!._lscale.x}`);
-    assert.ok(Math.abs(offset!._lpos.y - 116.27) < 0.01,
-        `offset 的 y 偏移应为 116.27（画面那圈裂纹的中心），实际 ${offset!._lpos.y}`);
+    //  尺寸全烘进画布（144×321）⇒ 根与 offset 都不留缩放，两个真源会互相打架。
+    assert.deepEqual([root!._lscale.x, root!._lscale.y], [1, 1],
+        `根节点不该再有缩放，实际 ${root!._lscale.x}`);
+    assert.ok(Math.abs(offset!._lscale.x - 1) < 1e-9,
+        `offset 缩放应为 1（尺寸在画布里），实际 ${offset!._lscale.x}`);
+    assert.ok(Math.abs(offset!._lpos.y - 116.92) < 0.01,
+        `offset 的 y 偏移应为 116.92（144×321 画布里那圈裂纹的中心），实际 ${offset!._lpos.y}`);
+    const size = prefab.find((entry) => entry.__type__ === 'cc.UITransform');
+    assert.deepEqual([size!._contentSize.width, size!._contentSize.height], [144, 321],
+        '内容尺寸应与烘焙画布一致');
 });
 
 test('⑥ 名单覆盖：36241 → 重击柱；30844 登记为「不播」；没登记的一律回落（定案 A 口径不变）', () => {

@@ -10,7 +10,7 @@ import {
 import { loadTerritoryCampaign } from './TerritoryCampaignRepository';
 import { configureTerritoryMap } from '../model/TerritoryMapConfig';
 import { TERRITORY_PATROL_OUTLINE_EFFECT_PATH } from '../model/TerritoryMonsterPatrol';
-import { parsePrefabSize } from '../../zcds/model/ZCPvpTableParser';
+import { parsePrefabSize } from '../../../core/table/RowParse';
 import { EffectAsset, Material, Prefab } from 'cc';
 import { RefUtil } from '../../../framework/ref/RefUtil';
 

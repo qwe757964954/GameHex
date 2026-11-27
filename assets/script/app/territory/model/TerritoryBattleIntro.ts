@@ -148,7 +148,7 @@ export const TERRITORY_BATTLE_INTRO_COVER_FRAME_SECONDS = 0.18;
  * 160 是"够用"与"别白画"之间的值：再大只是多铺一圈永远出不了画面的云
  * （1080×1920 的屏，余量每加 100 ⇒ 多 ~15 团、多一份全屏 overdraw）。
  */
-export const TERRITORY_BATTLE_INTRO_COVER_MARGIN = 160;
+const TERRITORY_BATTLE_INTRO_COVER_MARGIN = 160;
 
 /**
  * 位置抖动幅度（占间距的比例，0~0.5）。
@@ -156,7 +156,7 @@ export const TERRITORY_BATTLE_INTRO_COVER_MARGIN = 160;
  * 0.3 ⇒ 每团最多偏离格点 ±0.15 个间距（横向 ±25px、纵向 ±22px）：
  * 够把"网格"打散成随机错落，又留得住"每处都被两三团叠着"这件事。
  */
-export const TERRITORY_BATTLE_INTRO_COVER_JITTER = 0.3;
+const TERRITORY_BATTLE_INTRO_COVER_JITTER = 0.3;
 
 /**
  * `in` 段的**错峰**上限（0~1）。

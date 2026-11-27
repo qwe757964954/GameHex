@@ -440,7 +440,7 @@ export class ZCEffectPool {
         this.deadFxPending.delete(unitId);
     }
 
-    /** 入口和出口独立开合，同格同批只播一次，不改地块次数/冷却圆环。*/
+    /** 传送入口开合，同格同批只播一次，不改地块次数/冷却圆环。*/
     playPortalFx(hexId: number, x: number, y: number, startedAt: number, frame: SpriteFrame): void {
         const existing = this.portalFxNodes.get(hexId);
         if (existing) {

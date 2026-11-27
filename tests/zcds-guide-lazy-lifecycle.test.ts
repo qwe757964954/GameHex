@@ -6,12 +6,11 @@ import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import * as guideConfig from '../assets/script/app/zcds/model/ZCGuideConfig';
 import type { ZCGuideLoader } from '../assets/script/app/zcds/application/ZCGuideLoader';
-import { runtimeFixture, deferred, flush } from './helpers/battle-runtime';
+import { type ITestBattlePopup, runtimeFixture, deferred, flush } from './helpers/battle-runtime';
 import { loadViews } from './helpers/zcds-view-fixtures';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { ZCGameUiEvent } from '../assets/script/app/zcds/view/ZCGameHudEvents';
 import type { IZCGuidePreparedContent } from '../assets/script/app/zcds/application/ZCGuideLoader';
-import type { IZCBattlePopup } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
 
 const content: IZCGuidePreparedContent = { entries: [], params: guideConfig.ZC_GUIDE_DEFAULT_PARAMS, iconFrames: new Map() };
 
@@ -104,7 +103,7 @@ test('指南内容加载期间离场或换局，不创建迟到弹窗', async ()
     }
 });
 test('指南弹窗加载期间离场，迟到弹窗立即关闭', async () => {
-    const pending = deferred<IZCBattlePopup | null>(); let closed = 0;
+    const pending = deferred<ITestBattlePopup | null>(); let closed = 0;
     const h = runtimeFixture({}, false, undefined, { openGuide: () => pending.promise });
     EventMgr.instance.emit(ZCGameUiEvent.OpenGuide); await flush(); h.dispose();
     pending.resolve({ close: () => closed++ }); await flush();

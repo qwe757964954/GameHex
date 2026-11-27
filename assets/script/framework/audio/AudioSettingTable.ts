@@ -13,7 +13,7 @@
  */
 
 /** 音量上限（老端 `Slider.max = 100`）。 */
-export const AUDIO_VOLUME_MAX = 100;
+const AUDIO_VOLUME_MAX = 100;
 
 /**
  * 首次（本地无存档）时的音量。
@@ -30,13 +30,13 @@ export const DEFAULT_VOLUME = 100;
  * 注意老端的语义**不是**「记住上次音量」：
  * 关 → 直接写 0（旧值丢掉）；再开 → 因为当前是 0，所以回到 50。
  */
-export const RESTORE_VOLUME = 50;
+const RESTORE_VOLUME = 50;
 
 /** 音乐开关的本地键前缀（老端 `OnOffMusic.GetKey()`）。 */
-export const MUSIC_STORAGE_KEY_PREFIX = 'setting_music';
+const MUSIC_STORAGE_KEY_PREFIX = 'setting_music';
 
 /** 音效开关的本地键前缀（老端 `OnOffSound.GetKey()`）。 */
-export const SOUND_STORAGE_KEY_PREFIX = 'setting_sound';
+const SOUND_STORAGE_KEY_PREFIX = 'setting_sound';
 
 /** 账号键名（老端 `OnOff.GetAccount()` 读的就是这个）。 */
 export const ACCOUNT_STORAGE_KEY = 'account_num';

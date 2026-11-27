@@ -42,6 +42,8 @@ import {
     UITransform,
 } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
+import { AudioMgr } from '../../framework/audio/AudioMgr';
+import { GAME_AUDIO } from '../ResConst';
 import { CardUnitPreview } from './CardUnitPreview';
 import type { ICardUpgradedContent } from './CardUpgradedPresentation';
 import {
@@ -339,6 +341,10 @@ export class CardUpgradedPage extends PopupBase {
     protected onOpen(userData?: ICardUpgradedContent): void {
         if (!userData) return;
         this.render(userData);
+        // 2026-11-26 用户：「卡牌升级界面展示时播放升级成功通用音效」——
+        // 这条弹窗本身就是「升级成功」的展示，所以音效与入场同时起，不进时间轴
+        // （时间轴管的是光效/换字，音效没有「该在哪一帧」的问题）。
+        void AudioMgr.instance.playSound(GAME_AUDIO.upgradeSuccess, this.resourceScope);
         void this.loadAnimationAssets()
             .catch((error: unknown) => {
                 console.warn('[CardUpgradedPage] 动画资源准备失败，按无动画渲染', error);

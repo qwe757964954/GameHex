@@ -16,13 +16,10 @@
  * 老端 `bb_pic11.png` 就有 38×38 与 345×83 两个不同版本）。
  */
 
-/** 本模块自有图目录（`assets/resources/image/playerinfo`）。 */
-export const PI_ART_DIR = 'playerinfo';
-
 /**
  * 全部图的 key → 相对 `assets/resources/image/` 的路径（不带扩展名）。
  */
-export const PI_ART_NAMES: Readonly<Record<string, string>> = {
+const PI_ART_NAMES: Readonly<Record<string, string>> = {
     // ---------- 公共（`image/common`，与主线任务 / 物品详情共用同一份）----------
     /** 公共弹窗底 394×307（老端 `panel_window_01_9gong`，九宫 129,128,123,36）。 */
     panelWindow: 'common/cu_panel_window_01_9gong',
@@ -120,7 +117,7 @@ export const PI_ART_NAMES: Readonly<Record<string, string>> = {
  * ⚠️ 不是第二真源：`tmp/_fguilib.mjs` 的 `emit()` 自检③ 会与 `.meta` **双向对账**，
  * 这里写了而 `.meta` 没打（或反之）都会直接 fail。
  */
-export const PI_ART_SLICED: ReadonlySet<string> = new Set<string>([
+const PI_ART_SLICED: ReadonlySet<string> = new Set<string>([
     'panelWindow',  // common/cu_panel_window_01_9gong  129,128,142,143
     'titleBrown',   // common/cu_title_brown           171,20,157,21
     'sectionBar',   // common/cu_bb_img03              58,0,59,0
@@ -151,4 +148,4 @@ export const PI_ART_SLICED: ReadonlySet<string> = new Set<string>([
  * 但 `tmp/_fguilib.mjs` 的 `createLib()` 会 `readArtSet(opts.tiledConst)`，缺了直接 `throw`；
  * ⚠️ 写法必须带 `([`，否则内核正则匹配不上。
  */
-export const PI_ART_TILED: ReadonlySet<string> = new Set<string>([]);
+const PI_ART_TILED: ReadonlySet<string> = new Set<string>([]);

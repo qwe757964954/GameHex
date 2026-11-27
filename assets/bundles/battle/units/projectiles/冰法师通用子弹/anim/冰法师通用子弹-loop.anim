@@ -1,0 +1,83 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "冰法师通用子弹-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 24,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 0.2916666667,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0416666667,
+            0.0833333333,
+            0.125,
+            0.1666666667,
+            0.2083333333,
+            0.25
+          ],
+          "_values": [
+            {
+              "__uuid__": "ec54811f-4a02-41a0-97f4-552271268c04@f9941"
+            },
+            {
+              "__uuid__": "96e4db6c-71b3-4e50-86bd-3113e6a8be34@f9941"
+            },
+            {
+              "__uuid__": "3470462f-6433-4516-9520-7f2e228af291@f9941"
+            },
+            {
+              "__uuid__": "c09ee6c2-1938-453b-a7c3-aba4d8c6d4a5@f9941"
+            },
+            {
+              "__uuid__": "99af4c6e-ca23-454b-b8d4-a0356d8b2dba@f9941"
+            },
+            {
+              "__uuid__": "04485f1f-e4fa-4599-a7b8-b15126bb4473@f9941"
+            },
+            {
+              "__uuid__": "a98fb472-a67a-4e1d-8ee6-bb0b8a76fb9d@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

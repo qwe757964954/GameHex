@@ -1,5 +1,5 @@
 import { _decorator, Color, Component, Label, Node, ProgressBar, Sprite, SpriteFrame } from 'cc';
-import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { GuideFocusAnchor } from '../guide/ui/GuideFocusAnchor';
 

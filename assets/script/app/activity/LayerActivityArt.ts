@@ -30,13 +30,9 @@
  */
 
 import {
-    ACTIVITY_ART_ROOT as ART_ACTIVITY_ROOT,
     COMMON_ART_ROOT,
 } from '../ArtPaths';
 import type { ActivityBoxPhase } from './LayerActivityTable';
-
-/** 活动美术目录（相对 `resources` 的路径）。 */
-export const ACTIVITY_ART_ROOT = ART_ACTIVITY_ROOT;
 
 /** 标题横幅所在目录（复用工程既有的 `image/common/title_02.png`）。 */
 export const ACTIVITY_TITLE_ART_ROOT = COMMON_ART_ROOT;
@@ -101,20 +97,7 @@ export function buttonArtKey(tone: 'green' | 'blue' | 'red' | 'gray'): string {
     return tone === 'red' ? 'btnRed' : 'btnGray';
 }
 
-// ============================================================
-// 奖励格：品质框 + 道具图标
-// ============================================================
-
-/** 品质框统一在 `common/QualityFrameArt`，这里只转发，不重算。 */
-export {
-    QUALITY_FRAME_ROOT,
-    QUALITY_FRAME_NAMES,
-    qualityFrameLevel,
-    qualityFrameName,
-} from '../common/QualityFrameArt';
-
 /**
- * 奖励图标实现归位到 `common/RewardIcon`；本文件不再转发图标符号。
- *
- * 资源目录与裸名例外表也只在 `ArtPaths` / `common/ResTypes` 维护，本文件不转出口。
+ * 品质框统一在 `common/QualityFrameArt`，奖励图标统一在 `common/RewardIcon`；
+ * 资源目录与裸名例外表只在 `ArtPaths` / `common/ResTypes` 维护，本文件不转发。
  */

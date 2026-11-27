@@ -1,5 +1,6 @@
 import { createZCBattleSession } from '../../zcds/application/ZCBattlePreparation';
 import { director, instantiate, Node, Prefab, SpriteFrame, UIOpacity, UITransform, view } from 'cc';
+import { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { GameContext } from '../../../core/runtime/GameContext';
 import type { ConfigService } from '../../../core/config/ConfigService';
 import { GameRoute } from '../../../core/runtime/GameRoute';
@@ -71,7 +72,7 @@ export class BigMapEntry {
         return manager.context;
     }
     private opening = false;
-    private openRevision = 0;
+    private sessionScope: ResourceScope | null = null;
     private stopBattleSwitch: (() => void) | null = null;
     private navigationRestore: (() => void) | null = null;
     /** 关闭回调（宿主注入；`close()` 时回调一次，用于把底栏高亮切回去）。 */
@@ -109,12 +110,22 @@ export class BigMapEntry {
         if (this.isOpen || this.opening) return;
         this.opening = true;
         this.saveOwner = owner;
-        const revision = ++this.openRevision;
+        const scope = new ResourceScope('bigmap-session');
+        this.sessionScope = scope;
+        const alive = (): boolean => {
+            return !scope.disposed && this.isSaveOwnerCurrent(owner);
+        };
         try {
             const sourceConfig = await this.ensureConfig(configs);
-            if (revision !== this.openRevision || !this.isSaveOwnerCurrent(owner)) return;
+            if (!alive()) {
+                scope.dispose();
+                return;
+            }
             const layout = await this.ensureLayout(sourceConfig);
-            if (revision !== this.openRevision || !this.isSaveOwnerCurrent(owner)) return;
+            if (!alive()) {
+                scope.dispose();
+                return;
+            }
             const config = layout
                 ? { ...sourceConfig, world: { ...sourceConfig.world, rows: layout.rows, cols: layout.columns } }
                 : sourceConfig;
@@ -122,13 +133,15 @@ export class BigMapEntry {
             const canvas = host ? null : this.findCanvas();
             if (!host && !canvas) {
                 console.warn('[BigMapEntry] 找不到 Canvas，无法打开大世界');
+                scope.dispose();
                 return;
             }
             const size = view.getVisibleSize();
             const root = await this.instantiatePageHost();
             //实例化是异步的：期间页面可能已被关掉 / 换了存档，那就要销毁刚建的节点，别泄漏。
-            if (revision !== this.openRevision || !this.isSaveOwnerCurrent(owner)) {
+            if (!alive()) {
                 root.destroy();
+                scope.dispose();
                 return;
             }
             const transform = root.getComponent(UITransform);
@@ -166,12 +179,10 @@ export class BigMapEntry {
                 if (popupRoot) root.setSiblingIndex(popupRoot.getSiblingIndex());
             }
 
-            const campRepository = new BigMapCampRepository(new GameNetBigMapCampGateway(
-                () => revision === this.openRevision && this.isSaveOwnerCurrent(owner),
-            ));
+            const campRepository = new BigMapCampRepository(new GameNetBigMapCampGateway(alive, scope), Date.now, scope);
             const slgRepository = owner ? new BigMapSlgRepository(
-                new GameNetBigMapSlgGateway(() => revision === this.openRevision && this.isSaveOwnerCurrent(owner)),
-                config, () => Math.floor(Date.now() / 1000),
+                new GameNetBigMapSlgGateway(alive, scope),
+                config, () => Math.floor(Date.now() / 1000), undefined, scope,
             ) : undefined;
             const model = new BigMapModel({
                 config,
@@ -185,14 +196,15 @@ export class BigMapEntry {
                 itemCounts: () => readItemCounts(),
                 now: () => Math.floor(Date.now() / 1000),
                 rankProvider: owner ? new RemoteBigMapRankProvider(owner.roleId,
-                    () => revision === this.openRevision && this.isSaveOwnerCurrent(owner)) : new NpcBigMapRankProvider(config),
+                    alive, undefined, scope) : new NpcBigMapRankProvider(config),
                 campRepository,
                 canRequestBattle: owner !== null,
                 slgRepository,
                 selfRoleId: owner?.roleId ?? '',
+                scope,
             });
 
-            const controller = new BigMapController(model, { context: this.context, campRepository, slgRepository });
+            const controller = new BigMapController(model, { context: this.context, campRepository, slgRepository, scope });
             //Graphics 在 onEnable 中初始化材质。准备期间保持节点激活，避免提前绘制
             //缓存空材质并在原生 UIModelProxy.activeSubModels 中崩溃；用透明度隐藏成品前的页面。
             const opacity = root.getComponent(UIOpacity);
@@ -209,11 +221,11 @@ export class BigMapEntry {
             // `initialize()` 失败时不会 reject（`request` 内部把异常吞成 null），
             //所以只看 `.catch` 是收不到信号的 —— 必须看返回值。
             void controller.initialize().then((ok) => {
-                if (ok || revision !== this.openRevision || !root.isValid || !this.isSaveOwnerCurrent(owner)) return;
+                if (ok || !alive() || !root.isValid) return;
                 console.warn('[BigMapEntry] 基地信息同步失败：build / game / action 至少一项没回来，'
                     + '建造与升级会一直提示「正在同步基地信息」（先看上面有没有「SLG 请求被拦下」的告警）');
             }).catch((error: unknown) => {
-                if (revision === this.openRevision && root.isValid && this.isSaveOwnerCurrent(owner)) {
+                if (alive() && root.isValid) {
                     console.warn('[BigMapEntry] 基地信息同步失败', error);
                 }
             });
@@ -221,20 +233,23 @@ export class BigMapEntry {
             //兜底的「第 1 章」算。回包到达后补一次刷新，否则通关了却建不了（2026-10-26 用户反馈）。
             if (!TerritoryChapterInfoRepository.instance.current) {
                 void TerritoryChapterInfoRepository.instance.refresh().then(() => {
-                    if (revision !== this.openRevision || !root.isValid || !this.isSaveOwnerCurrent(owner)) return;
+                    if (!alive() || !root.isValid) return;
                     this.controller?.refreshUnlockContext();
                 });
             }
-            await page.initialize(controller.snapshot, controller.resources, layout?.background ?? '', navigationHeight, async (scope) => {
+            await page.initialize(controller.snapshot, controller.resources, layout?.background ?? '', navigationHeight, async (pageScope) => {
                 const role = readRoleRow();
-                if (!role || scope.disposed) return null;
+                if (!role || pageScope.disposed) return null;
                 const resolver = await HeadArt.loadHeadArtResolver(configs);
-                if (scope.disposed) return null;
+                if (pageScope.disposed) return null;
                 return HeadArt.loadHeadFrame(toIdString(role.img), (name, root) => (
-                    controller.resources.assets.load(spriteFramePath(root, name), SpriteFrame, { scope })
+                    controller.resources.assets.load(spriteFramePath(root, name), SpriteFrame, { scope: pageScope })
                 ), resolver);
             });
-            if (revision !== this.openRevision || !root.isValid) return;
+            if (scope.disposed || !root.isValid) {
+                scope.dispose();
+                return;
+            }
             if (!this.isSaveOwnerCurrent(owner)) {
                 this.close();
                 return;
@@ -242,10 +257,11 @@ export class BigMapEntry {
             if (navigation?.isValid) this.navigationRestore = mountBigMapNavigation(navigation, root).restore;
             opacity.opacity = 255;
         } catch (error) {
-            if (revision === this.openRevision) this.close();
+            if (this.sessionScope === scope) this.close();
+            else scope.dispose();
             throw error;
         } finally {
-            if (revision === this.openRevision) this.opening = false;
+            if (this.sessionScope === scope) this.opening = false;
         }
     }
 
@@ -280,15 +296,17 @@ export class BigMapEntry {
     }
 
     close(): void {
+        const scope = this.sessionScope;
+        this.sessionScope = null;
         EventMgr.instance.offTarget(this);
         this.controller?.resources.sessionAssets.pauseWarmup?.();
-        this.openRevision += 1;
         this.opening = false;
         this.navigationRestore?.();
         this.navigationRestore = null;
         this.stopBattleSwitch?.();
         this.stopBattleSwitch = null;
         this.controller?.dispose();
+        scope?.dispose();
         if (this.root?.isValid) this.root.destroy();
         this.root = null;
         this.controller = null;

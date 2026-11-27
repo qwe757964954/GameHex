@@ -90,7 +90,7 @@ export const BATTLE_RESULT_WIN = 1;
 export const BATTLE_RESULT_LOSE = 2;
 
 /** 完成战斗上报硬超时（毫秒）。 */
-export const BATTLE_FINISH_TIMEOUT_MS = 3000;
+const BATTLE_FINISH_TIMEOUT_MS = 3000;
 
 /**
  * 完成战斗响应。协议已收敛为单字段 code；段位和积分改由

@@ -1,6 +1,7 @@
 import {
     readConfigArray as array, readConfigNumber, readConfigObject as object, readConfigText as text,
 } from '../../../core/config/ConfigValue';
+import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../core/hex/HexGridLayout';
 import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import type {
     ZCAttackProfile,
@@ -334,7 +335,7 @@ export function parseAttackProfiles(value: unknown): ReadonlyMap<number, ZCAttac
             impactEffectAnchor: parseImpactAnchor(raw.impactEffectAnchor, `skills.${skillId}.impactEffectAnchor`),
             durationSeconds: optionalNumber(raw.durationSeconds, `skills.${skillId}.durationSeconds`),
             penetrateRange: optionalPositiveNumber(raw.penetrateRange, `skills.${skillId}.penetrateRange`)
-                ?? (skillId === 30845 ? 18 * 42 : undefined),
+                ?? (skillId === 30845 ? 18 * HEX_GRID_LOGICAL_ROW_STEP : undefined),
             waves: optionalPositiveNumber(raw.waves, `skills.${skillId}.waves`),
             slowRatio: optionalNumber(raw.slowRatio, `skills.${skillId}.slowRatio`),
             onHitStatusId: optionalText(raw.onHitStatusId, `skills.${skillId}.onHitStatusId`),

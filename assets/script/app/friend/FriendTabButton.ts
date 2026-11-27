@@ -9,7 +9,7 @@
  * `over` → `fd_tab_over`（本工程不用 hover 态）。
  */
 
-import { _decorator, Button, Component, Label, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Button, Color, Component, Label, Sprite, SpriteFrame } from 'cc';
 
 const { ccclass, property } = _decorator;
 
@@ -41,16 +41,29 @@ export class FriendTabButton extends Component {
     }
 
     /**
-     * 铺一次：文案 / `interactable` / 底图都要绝对赋值。
+     * 铺一次：文案 / 颜色 / `interactable` / 底图都要绝对赋值。
      *
-     * 底图不能「拿不到就不换」—— 那样切页签时底图会停在上一帧，界面不报错，
-     * 只是「页签高亮永远停在第 1 个」。因此只有两张图都拿不到时才保留原帧。
+     * v2 是「灰轨道 + 金黄选中药丸」：未选中不挂底图（`frameOff` 传 null 就清空），
+     * 选中才显示 `frameOn`。底图不能「拿不到就不换」—— 那样切页签时高亮会停在上一帧。
      */
     render(text: string, selected: boolean, frameOff: SpriteFrame | null, frameOn: SpriteFrame | null): void {
         this.label.string = text;
+        this.label.fontSize = 26;
+        this.label.isBold = true;
+        this.label.color = selected
+            ? new Color(255, 248, 234, 255)
+            : new Color(74, 55, 38, 255);
+        this.label.enableOutline = selected;
+        this.label.outlineColor = new Color(122, 74, 5, 255);
+        this.label.outlineWidth = 2;
         this.button.interactable = !selected;
-        const target = selected ? frameOn : frameOff;
-        if (target) this.background.spriteFrame = target;
+
+        if (selected) {
+            if (frameOn) this.background.spriteFrame = frameOn;
+        } else {
+            // 未选中必须清空（含首次 `frameOff = null` 的情况），否则会残留上一页的金底。
+            this.background.spriteFrame = frameOff;
+        }
     }
 
     private emitClick(): void {

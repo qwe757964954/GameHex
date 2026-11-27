@@ -1,7 +1,7 @@
 /** FairyGUI → Cocos 坐标换算（纯 TS，零引擎依赖）。 */
 
-export const FGUI_DESIGN_WIDTH = 720;
-export const FGUI_DESIGN_HEIGHT = 1280;
+const FGUI_DESIGN_WIDTH = 720;
+const FGUI_DESIGN_HEIGHT = 1280;
 
 export interface ILayoutPoint {
     readonly x: number;

@@ -29,10 +29,13 @@ import { ZCGroundZoneSystem, zcGroundZoneBroadRadius, zcGroundZoneReaches }
     from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 import { ZCUnitSystem } from '../assets/script/app/zcds/model/systems/ZCUnitSystem';
 import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
-import { ZC_BOLT_EFFECT_PREFAB_PATH, ZC_BOLT_EFFECT_SECONDS, ZC_BOLT_NUMB_STATUS_ID, zcBoltStrikeEffectPath }
-    from '../assets/script/app/zcds/model/ZCBoltStrikeFx';
-import { ZC_SELF_AURA_EFFECT_PREFAB_PATH, zcSelfAuraEffectPath }
-    from '../assets/script/app/zcds/model/ZCSelfAuraFx';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
+import {
+    ZC_EFFECT_PATHS, zcSelfAuraEffectPath,
+} from '../assets/script/app/zcds/model/ZCEffectCatalog';
+import {
+    ZC_EFFECT_STATUS_PREFIX, ZC_EFFECT_TUNING,
+} from '../assets/script/app/zcds/model/ZCEffectTuning';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 
 
@@ -100,13 +103,13 @@ test('pvpStatus 里的 numb 已按设计删除：控制能力移交别的系统�
     //  会静默不生效（不报错、不抛异常），`pvpSkillPlan.statusId = 'numb'` 就成了一条
     //  谁都看不出来的悬空引用 —— 策划以为挂了 3 秒麻痹，实际一个状态都没挂上。
     for (const rows of [readTable('pvpStatus'), readClientTable('pvpStatus')]) {
-        const row = rows.find((item) => item.statusId === ZC_BOLT_NUMB_STATUS_ID);
+        const row = rows.find((item) => item.statusId === ZC_EFFECT_STATUS_PREFIX.boltNumb);
         assert.equal(row, undefined,
             'numb 已按设计删除（2026-11-17）：控制能力归别的系统，不要建回来');
     }
     for (const [label, rows] of [['remoteRef', readTable('pvpSkillPlan')],
         ['client', readClientTable('pvpSkillPlan')]] as const) {
-        const dangling = rows.filter((row) => String(row.statusId ?? '') === ZC_BOLT_NUMB_STATUS_ID);
+        const dangling = rows.filter((row) => String(row.statusId ?? '') === ZC_EFFECT_STATUS_PREFIX.boltNumb);
         assert.deepEqual(dangling.map((row) => row.modifierId), [],
             `${label} 里还有把 statusId 写成 numb 的行 ⇒ 静默失效的悬空引用`);
     }
@@ -120,9 +123,9 @@ test('pvpSkillPlan：两条技能的 6 行都在，参数与设计案逐格对�
     assert.equal(shock.length, 3);
 
     //  解锁等级以 K 表为唯一真源
-    //  2026-11-17 统一档位：101603 是第 3 格 → 9/18/27，101604 是第 4 格 → 12/24/36。
-    assert.deepEqual(bolt.map((row) => Number(row.unlockHeroLevel)), [9, 18, 27]);
-    assert.deepEqual(shock.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36]);
+    //  2026-11-26 设计案定稿：技能 3 = 5/18/27、技能 4 = 7/24/36（旧口径 9/18/27、12/24/36 作废）。
+    assert.deepEqual(bolt.map((row) => Number(row.unlockHeroLevel)), [5, 18, 27]);
+    assert.deepEqual(shock.map((row) => Number(row.unlockHeroLevel)), [7, 24, 36]);
 
     for (const row of [...bolt, ...shock]) {
         assert.equal(row.behaviorKey, row.skillChainId === 101603 ? 'bolt_strike' : 'self_aura');
@@ -204,8 +207,8 @@ test('bolt_strike 必须双登记（行为白名单 + 运行时注册表），�
         join(ROOT, 'assets', 'script', 'app', 'zcds', 'model', 'ZCSkillRuntime.ts'), 'utf8');
     assert.match(runtimeSource, /register\('bolt_strike'/,
         'ZCSkillRuntime 没注册 bolt_strike ⇒ 参数永远进不了运行时');
-    assert.equal(zcBoltStrikeEffectPath('bolt_strike'), ZC_BOLT_EFFECT_PREFAB_PATH);
-    assert.equal(zcBoltStrikeEffectPath('self_aura'), null);
+    assert.equal(ZC_EFFECT_PATHS.bolt, 'units/projectiles/磁电菇_劈雷技能/磁电菇_劈雷技能');
+    assert.equal(zcSelfAuraEffectPath('bolt_strike'), null);
 });
 
 // ────────────────────────────────────────────── 三、五雷轰顶：每道独立结算
@@ -255,14 +258,14 @@ function boltContext(caster: ZCUnitState, target: { id: number; x: number; y: nu
         damageBuilding: () => undefined,
         unitsInRadius: () => [],
         healUnit: () => {},
-    } as unknown as Parameters<typeof ZCAttackResolutionSystem.castBoltLine>[2];
+    } as unknown as Parameters<typeof ZCSkillResolutionSystem.castBoltLine>[2];
 }
 
 test('五雷轰顶：3 道雷各落一条事件 + 一个区域，沿「目标 → 背朝向」每道错开 60px', () => {
     const caster = unit(1, { freeX: 0, freeY: 0 });
     const state = snapshot([caster, unit(9, { owner: 'enemy', freeX: 60 })]);
     const context = boltContext(caster, { id: 9, x: 60, y: 0 }, BOLT_PARAMS);
-    assert.equal(ZCAttackResolutionSystem.castBoltLine(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castBoltLine(state, caster, context), true);
 
     assert.equal(state.combatEvents.length, 3, '3 道雷 ⇒ 3 条表现事件');
     assert.equal(state.groundZones.length, 3, '3 道雷 ⇒ 3 个独立判伤区域');
@@ -295,7 +298,7 @@ test('五雷轰顶：L3 是 5 道 × 250%，总伤 5 倍而不是摊薄', () => 
     const state = snapshot([caster, unit(9, { owner: 'enemy', freeX: 60 })]);
     const context = boltContext(caster, { id: 9, x: 60, y: 0 },
         { ...BOLT_PARAMS, boltCount: 5, boltDamageRate: 2.5 });
-    ZCAttackResolutionSystem.castBoltLine(state, caster, context);
+    ZCSkillResolutionSystem.castBoltLine(state, caster, context);
     assert.equal(state.groundZones.length, 5);
     //  30 × 2.5 = 75 每道 ⇒ 5 道共 375
     assert.equal(state.combatEvents.reduce((sum, event) => sum + event.damage, 0), 375);
@@ -306,7 +309,7 @@ test('五雷轰顶：没有锁定目标 ⇒ 不放雷、不消费 CD', () => {
     const state = snapshot([caster]);
     const context = boltContext(caster, { id: 9, x: 60, y: 0 }, BOLT_PARAMS);
     (context as unknown as { currentTarget: () => unknown }).currentTarget = () => null;
-    assert.equal(ZCAttackResolutionSystem.castBoltLine(state, caster, context), false);
+    assert.equal(ZCSkillResolutionSystem.castBoltLine(state, caster, context), false);
     assert.equal(state.groundZones.length, 0);
     assert.equal(state.combatEvents.length, 0);
 });
@@ -315,7 +318,7 @@ test('五雷轰顶：参数不全（缺 boltCount / 倍率 / 半径）⇒ 返回
     const caster = unit(1);
     const state = snapshot([caster]);
     const context = boltContext(caster, { id: 9, x: 60, y: 0 }, { boltCooldown: 12 });
-    assert.equal(ZCAttackResolutionSystem.castBoltLine(state, caster, context), false);
+    assert.equal(ZCSkillResolutionSystem.castBoltLine(state, caster, context), false);
 });
 
 // ────────────────────────────────────────────── 三·五、逐道出现（观感，2026-11-12 第三次反馈）
@@ -342,7 +345,7 @@ test('五雷轰顶：逐道 0.15s 出现 —— 任意一拍上「已到点」�
 
     const caster = unit(1, { freeX: 0, freeY: 0 });
     const state = snapshot([caster, unit(9, { owner: 'enemy', freeX: 60 })]);
-    ZCAttackResolutionSystem.castBoltLine(state, caster, boltContext(caster, { id: 9, x: 60, y: 0 },
+    ZCSkillResolutionSystem.castBoltLine(state, caster, boltContext(caster, { id: 9, x: 60, y: 0 },
         { ...BOLT_PARAMS, boltCount: 5, boltDamageRate: 2.5 }));
 
     const visibleAt = (now: number) => state.combatEvents.filter((event) => entered(event.startedAt, now)).length;
@@ -352,7 +355,7 @@ test('五雷轰顶：逐道 0.15s 出现 —— 任意一拍上「已到点」�
         '5 道雷必须是 0 / 0.15 / 0.30 / 0.45 / 0.60 逐道亮起');
     //  全部到点只花 0.6s，短于单道特效自身时长（0.667s）⇒ 观感是「一道接一道砸下来」，
     //  而不是「一波齐射」—— 这也是 0.15s 这个间隔能被看见的前提。
-    assert.ok(0.6 < ZC_BOLT_EFFECT_SECONDS);
+    assert.ok(0.6 < ZC_EFFECT_TUNING.boltSeconds);
 });
 
 test('五雷轰顶：渲染世界对「还没到点」的事件不建节点（节点一建动画就从第 0 帧起播）', () => {
@@ -720,7 +723,7 @@ test('特效预制体：两套三件套都齐备，且预制体路径就是代�
         assert.ok(existsSync(join(dir, 'anim', `${clip}.anim`)), `${name} 缺动画 ${clip}.anim`);
         assert.ok(existsSync(join(dir, 'atlas', `${name}.pac`)), `${name} 缺自动图集 ${name}.pac`);
     }
-    assert.equal(ZC_BOLT_EFFECT_PREFAB_PATH, 'units/projectiles/磁电菇_劈雷技能/磁电菇_劈雷技能',
+    assert.equal(ZC_EFFECT_PATHS.bolt, 'units/projectiles/磁电菇_劈雷技能/磁电菇_劈雷技能',
         '落雷路径必须指向真美术，不许再退回占位用的「雷法师_武将闪电」');
     assert.equal(zcSelfAuraEffectPath('self_aura', '68016'), 'units/projectiles/雷电冲击/雷电冲击',
         '磁电冲击的造型按单位覆盖到「雷电冲击」');
@@ -729,8 +732,9 @@ test('特效预制体：两套三件套都齐备，且预制体路径就是代�
 test('落雷预制体：屏上地面爆闪直径 ≈ boltRadius 换算出来的 138.4px', () => {
     const dir = fxDir('磁电菇_劈雷技能');
     const parts = prefabParts(dir, '磁电菇_劈雷技能');
-    assert.equal(parts.ui._contentSize.width, 237, '画布宽（源 1019 裁到 474 再缩一半）');
-    assert.equal(parts.ui._contentSize.height, 283);
+    assert.equal(parts.ui._contentSize.width, 193,
+        '画布宽：源 1019 裁到 474，2026-11-26 按屏上尺寸重烘成 193×231');
+    assert.equal(parts.ui._contentSize.height, 231);
     assert.equal(parts.sprite._sizeMode, 0, 'CUSTOM + 固定画布，逐帧换图不跟着新图变形');
     assert.equal(parts.sprite._isTrimmedMode, false);
     assert.equal(parts.anim.playOnLoad, false, '播放由 ZCCombatEffectView 显式发起');
@@ -740,9 +744,10 @@ test('落雷预制体：屏上地面爆闪直径 ≈ boltRadius 换算出来的 
     assert.ok(parts.node._lpos.y > 0, '地面接地点在画布中心下方，节点要往上抬');
     assert.equal(parts.node._lpos.x, 0);
 
-    //  地面爆闪占画布 169.5px（2026-11-11 由生成器从 20 帧底部 12% 带量出来的最大值，
-    //  裁切后 339/2）。改了美术或裁切窗口就要回来重标这个数。
-    const GROUND_SPLASH_CANVAS_PX = 169.5;
+    //  地面爆闪占画布 138.1px（2026-11-11 由生成器从 20 帧底部 12% 带量出 339 源 px，
+    //  2026-11-26 重烘后画布即屏上尺寸：339 × 193/474）。改了美术或裁切窗口就要回来重标这个数。
+    assert.equal(parts.node._lscale.x, 1, '尺寸烘进贴图后根节点 _lscale 必须为 1');
+    const GROUND_SPLASH_CANVAS_PX = 138.1;
     const onScreen = GROUND_SPLASH_CANVAS_PX * parts.node._lscale.x;
     const target = 90 * 2 * SCREEN_PX_PER_LOGIC_PX; // boltRadius = 90（表值）
     assert.ok(Math.abs(onScreen - target) / target < 0.02,
@@ -757,8 +762,8 @@ test('落雷动画：20 帧 @ sample 30、一次性播放，总长与代码常�
     assert.equal(curve._values.length, 20);
     assert.equal(clip.sample, 30, 'sample 必须是 30 —— 见下一条「第 5 帧判伤」');
     assert.equal(clip.wrapMode, 1, '1 = Normal，一次性，停在末帧（落雷不是循环光环）');
-    assert.ok(Math.abs(clip._duration - ZC_BOLT_EFFECT_SECONDS) < 1e-6,
-        `动画总长 ${clip._duration}s 必须等于 ZC_BOLT_EFFECT_SECONDS ${ZC_BOLT_EFFECT_SECONDS}s`
+    assert.ok(Math.abs(clip._duration - ZC_EFFECT_TUNING.boltSeconds) < 1e-6,
+        `动画总长 ${clip._duration}s 必须等于 ZC_EFFECT_TUNING.boltSeconds ${ZC_EFFECT_TUNING.boltSeconds}s`
         + '（表现事件的 durationSeconds 要盖住整段，否则雷尾那几帧会被提前摘掉）');
 });
 
@@ -850,7 +855,7 @@ test('两套特效路径都能进本局加载清单，且不会串到别家的�
         '大威天芦的「无尘禁土」走自己的火焰环，不能被磁电菇的造型覆盖');
     //  ⚠️ 2026-11-17：68025 已换成【大威天芦_火焰光环】⇒ 兜底光柱不再有单位使用，
     //  因此它**不该**出现在本局清单里（出现了说明有单位退回了缺省造型）。
-    assert.equal(plan.effectPaths.includes(ZC_SELF_AURA_EFFECT_PREFAB_PATH), false,
+    assert.equal(plan.effectPaths.includes(ZC_EFFECT_PATHS.sustainedAura), false,
         '兜底光柱已经没有任何单位落在上面');
     assert.equal(zcSelfAuraEffectPath('self_aura', '68025'),
         'units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环',
@@ -942,7 +947,9 @@ test('矩形判定的结算：站在光束上方的人不掉血，光束里的�
 });
 
 test('代码接线：施法读 auraRect*、区域两处判定都走同一个形状函数', () => {
-    const cast = readFileSync(join(ROOT, 'assets/script/app/zcds/model/systems/ZCAttackResolutionSystem.ts'), 'utf8');
+    //  🔴 `castSelfAura` 已搬到 `ZCSkillResolutionSystem`（前者只留同名门面转发），
+    //  断言必须指真源：指门面文件恒不命中，是那次重构漏改的假红。
+    const cast = readFileSync(join(ROOT, 'assets/script/app/zcds/model/systems/ZCSkillResolutionSystem.ts'), 'utf8');
     assert.match(cast, /auraRectHalfHeight/, 'castSelfAura 没读 auraRectHalfHeight ⇒ 表配了也没用');
     assert.match(cast, /rectHalfLength: rectHalfLength > 0/, '半长必须能随 zone 落地');
     assert.match(cast, /rectHalfHeight: rectHalfHeight > 0/, '半宽必须能随 zone 落地');
@@ -1009,7 +1016,7 @@ test('朝向与抬升会跟着区域抄进表现事件（视图自己算不出�
 });
 
 test('代码接线：施法算瞄准角、视图读角度与抬升', () => {
-    const cast = readFileSync(join(ROOT, 'assets/script/app/zcds/model/systems/ZCAttackResolutionSystem.ts'), 'utf8');
+    const cast = readFileSync(join(ROOT, 'assets/script/app/zcds/model/systems/ZCSkillResolutionSystem.ts'), 'utf8');
     assert.match(cast, /auraFaceTarget/, 'castSelfAura 没读 auraFaceTarget ⇒ 永远朝右喷');
     assert.match(cast, /Math\.atan2\(targetPos\.y - origin\.y, targetPos\.x - origin\.x\)/,
         '方向必须是「本体 → 目标」的方位角');

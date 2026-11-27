@@ -1,4 +1,5 @@
 import {_decorator, Button, Component, Node, Sprite, SpriteFrame} from 'cc';
+import { RedDot } from '../common/RedDot';
 import { BT_SPRITE_SIMPLE } from './BattleTokenArt';
 import type { IRewardSlotState } from './BattleTokenTable';
 
@@ -38,8 +39,8 @@ export class BattleTokenRewardSlot extends Component {
     @property({ type: Node, tooltip: '未解锁的锁标（bt_lock）' })
     lockIcon: Node = null!;
 
-    @property({ type: Node, tooltip: '可领取红点（common/cm_red_dot）' })
-    redDot: Node = null!;
+    @property({ type: RedDot, tooltip: '可领取红点（工程通用红点）' })
+    redDot: RedDot = null!;
 
     @property({ type: Button, tooltip: '整格的按钮（可领取时才 interactable）' })
     button: Button = null!;
@@ -75,7 +76,7 @@ export class BattleTokenRewardSlot extends Component {
         this.checkMark.active = state.taken;
         this.mask.active = state.masked;
         this.lockIcon.active = !state.unlocked;
-        this.redDot.active = state.claimable;
+        this.redDot.setRedDot(state.claimable);
         this.button.interactable = state.canTake;
     }
 

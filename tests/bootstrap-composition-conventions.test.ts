@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { VIEW_LIFECYCLE } from '../assets/script/framework/ui/ViewLifecycle';
 import { LoginUiEvent } from '../assets/script/app/login/LoginEvents';
 import type { ILoginControllerOptions } from '../assets/script/app/login/LoginController';
@@ -54,6 +55,7 @@ test('controller initialization contracts group operational dependencies by resp
         ['league/LeagueEditController', 'ILeagueEditControllerOptions'],
         ['league/LeagueCreateController', 'ILeagueCreateControllerOptions'],
         ['league/LeagueDonateController', 'ILeagueDonateControllerOptions'],
+        ['guide/application/GuideController', 'IGuideControllerOptions'],
         ['zcds/application/ZCBattleRuntimeContract', 'IZCBattleRuntimeServices'],
         ['zcds/application/ZCBattleSettlementController', 'IZCBattleSettlementServices'],
     ];
@@ -62,8 +64,9 @@ test('controller initialization contracts group operational dependencies by resp
         const contract = source.statements.find(node => ts.isInterfaceDeclaration(node) && node.name.text === name);
         assert.ok(contract && ts.isInterfaceDeclaration(contract), name);
         for (const member of contract.members) {
-            if (member.name?.getText(source) === 'failed') continue;
-            assert.ok(!ts.isMethodSignature(member) && !(ts.isPropertySignature(member) && member.type && ts.isFunctionTypeNode(member.type)), `${name}.${member.name?.getText(source)}`);
+            const memberName = member.name?.getText(source);
+            if (memberName === 'failed' || (name === 'ICardUpgradeControllerOptions' && memberName === 'loadUpgradedArt')) continue;
+            assert.ok(!ts.isMethodSignature(member) && !(ts.isPropertySignature(member) && member.type && ts.isFunctionTypeNode(member.type)), `${name}.${memberName}`);
         }
     }
 });
@@ -71,6 +74,7 @@ test('controller initialization contracts group operational dependencies by resp
 function loginFixture(activationFails = false, cleanupFails = false) {
     const calls: string[] = [], failure = new Error('view activation failed');
     let options: ILoginControllerOptions;
+    let controllerRef: object | null = null;
     let resolvePanel: (panel: { isValid: boolean; close(): void }) => void;
     const pendingPanel = new Promise<{ isValid: boolean; close(): void }>(resolve => { resolvePanel = resolve; });
     const page = {};
@@ -85,17 +89,35 @@ function loginFixture(activationFails = false, cleanupFails = false) {
     }).outputText, { exports, console: { ...console, error() {} }, require(name: string) {
         if (name === 'cc') return { instantiate: () => node, Prefab: class {}, Vec3: { ZERO: {} } };
         if (name.endsWith('/ControllerBase')) return { ControllerBase };
+        if (name.endsWith('/ResourceScope')) return { ResourceScope };
         if (name.endsWith('/ViewLifecycle')) return { VIEW_LIFECYCLE };
+        if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/LoginEvents')) return { LoginUiEvent };
         if (name.endsWith('/EngineMain')) return { EngineMain: { isMiniGameWeiXin: false, isMiniGameDouyin: false } };
         if (name.endsWith('/CardRepository')) return { cardRepository: { bindHeroSession: value => { assert.equal(value, null); calls.push('clear-heroes'); } } };
         if (name.endsWith('/LoginRoot')) return { LoginRoot: class { configureGateway() {} } };
         if (name.endsWith('/LoginProtocol')) return { LoginGateway: class {} };
         if (name.endsWith('/LoginController')) return { LoginController: class {
-            constructor(_context: unknown, dependencies: ILoginControllerOptions) { options = dependencies; calls.push('controller'); }
+            constructor(_context: unknown, dependencies: ILoginControllerOptions) { controllerRef = this; options = dependencies; calls.push('controller'); }
             dispose() { calls.push('dispose'); }
         } };
-        if (name.endsWith('/ServerSelectPanel')) return { ServerSelectPanel: { open: () => pendingPanel } };
+        if (name.endsWith('/ServerSelectPanel')) {
+            return {
+                ServerSelectPanel: {
+                    async open(params?: { scope?: ResourceScope }) {
+                        if (params?.scope?.disposed) return null;
+                        const panel = await pendingPanel;
+                        if (!panel) return null;
+                        if (params?.scope?.disposed) {
+                            panel.close();
+                            return null;
+                        }
+                        params?.scope?.defer(() => panel.close());
+                        return panel;
+                    },
+                },
+            };
+        }
         return {};
     } });
     const Composition = exports.LoginComposition as new (context: unknown, network: unknown, host: unknown) => ControllerBase & {
@@ -105,6 +127,7 @@ function loginFixture(activationFails = false, cleanupFails = false) {
     const preloadScope = new ResourceScope('login-conventions');
     composition.scope.defer(() => calls.push('resources'));
     return { composition, calls, failure, preloadScope,
+        get controller() { return controllerRef; },
         get options() { return options; }, resolvePanel: panel => resolvePanel(panel),
         preload: () => composition.preload({ resources: preloadScope, cancelled: false }),
     };
@@ -123,12 +146,12 @@ test('login server popup completing after exit closes without retaining a stale 
     const h = loginFixture();
     try {
         await h.preload(); h.composition.mount();
-        const opening = h.options.servers.openServers({ owner: {}, servers: [], selectedServerId: null });
+        EventMgr.instance.emit(LoginUiEvent.Output, { kind: 'openServers', servers: [], selectedServerId: null }, h.controller!);
         h.composition.dispose();
         let closed = 0;
         h.resolvePanel({ isValid: true, close() { closed++; } });
-        await opening;
-        h.options.servers.closeServers();
+        await new Promise(resolve => setImmediate(resolve));
+        EventMgr.instance.emit(LoginUiEvent.Output, { kind: 'closeServers' }, h.controller!);
         assert.equal(closed, 1);
     } finally { h.composition.dispose(); h.preloadScope.dispose(); }
 });

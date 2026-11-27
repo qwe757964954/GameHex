@@ -11,9 +11,6 @@ export enum EntranceBelond {
     right = 3,
 }
 
-/** 一屏完整容纳的入口数，用于反推视口高度。 */
-export const MAX_VISIBLE_ENTRANCE = 5;
-
 /** 条目边长。 */
 export const ENTRANCE_ITEM_SIZE = 66;
 

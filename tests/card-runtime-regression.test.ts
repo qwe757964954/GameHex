@@ -10,9 +10,11 @@ import * as skillList from '../assets/script/app/card/CardSkillList';
 import { CARD_LINEUP_TEXTS } from '../assets/script/app/card/CardLineupTexts';
 import * as descMarkup from '../assets/script/app/card/CardSkillDescMarkup';
 import { CardLineupEvent } from '../assets/script/app/card/CardLineupEvents';
-import { CardPopupEvent } from '../assets/script/app/card/CardPopupEvents';
+import { CardPopupEvent, type CardSkillOutput } from '../assets/script/app/card/CardPopupEvents';
 import * as resTypes from '../assets/script/app/common/ResTypes';
 import * as tableNames from '../assets/script/core/config/TableNames';
+import { scopeAssetService, type AssetService } from '../assets/script/core/asset/AssetService';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import * as requestGuard from '../assets/script/app/net/RequestGuard';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
@@ -38,6 +40,53 @@ function loadRuntime<T>(file: string, dependencies: Record<string, unknown>): T 
 }
 
 const decorators = { ccclass: () => (value: unknown) => value, property: () => () => {} };
+
+test('升级美术复用卡牌图标入口，骨骼加载失败时保留静态展示资源', async () => {
+    const scope = new ResourceScope('card-upgrade-art');
+    const frame = {} as SpriteFrame;
+    const spritePaths: string[] = [];
+    const prefabPaths: string[] = [];
+    class Prefab {}
+    const assets: AssetService = {
+        load: async (path, type, options) => {
+            assert.equal(type, Prefab);
+            assert.equal(options.scope, scope);
+            prefabPaths.push(path);
+            throw new Error('missing prefab');
+        },
+        loadDir: async () => [],
+        has: async () => true,
+    };
+    const { loadCardUpgradedArt } = loadRuntime<typeof import('../assets/script/app/card/CardUpgradedArt')>('CardUpgradedArt', {
+        cc: { Prefab },
+        '../../core/asset/AssetService': { scopeAssetService },
+        './CardLineupIcons': {
+            loadArt: async (name: string, root: string) => {
+                spritePaths.push(`${root}/${name}`);
+                return frame;
+            },
+            loadIconByArtPath: async (path: string) => {
+                spritePaths.push(path);
+                return frame;
+            },
+        },
+    });
+    try {
+        const art = await loadCardUpgradedArt(assets, { rarity: 'green', unitPrefabPath: 'skel/hero' } as ZCDeckCard, 'mage', scope);
+        assert.deepEqual(prefabPaths, ['skel/hero']);
+        assert.deepEqual(spritePaths, [
+            'image/carddetail_bg/kpxx_bg_04',
+            'image/carddetail/upgrade_popup/frame_04',
+            'icons/card/yx_zhiye_fs',
+        ]);
+        assert.equal(art.chrome.background, frame);
+        assert.equal(art.chrome.frame, frame);
+        assert.equal(art.classIcon, frame);
+        assert.equal(art.heroPrefab, null);
+    } finally {
+        scope.dispose();
+    }
+});
 
 test('布阵站台直接赋图，缺图清空，保留 prefab 的 RAW 与缩放', () => {
     const module = loadRuntime<typeof import('../assets/script/app/card/LineupBoardSlot')>('LineupBoardSlot', {
@@ -121,7 +170,6 @@ interface ISkillViewProbe {
     onOpen(data?: unknown): void;
     onClose(): void;
     render(state: unknown): void;
-    notify(kind: 'offline' | 'failed'): void;
 }
 
 const tick = () => new Promise<void>(resolve => { setImmediate(resolve); });
@@ -136,16 +184,14 @@ interface ISkillFixture {
     controller: ISkillControllerProbe;
     renders: Array<CardSkillListPresentation | null>;
     state: { sends: number; reads: number; closes: number; tips: number; removed: number };
-    view: {
-        render: (state: CardSkillListPresentation | null) => void;
-        close: () => void;
-        notify: (kind: 'offline' | 'failed') => void;
-    };
+    notifyStatuses: Array<'offline' | 'failed'>;
+    onRender: (state: CardSkillListPresentation | null) => void;
+    finish(): void;
 }
 
 /**
  * 加载真实 CardSkillController，只替换引擎与外部 I/O；ControllerBase 用真实类，
- * 不复制框架逻辑。repositories / view 端口由 options 注入。
+ * 不复制框架逻辑。输出经 `CardPopupEvent.SkillOutput` 按 `source === controller` 接收。
  */
 function makeSkillController(options: {
     heroId?: number;
@@ -160,6 +206,8 @@ function makeSkillController(options: {
 } = {}): ISkillFixture {
     const state = { sends: 0, reads: 0, closes: 0, tips: 0, removed: 0 };
     const renders: Array<CardSkillListPresentation | null> = [];
+    const notifyStatuses: Array<'offline' | 'failed'> = [];
+    const observer = {};
     const level = options.level ?? 1;
     const repository = {
         loadSkillList: options.loadSkillList ?? (async () => {
@@ -177,26 +225,52 @@ function makeSkillController(options: {
             return options.upgradeResult ?? { kind: 'success', level: level + 1 };
         }),
     };
-    const view = {
-        render: (value: CardSkillListPresentation | null) => { renders.push(value); },
-        close: () => { state.closes += 1; },
-        notify: () => { state.tips += 1; },
-    };
     const module = loadRuntime<{ CardSkillController: SkillControllerCtor }>('CardSkillController', {
         '../../framework/controller/ControllerBase': { ControllerBase },
+        '../../framework/event/EventMgr': { EventMgr },
         './CardLineupEvents': { CardLineupEvent },
         './CardPopupEvents': { CardPopupEvent },
         './CardSkillList': skillList,
     });
-    const controller = new module.CardSkillController({}, {
-        owner: view,
+    const controller = new module.CardSkillController({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: () => { state.removed += 1; },
+        },
+    }, {
         data: { heroId: options.heroId ?? 68001, skillId: options.skillId ?? 100101 },
         repository,
-        view,
-        requests: { removeCaller: () => { state.removed += 1; } },
-        failed: options.onError ?? (() => {}),
     });
-    return { controller, renders, state, view };
+    const fixture: ISkillFixture = {
+        controller,
+        renders,
+        state,
+        notifyStatuses,
+        onRender: value => { renders.push(value); },
+        finish() {
+            controller.dispose();
+            EventMgr.instance.offTarget(observer);
+        },
+    };
+    EventMgr.instance.on(CardPopupEvent.SkillOutput, (output: CardSkillOutput, source: object) => {
+        if (source !== controller) return;
+        switch (output.kind) {
+            case 'render':
+                fixture.onRender(output.state);
+                break;
+            case 'close':
+                state.closes += 1;
+                break;
+            case 'notify':
+                notifyStatuses.push(output.status);
+                state.tips += 1;
+                break;
+            case 'failed':
+                options.onError?.(output.error);
+                break;
+        }
+    }, observer);
+    return fixture;
 }
 
 function lastPresentation(f: ISkillFixture): CardSkillListPresentation {
@@ -207,7 +281,7 @@ function lastPresentation(f: ISkillFixture): CardSkillListPresentation {
 
 /** 纯 View 夹具：只用于验证挂点缺失当场抛错。 */
 function makeSkillPageView() {
-    const state = { closes: 0, tips: 0, tiers: [] as unknown[][] };
+    const state = { closes: 0, tiers: [] as unknown[][] };
     const module = loadRuntime<{ CardSkillPage: new () => ISkillViewProbe }>('CardSkillPage', {
         cc: {
             _decorator: decorators, Color: class {},
@@ -216,7 +290,6 @@ function makeSkillPageView() {
         },
         '../../framework/ui/PopupBase': { PopupBase: class { close() { state.closes += 1; } } },
         '../../framework/event/EventMgr': { EventMgr },
-        '../common/Toast': { Toast: { show: () => { state.tips += 1; } } },
         './CardLineupTexts': { CARD_LINEUP_TEXTS },
         './CardSkillTierView': { CardSkillTierView: class {} },
         '../../vscrollview/VScrollView': { VirtualScrollView: class {} },
@@ -257,7 +330,7 @@ for (const kind of ['failed', 'offline', 'success'] as const) {
                 await tick();
                 if (state !== 'open') f.controller.dispose();
                 if (state === 'destroyed') {
-                    f.view.render = () => assert.fail('已销毁的视图不应再收到渲染');
+                    f.onRender = () => assert.fail('已销毁的视图不应再收到渲染');
                 }
                 const count = f.renders.length;
                 finish({ kind });
@@ -268,7 +341,7 @@ for (const kind of ['failed', 'offline', 'success'] as const) {
                     '取消的会话不能弹业务失败提示');
                 assert.equal(f.state.reads, state === 'open' && kind === 'success' ? 2 : 1,
                     '只有仍存活的会话可以在升级成功后刷新技能');
-            } finally { f.controller.dispose(); }
+            } finally { f.finish(); }
         });
     }
 }
@@ -285,7 +358,7 @@ test('预览降档后按 ↑ 只是回到服务端档，不发升级包', async 
         assert.equal(f.state.sends, 0, '预览档落后于服务端档时 ↑ 不能发包消耗材料');
         assert.equal(lastPresentation(f).rows[0].level, 2);
         assert.equal(lastPresentation(f).rows[0].source, 'server');
-    } finally { f.controller.dispose(); }
+    } finally { f.finish(); }
 });
 
 test('升级成功后刷新失败：不卡 busy，档位取服务端确认值', async () => {
@@ -301,25 +374,24 @@ test('升级成功后刷新失败：不卡 busy，档位取服务端确认值', 
         assert.equal(last.busy, false, '刷新失败也必须把 busy=false 落到视图');
         assert.equal(last.rows[0].level, 3, '服务端连升两档时显示确认值，不是猜的 level+1');
         assert.equal(f.state.sends, 1);
-    } finally { f.controller.dispose(); }
+    } finally { f.finish(); }
 });
 
-test('技能弹窗视图接入真实控制器，打开只取数一次且支持展示命令', async () => {
-    const { page, state } = makeSkillPageView();
-    const f = makeSkillController();
+test('技能弹窗视图接入真实控制器，打开只取数一次且通过输出事件驱动渲染与提示', async () => {
+    const { page } = makeSkillPageView();
+    const f = makeSkillController({ level: 1, upgradeResult: { kind: 'failed' } });
     try {
         page.onInit();
         page.onOpen({ heroId: 68001, cardName: '测试卡' });
-        f.view.render = value => { f.renders.push(value); page.render(value); };
-        f.view.notify = kind => page.notify(kind);
+        f.onRender = value => { f.renders.push(value); page.render(value); };
         await f.controller.start();
         assert.equal(f.state.reads, 1);
         assert.equal(lastPresentation(f).heroId, 68001);
         assert.equal(page.skillSkin.active, true);
-        assert.equal(state.tips, 0);
-        page.notify('failed');
-        assert.equal(state.tips, 1);
-    } finally { f.controller.dispose(); page.onClose(); }
+        assert.deepEqual(f.notifyStatuses, []);
+        await f.controller.step(100101, 1);
+        assert.deepEqual(f.notifyStatuses, ['failed']);
+    } finally { f.finish(); page.onClose(); }
 });
 
 test('缺少合法 heroId 时关闭面板且不取数', async () => {
@@ -328,7 +400,7 @@ test('缺少合法 heroId 时关闭面板且不取数', async () => {
         await f.controller.start();
         assert.equal(f.state.closes, 1, '非法入参必须显式关闭');
         assert.equal(f.state.reads, 0, '不能拿 heroId=0 去读全表技能');
-    } finally { f.controller.dispose(); }
+    } finally { f.finish(); }
 });
 
 test('升级失败提示只弹一次，后续纯渲染不重复 Toast', async () => {
@@ -337,9 +409,10 @@ test('升级失败提示只弹一次，后续纯渲染不重复 Toast', async ()
         await f.controller.start();
         await f.controller.step(100101, 1);
         assert.equal(f.state.tips, 1);
+        assert.deepEqual(f.notifyStatuses, ['failed']);
         await f.controller.step(100101, -1);
         assert.equal(f.state.tips, 1, 'render 不得夹带一次性 Toast');
-    } finally { f.controller.dispose(); }
+    } finally { f.finish(); }
 });
 
 test('站台换卡与空补图均清除旧品质盘和角标，模型展示不被补图打断', () => {

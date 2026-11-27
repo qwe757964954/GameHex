@@ -1,16 +1,12 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
+import { EventMgr } from '../../framework/event/EventMgr';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import type { AssetType } from '../../core/asset/AssetService';
 import { MainTab, MainTabModel, mainTabTarget } from './MainTabModel';
-import { MainTabEvent, type IMainTabSelectEvent } from './MainTabEvents';
+import { MainTabEvent, type IMainTabSelectEvent, type MainTabOutput } from './MainTabEvents';
 
 export interface IMainTabControllerOptions<T> {
     readonly assetType: AssetType<T>;
-    readonly failed: (tab: number, error: unknown) => void;
-    readonly view: {
-        readonly showPage: (page: T) => void;
-        readonly renderNav: (tab: number) => void;
-    };
     readonly world: {
         readonly openWorld: () => Promise<void>;
         readonly closeWorld: () => void;
@@ -33,7 +29,6 @@ export class MainTabController<T> extends ControllerBase {
     private pageScope: ResourceScope | null = null;
     private pendingScope: ResourceScope | null = null;
     private loading: Promise<void> | null = null;
-    private started = false;
 
     constructor(context: IControllerContext | (() => IControllerContext), private readonly options: IMainTabControllerOptions<T>) {
         super(context, 'main-tab-controller');
@@ -41,8 +36,6 @@ export class MainTabController<T> extends ControllerBase {
     get snapshot() { return this.model.snapshot; }
 
     start(): void {
-        if (this.started || this.isDisposed) return;
-        this.started = true;
         this.listen(MainTabEvent.Select, this.onSelect);
     }
     private onSelect(event: IMainTabSelectEvent): void {
@@ -68,10 +61,10 @@ export class MainTabController<T> extends ControllerBase {
             const wasWorldVisible = this.snapshot.worldVisible;
             this.model.showWorld(false);
             this.options.world.closeWorld();
-            if (wasWorldVisible) this.options.view.renderNav(tab);
+            if (wasWorldVisible) this.emitOutput({ kind: 'renderNav', tab });
             if (tab === this.snapshot.currentTab) {
                 this.model.settle();
-                this.options.view.renderNav(tab);
+                this.emitOutput({ kind: 'renderNav', tab });
                 this.options.warmup.settled();
                 return Promise.resolve();
             }
@@ -81,7 +74,7 @@ export class MainTabController<T> extends ControllerBase {
             this.loading = this.loadPage(tab, target.path, target.bundle, scope, revision);
         } else {
             this.model.showWorld(true);
-            this.options.view.renderNav(MainTab.World);
+            this.emitOutput({ kind: 'renderNav', tab: MainTab.World });
             this.loading = this.openWorld(revision);
         }
         return this.loading;
@@ -94,17 +87,17 @@ export class MainTabController<T> extends ControllerBase {
         try {
             const page = await this.resources.assets.load(path, this.options.assetType, { scope, bundle });
             if (!this.current(revision) || scope.disposed) return;
-            this.options.view.showPage(page);
+            this.emitOutput({ kind: 'showPage', tab, page });
             const previous = this.pageScope;
             this.pageScope = scope;
             adopted = true;
             previous?.dispose();
             this.model.commit(tab);
-            this.options.view.renderNav(tab);
+            this.emitOutput({ kind: 'renderNav', tab });
         } catch (error) {
             if (this.current(revision)) {
-                this.options.view.renderNav(this.snapshot.currentTab);
-                this.options.failed(tab, error);
+                this.emitOutput({ kind: 'renderNav', tab: this.snapshot.currentTab });
+                this.emitOutput({ kind: 'failed', tab, error });
             }
         } finally {
             if (!adopted) scope.dispose();
@@ -118,16 +111,19 @@ export class MainTabController<T> extends ControllerBase {
         catch (error) {
             if (this.current(revision)) {
                 this.model.showWorld(false);
-                this.options.view.renderNav(this.snapshot.currentTab);
-                this.options.failed(MainTab.World, error);
+                this.emitOutput({ kind: 'renderNav', tab: this.snapshot.currentTab });
+                this.emitOutput({ kind: 'failed', tab: MainTab.World, error });
             }
         } finally { this.finish(revision); }
     }
     worldClosed(): void {
         if (this.isDisposed || !this.snapshot.worldVisible) return;
         this.model.showWorld(false);
-        this.options.view.renderNav(this.snapshot.currentTab);
+        this.emitOutput({ kind: 'renderNav', tab: this.snapshot.currentTab });
         if (this.snapshot.loadingTab === -1) this.options.warmup.settled();
+    }
+    private emitOutput(output: MainTabOutput<T>): void {
+        EventMgr.instance.emit(MainTabEvent.Output, output, this);
     }
     private finish(revision: number): void {
         if (!this.current(revision)) return;

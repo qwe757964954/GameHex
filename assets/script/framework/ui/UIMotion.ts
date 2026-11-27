@@ -71,13 +71,13 @@ export interface IUIMotionSample {
 export const UI_MOTION_PANEL_SCALE_FROM = 0.92;
 
 /** 紧凑面板的进场起始纵向偏移（逻辑 px）：从下方 18px 浮上来。 */
-export const UI_MOTION_PANEL_OFFSET_Y = -18;
+const UI_MOTION_PANEL_OFFSET_Y = -18;
 
 /** 整屏界面的进场起始缩放：只做微推，避免边缘露底。 */
 export const UI_MOTION_SCREEN_SCALE_FROM = 0.96;
 
 /** 整屏界面的进场时长（秒）。 */
-export const UI_MOTION_SCREEN_ENTER_SECONDS = 0.24;
+const UI_MOTION_SCREEN_ENTER_SECONDS = 0.24;
 
 /** 紧凑面板的进场时长（秒）；略长是因为它带过冲，短了会显得「弹太快」。 */
 export const UI_MOTION_PANEL_ENTER_SECONDS = 0.28;
@@ -86,10 +86,10 @@ export const UI_MOTION_PANEL_ENTER_SECONDS = 0.28;
 export const UI_MOTION_EXIT_SECONDS = 0.16;
 
 /** 关闭时缩到的倍数（两档同值；只做「往里收一点」，不做整页缩小）。 */
-export const UI_MOTION_EXIT_SCALE = 0.94;
+const UI_MOTION_EXIT_SCALE = 0.94;
 
 /** 关闭时的纵向偏移（逻辑 px）：向下 10px 沉下去。 */
-export const UI_MOTION_EXIT_OFFSET_Y = -10;
+const UI_MOTION_EXIT_OFFSET_Y = -10;
 
 /**
  * 取一条过渡曲线。

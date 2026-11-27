@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PostLoginController } from '../assets/script/app/loading/PostLoginController';
+import { PostLoginEvent, type PostLoginOutput } from '../assets/script/app/loading/PostLoginEvents';
 import { resolvePostLoginIdentity, postLoginProgress } from '../assets/script/app/loading/PostLoginContract';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { MAIN_LOADING_EVENTS } from '../assets/script/app/main/MainLoadingEvents';
@@ -11,22 +12,29 @@ function fixture(startRatio = 0.6) {
     let report = (_progress: { ratio: number }) => {};
     let resolve = () => {}, reject = (_error: Error) => {};
     const pending = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+    const outputOwner = {};
     const controller = new PostLoginController(createControllerContext(), {
         startRatio,
-        failed: error => calls.push(error),
         session: {
             prepare: callback => { calls.push('prepare'); report = callback; return pending; },
             bootstrapIdentity: data => calls.push(data),
             initAudio: () => calls.push('audio')
         },
-        view: {
-            setProgress: ratio => ratios.push(ratio),
-            setStatus: message => statuses.push(message)
-        },
-        navigation: {
-            navigate: route => routes.push(route)
-        },
     });
+    EventMgr.instance.on(PostLoginEvent.Output, (output: PostLoginOutput, source: object) => {
+        if (source !== controller) return;
+        switch (output.kind) {
+            case 'progress': ratios.push(output.ratio); return;
+            case 'status': statuses.push(output.message); return;
+            case 'navigate': routes.push(output.route); return;
+            case 'failed': calls.push(output.error); return;
+        }
+    }, outputOwner);
+    const originalDispose = controller.dispose.bind(controller);
+    controller.dispose = () => {
+        EventMgr.instance.offTarget(outputOwner);
+        originalDispose();
+    };
     return { controller, ratios, statuses, routes, calls, resolve, reject, report: (ratio: number) => report({ ratio }) };
 }
 test('post-login progresses from actual update value through session then Main; starts once', async () => {

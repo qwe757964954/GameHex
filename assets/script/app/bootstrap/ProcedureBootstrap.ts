@@ -22,8 +22,14 @@ import { ShowRewardPage } from '../showReward/ShowRewardPage';
 import { Toast } from '../common/Toast';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { PopupLayer } from '../../framework/ui/PopupDef';
-import { REWARD_ITEM_DETAIL_INTENT, type IRewardItemDetailIntent } from '../common/RewardItemEvents';
+import {
+    REWARD_GEM_DETAIL_INTENT,
+    REWARD_ITEM_DETAIL_INTENT,
+    type IRewardGemDetailIntent,
+    type IRewardItemDetailIntent,
+} from '../common/RewardItemEvents';
 import { ItemInfoPage } from '../itemdetail/ItemInfoPage';
+import { RoleGemInfoPopup } from '../role/RoleGemInfoPopup';
 import { registerRdVars } from '../rd/RdRegistry';
 import { GameNet } from '../net/GameNet';
 import { GameSocketBridge } from '../gm/GameSocketBridge';
@@ -56,6 +62,19 @@ export class ProcedureBootstrap extends Component {
             layer: PopupLayer.SYSTEM,
             allowMultiple: true,
         }).catch(error => { console.error('[RewardItem] 打开物品详情失败', error); });
+    };
+
+    /** 宝石奖励格 → 宝石详情（宝石不是道具，不能落到 `ItemInfoPage`）。 */
+    private readonly onRewardGemDetail = (intent: IRewardGemDetailIntent): void => {
+        const gemId = String(intent?.gemId ?? '');
+        // 与 `RoleRepository.describe` 同一口径：只认正整数实例 id，坏数据不弹窗。
+        if (!/^[1-9]\d*$/.test(gemId)) return;
+        // 与物品详情同一层：奖励弹窗 / 战斗结算页之上；允许叠开，不打断奖励领取。
+        void RoleGemInfoPopup.open({
+            userData: { gemId },
+            layer: PopupLayer.SYSTEM,
+            allowMultiple: true,
+        }).catch(error => { console.error('[RewardItem] 打开宝石详情失败', error); });
     };
 
     /** 真实支付发货广播：`CmdRecharge.rewards` 才是本次到账明细。 */
@@ -98,6 +117,7 @@ export class ProcedureBootstrap extends Component {
         GameNet.instance.addEvent('CmdRechargeBroMsg', this, this.onRechargeSettled);
         GameNet.instance.addEvent('CmdItemRewardBroMsg', this, this.onItemReward);
         EventMgr.instance.on(REWARD_ITEM_DETAIL_INTENT, this.onRewardItemDetail, this);
+        EventMgr.instance.on(REWARD_GEM_DETAIL_INTENT, this.onRewardGemDetail, this);
     }
     private configurePayment(network: FetchNetworkTransport): void {
         const payment = CenterPaymentService.instance(network);
@@ -161,6 +181,7 @@ export class ProcedureBootstrap extends Component {
     onDestroy(): void {
         cardRepository.bindHeroSession(null);
         EventMgr.instance.off(REWARD_ITEM_DETAIL_INTENT, this.onRewardItemDetail, this);
+        EventMgr.instance.off(REWARD_GEM_DETAIL_INTENT, this.onRewardGemDetail, this);
         const resourceLoads = this.resourceLoads;
         this.resourceLoads = null;
         try { resourceLoads?.dispose(); }

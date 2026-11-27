@@ -1,5 +1,6 @@
 import { instantiate, JsonAsset, Node, Prefab, Vec3 } from 'cc';
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
+import { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { ProcedurePreloadContext } from '../../../framework/procedure/ProcedureBase';
 import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
 import { VIEW_LIFECYCLE, type IViewLifecycle } from '../../../framework/ui/ViewLifecycle';
@@ -9,7 +10,7 @@ import { LoginController } from '../../login/LoginController';
 import { LoginRoot } from '../../login/LoginRoot';
 import { LoginPage } from '../../login/LoginPage';
 import { LoginGateway, DEFAULT_VERSION_CONFIG, type VersionConfig } from '../../login/LoginProtocol';
-import type { ILoginService, IServerSelectContent } from '../../login/LoginEvents';
+import type { ILoginService, IServerSelectContent, LoginOutput } from '../../login/LoginEvents';
 import { LoginUiEvent } from '../../login/LoginEvents';
 import { ServerSelectPanel } from '../../login/ServerSelectPanel';
 import { GameNet } from '../../net/GameNet';
@@ -22,7 +23,9 @@ import { TTUtil } from '../../../framework/utils/TTUtil';
 export class LoginComposition extends ControllerBase {
     private prefab: Prefab | null = null;
     private node: Node | null = null;
-    private panel: ServerSelectPanel | null = null;
+    private serverScope: ResourceScope | null = null;
+    private page: LoginPage | null = null;
+    private controller: LoginController | null = null;
     constructor(context: IControllerContext, private readonly network: NetworkTransport, private readonly host: Node) {
         super(context, 'login-composition');
     }
@@ -38,11 +41,12 @@ export class LoginComposition extends ControllerBase {
             const node = instantiate(this.prefab);
             this.node = node;
             const page = node.getComponent(LoginPage);
+            this.page = page;
             const controller = this.createController(page);
+            this.controller = controller;
             this.own(() => controller.dispose());
-            this.listen(LoginUiEvent.ServerClosed, (event: { panel: ServerSelectPanel }, source: object) => {
-                if (source === page && event.panel === this.panel) this.panel = null;
-            });
+            this.own(() => this.closeServers());
+            this.listen(LoginUiEvent.Output, this.onLoginOutput);
             this.listen(VIEW_LIFECYCLE, (event: IViewLifecycle, source: object) => {
                 if (source !== page) return;
                 if (event.phase === 'ready') void controller.start();
@@ -63,38 +67,60 @@ export class LoginComposition extends ControllerBase {
         const platformProvider = createPlatformLoginProvider();
         if (platformProvider) root.configurePlatformLogin(platformProvider);
         return new LoginController(this.resources, {
-            owner: page,
             service: createLoginService(root),
             config: {
                 loadVersion: () => this.loadVersion()
             },
-            view: page,
-            feedback: {
-                tip: text => FW.showTip(text)
-            },
-            servers: {
-                openServers: content => this.openServers(content),
-                closeServers: () => this.closeServers(),
-            },
             clock: {
                 schedule: (callback, seconds) => { page.scheduleOnce(callback, seconds); return () => page.unschedule(callback); }
-            },
-            navigation: {
-                navigate: (route, params) => ProcedureManager.navigate(route, params)
             },
             channel: resolveChannelConfig(),
         });
     }
-    private async openServers(content: IServerSelectContent): Promise<void> {
-        if (this.panel) return;
-        const panel = await ServerSelectPanel.open({ userData: content });
-        if (this.isDisposed) { if (panel?.isValid) panel.close(); return; }
-        if (panel?.isValid) this.panel = panel;
+    private onLoginOutput(output: LoginOutput, source: object): void {
+        if (source !== this.controller) return;
+        switch (output.kind) {
+            case 'restoreCredentials':
+                this.page?.restoreCredentials(output.value);
+                return;
+            case 'render':
+                this.page?.render(output.state);
+                return;
+            case 'tip':
+                FW.showTip(output.message);
+                return;
+            case 'openServers':
+                if (this.page) {
+                    this.openServers({
+                        owner: this.page,
+                        servers: output.servers,
+                        selectedServerId: output.selectedServerId,
+                    });
+                }
+                return;
+            case 'closeServers':
+                this.closeServers();
+                return;
+            case 'navigate':
+                ProcedureManager.navigate(output.route, output.params);
+                return;
+        }
+    }
+    private openServers(content: IServerSelectContent): void {
+        if (!this.serverScope || this.serverScope.disposed) {
+            this.serverScope = new ResourceScope('login-servers');
+        }
+        void ServerSelectPanel.open({
+            scope: this.serverScope,
+            userData: content,
+        }).catch(error => {
+            if (!this.isDisposed) FW.showTip(error instanceof Error ? error.message : String(error));
+        });
     }
     private closeServers(): void {
-        const panel = this.panel;
-        this.panel = null;
-        if (panel?.isValid) panel.close();
+        const scope = this.serverScope;
+        this.serverScope = null;
+        scope?.dispose();
     }
     private async loadVersion(): Promise<VersionConfig> {
         try {
@@ -108,6 +134,9 @@ export class LoginComposition extends ControllerBase {
     }
     dispose(): void {
         this.releaseInputs();
+        this.closeServers();
+        this.controller = null;
+        this.page = null;
         const node = this.node;
         this.node = null;
         this.prefab = null;

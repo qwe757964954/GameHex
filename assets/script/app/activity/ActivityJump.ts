@@ -38,21 +38,6 @@ import { ACTIVITY_TEXTS } from './LayerActivityTexts';
 import { resolveActivityJump } from './ActivityJumpTable';
 import type { ActivityJumpTarget } from './ActivityJumpTable';
 
-export {
-    ACTIVITY_JUMP_ROUTES,
-    JUMP_TYPE,
-    activityJumpLabel,
-    activityJumpTargets,
-    hasActivityJumpRoute,
-    resolveActivityJump,
-} from './ActivityJumpTable';
-export type {
-    ActivityJumpKind,
-    ActivityJumpTarget,
-    IActivityJumpRoute,
-    JumpType,
-} from './ActivityJumpTable';
-
 /** 取当前场景里的 `MainTabHost`（取不到返回 `null`，由 opener 内部判空）。 */
 function findTabHost(): MainTabHost | null {
     return director.getScene()?.getComponentInChildren(MainTabHost) ?? null;

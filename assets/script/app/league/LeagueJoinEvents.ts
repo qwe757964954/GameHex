@@ -1,6 +1,9 @@
 import type { ILeagueUnionView } from './LeagueTable';
 
-export const LeagueJoinEvent = { Intent: 'league-join:intent' } as const;
+export const LeagueJoinEvent = {
+    Intent: 'league-join:intent',
+    Output: 'league-join:output',
+} as const;
 
 /**
  * 加入联盟页的一次会话意图。
@@ -19,3 +22,10 @@ export type ILeagueJoinIntent =
 export interface ILeagueJoinView {
     readonly render: (rows: readonly ILeagueUnionView[]) => void;
 }
+
+export type LeagueJoinOutput =
+    | { readonly kind: 'render'; readonly rows: readonly ILeagueUnionView[] }
+    | { readonly kind: 'tip'; readonly text: string }
+    | { readonly kind: 'joined' }
+    | { readonly kind: 'openCreate' }
+    | { readonly kind: 'openUnion'; readonly union: ILeagueUnionView };

@@ -1,6 +1,10 @@
 import type { ServerInfoData, VersionConfig } from './LoginProtocol';
 
-export const LoginUiEvent = { Intent: 'login:intent', ServerClosed: 'login:server-closed' } as const;
+export const LoginUiEvent = {
+    Intent: 'login:intent',
+    Output: 'login:output',
+    ServerClosed: 'login:server-closed',
+} as const;
 
 /** 服务器选择以当前 LoginPage 为事件来源，选中意图携带服务器 id。 */
 export type ILoginIntent =
@@ -16,6 +20,14 @@ export interface IServerSelectContent {
     readonly servers: readonly ServerInfoData[];
     readonly selectedServerId: number | null;
 }
+
+export type LoginOutput =
+    | { readonly kind: 'restoreCredentials'; readonly value: { readonly account: string; readonly password: string } }
+    | { readonly kind: 'render'; readonly state: ILoginViewState }
+    | { readonly kind: 'tip'; readonly message: string }
+    | { readonly kind: 'openServers'; readonly servers: readonly ServerInfoData[]; readonly selectedServerId: number | null }
+    | { readonly kind: 'closeServers' }
+    | { readonly kind: 'navigate'; readonly route: string; readonly params?: unknown };
 
 export interface ILoginViewState {
     readonly version: string;

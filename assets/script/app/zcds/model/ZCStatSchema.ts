@@ -253,6 +253,26 @@ export interface ZCSkillPlanRecord {
     operation?: ZCStatOperation;
     value?: number;
     behaviorKey?: string;
+    /**
+     * 技能名（`pvpSkillPlan.skillName` 原样带过来，2026-11-25）。
+     *
+     * 为什么构筑期必须留一份：行为车道（`fire_zone` / `trap_place` / `blink_strike` …）是
+     * **基表 `pvpSkill` 里没有行**的技能 —— 它们的伤害事件套的是普攻行的 `skillId / name`
+     * （见 `ZCSkillResolutionSystem.castFireZone` 里 `definition.attackProfile`），
+     * 事件层再也读不到「文明之火」这四个字。大招通报要写名字，只能从这里取。
+     * 留空 ⇒ 该行没配名字，通报不播（不拿「XX普攻」冒充）。
+    */
+    skillName?: string;
+    /** 技能说明（`pvpSkillPlan.desc` 原样带过来）；兵营/卡牌详情直接展示这一行。*/
+    description?: string;
+    /**
+     * 技能类型（`pvpSkillPlan.skillKind`：`active_cd` / `active_attack` / `passive_stat`）。
+     *
+     * 大招通报按它筛选（2026-11-25 用户口径「只报主动技能名字」）：`passive_stat` 占了全表
+     * 2311 行里的 2137 行（子链、尾巴、owner 级加成都在里面），不筛就等于「事件带 skillId 就报」，
+     * 普攻行与被动表现会一起弹。判据在 `zcIsAnnounceSkillKind`。
+     */
+    skillKind?: string;
     triggerEvent?: string;
     stateMode: ZCSkillStateMode;
     targetSelector?: string;
@@ -1042,6 +1062,9 @@ export function parseZCModifierAdapterCatalogs(
             operation,
             value,
             behaviorKey,
+            skillName: typeof row.skillName === 'string' && row.skillName.trim() ? row.skillName.trim() : undefined,
+            description: typeof row.desc === 'string' && row.desc.trim() ? row.desc.trim() : undefined,
+            skillKind: typeof row.skillKind === 'string' && row.skillKind.trim() ? row.skillKind.trim() : undefined,
             triggerEvent: typeof row.triggerEvent === 'string' && row.triggerEvent.trim() ? row.triggerEvent.trim() : undefined,
             stateMode: (typeof row.stateMode === 'string' && row.stateMode.trim() ? row.stateMode.trim() : 'none') as ZCSkillBinding['stateMode'],
             targetSelector: typeof row.targetSelector === 'string' && row.targetSelector.trim() ? row.targetSelector.trim() : undefined,

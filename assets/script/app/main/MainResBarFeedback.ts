@@ -141,7 +141,7 @@ export const RES_BAR_SPEND_ICON_POP = 0.12;
 export const RES_BAR_SPEND_LABEL_POP = 0.2;
 
 /** 数字向上跳的像素（`0` = 只放大不位移）。 */
-export const RES_BAR_SPEND_LABEL_HOP = 6;
+const RES_BAR_SPEND_LABEL_HOP = 6;
 
 /**
  * 闪烁时数字混向的**目标色**（纯白）。
@@ -287,8 +287,8 @@ export function resBarSpendFloatFx(elapsed: number): IResBarSpendFloatFx | null 
 /**
  * 飘字的文本：`-` 符号 + 扣除数字（需求原文「【-】符号和扣除数字」）。
  *
- * 不带千分位 —— 与资源栏自身的数字同口径（`formatResBarCountText` 也不加），
- * 上下两处排版一致才不会让人以为不是同一笔账。
+ * 不带千分位、也不缩写 —— 它回答的是「这一笔扣了多少」：`-1000` 比 `-1K` 更好核对，
+ * 与资源栏主读数（大数缩写，见 `MainResBarTypes.formatResBarAmountText`）分工不同。
  */
 export function formatResBarSpendFloat(amount: number): string {
     const value = Number.isFinite(amount) ? Math.round(Math.abs(amount)) : 0;
@@ -300,42 +300,6 @@ function toChannel(value: unknown): number {
     const n = Number(value);
     if (!Number.isFinite(n)) return 0;
     return n < 0 ? 0 : n > 255 ? 255 : Math.round(n);
-}
-
-/** 拆开的数值文本：`12/60` → `{ value: 12, suffix: '/60' }`；`1,234` → `{ 1234, '' }`。 */
-export interface IResBarCountText {
-    readonly value: number;
-    /** 数值后面原样保留的部分（体力的 `/上限`、单位等）。 */
-    readonly suffix: string;
-}
-
-/**
- * 把资源栏上的**显示文本**拆成「数值 + 后缀」。
- *
- * 不认千分位里的逗号（先剔掉）：`CmdRole` 的数值是本端拼的 `String(number)`，
- * 但老端存档 / 手改的缓存里出现过 `1,234`，剔掉最省事。
- * 拆不出来（空串 / 纯文字）⇒ `value = 0`，调用方据此跳过滚动（只弹跳）。
- */
-export function parseResBarCountText(text: string): IResBarCountText {
-    const raw = typeof text === 'string' ? text.replace(/,/g, '').trim() : '';
-    const matched = /^(-?\d+)(.*)$/.exec(raw);
-    if (!matched) return { value: 0, suffix: '' };
-    const value = Number(matched[1]);
-    return {
-        value: Number.isFinite(value) ? value : 0,
-        suffix: matched[2] ?? '',
-    };
-}
-
-/**
- * 滚动中的显示文本：数值取整后拼回后缀。
- *
- * ⚠️ 不重排千分位 —— `CmdRole` 的数字本来就没有分隔符，这里加进去会在动画收尾那一下
- *   跳成另一个排版（数字滚动最刺眼的就是**最后一个字的排版突变**）。
- */
-export function formatResBarCountText(base: IResBarCountText, value: number): string {
-    const target = Number.isFinite(value) ? Math.round(value) : 0;
-    return `${target}${base.suffix}`;
 }
 
 /**

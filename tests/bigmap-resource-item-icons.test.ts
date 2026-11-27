@@ -88,21 +88,22 @@ test('显式 itemId 优先于缺列约定，0 仍可关闭背包映射', () => {
         assert.equal(config.resources.get('iron')?.itemId, 18503);
     }
 });
-test('真实 item 表已配 18501~18505 的图标，且图真的在 main-pages/icons/item 下', () => {
+test('真实 item 表已配 18501~18505 的图标，且图真的在 bigmap/concept/ui 下', () => {
     const config = loadBigMapConfig();
     const itemRows = JSON.parse(readFileSync('assets/remoteRef/item.json', 'utf8'));
     const merged = attachBigMapResourceItemIcons(config, itemRows);
-    // 表与图必须成对：只配了表没交图 ⇒ 加载必然 null；只交了图没配表 ⇒ 走不到背包那条路。
+    // 表与图必须成对：只配了表没交图 ⇒ 加载必然 null；只交了图没配表 ⇒ 走不到这条链。
+    // 2026-11-26：18501-18504 从背包 `icons/item/图标_*` 改指 `concept/ui/top_*`（金币也换成 top_coin），
+    // `concept/sprites/` 整目录已删除 —— 这条用例同时守住「表里写的新图真的在库里」。
     const expected: Record<string, string> = {
-        grain: 'icons/item/图标_粮食',
-        wood: 'icons/item/图标_木材',
-        iron: 'icons/item/图标_矿石',
-        coin: 'icons/item/图标_钻石',
-        stamina: 'icons/item/图标_行动力',
+        grain: 'image/concept/ui/top_grain',
+        wood: 'image/concept/ui/top_wood',
+        iron: 'image/concept/ui/top_iron',
+        coin: 'image/concept/ui/top_coin',
+        stamina: 'image/concept/ui/top_stamina',
     };
     for (const [resType, icon] of Object.entries(expected)) {
         assert.equal(merged.resourceIcons.get(resType as never), icon);
-        assert.ok(existsSync(`assets/bundles/main-pages/icons/item/${icon.split('/').pop()}.png`),
-            `缺图：${icon}.png`);
+        assert.ok(existsSync(`assets/bundles/bigmap/${icon}.png`), `缺图：${icon}.png`);
     }
 });

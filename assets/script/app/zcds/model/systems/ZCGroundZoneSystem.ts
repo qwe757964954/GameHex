@@ -1,5 +1,11 @@
 import type { ZCFloatText, ZCGroundZoneState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import type { ZCStatusApplyOptions, ZCStatusSystemSnapshot } from '../ZCStatusEffect';
+import { zcEffectDurationOf } from '../ZCEffectCatalog';
+import {
+    ZC_BULLET_RAIN_ORIGIN_LIFT_PX, ZC_BULLET_RAIN_SHOT_INTERVAL_SECONDS,
+    zcBulletDropHeightOf, zcBulletFlyArcPx, zcBulletFlySecondsFor, zcBulletRainFieldsAt,
+    zcBulletRainImpactAt, zcBulletRainStyleOf,
+} from '../ZCProjectileDropStyle';
 import type { IZCModelServices } from './ZCModelServices';
 
 /** 判定形状只关心这几列，抽出签名好测。*/
@@ -207,6 +213,9 @@ export class ZCGroundZoneSystem {
         zone.moveVelocityY = 0;
         //  落地把抬升清掉：留着的话常驻陷阱会飘在半空。
         if (arc > 0) zone.visualLiftPx = undefined;
+        //  飞行段的朝向也要清（2026-11-26 第 57 批）：那是「子弹头朝飞的方向」，
+        //  留着会让落地后的常驻陷阱图歪着躺在地上。
+        zone.angleDegrees = undefined;
         //  落地换挡（2026-11-19 蘑菇爆炸 101704）：飞行段播的是「生成」，落地要换成常驻的
         //  「陷阱」。做法是把飞行段那条持有事件**就地摘掉**（`durationSeconds` 压到「已活时长」，
         //  下一拍就到了），再清掉 `visualEventId` —— 紧接着这一帧的 `syncHoldVisual` 会按
@@ -700,7 +709,105 @@ export class ZCGroundZoneSystem {
     private static resolveWave(state: IZCGroundZoneStepState, zone: ZCGroundZoneState, context: IZCGroundZoneContext): void {
         let statusChanged = false;
         if (!zone.holdVisual) {
-            state.combatEvents.push({
+            //  这两条纯表现口径都按**单位名单**分流（见 `ZCProjectileDropStyle`）：
+            //  · 垂直下落（杰克藕 / 急冻瓜）：`dropFromPx` 由视图按进度递减到 0；
+            //  · 从施法者飞入（篮球天才，2026-11-25 第 53 批）：给起点 + 时长 + 抛物峰高，
+            //    视图把特效从施法者坐标插值到 `zone.x/y`（命中区域本身**一直**在目标坐标）。
+            //  🔴 两者都只改表现位置，`zone.x/y` 与区域判定一个字节都不动。
+            const source = context.unitById?.(zone.sourceUnitId);
+            const sourceUnitId = source ? source.unitId : undefined;
+            //  起点必须是「施法者**现在**在哪」：区域是出手当拍建的，第一波也在同一拍，
+            //  所以这就是「球离手的地方」。`unitPosition` 缺席（轻量上下文）按 0 距离处理 ⇒
+            //  退化成原地播，不会飞出一段莫名其妙的长线。
+            //  🔴 只取一次并立刻拆成两个数：`unitPosition` 返回的是**每单位复用的 scratch**，
+            //  把对象留着传到 `push` 里，中间任何一次取位都会把它改掉。
+            let flyFromX: number | undefined;
+            let flyFromY: number | undefined;
+            let flySeconds = 0;
+            if (source) {
+                const origin = context.unitPosition(source);
+                const originX = origin.x;
+                const originY = origin.y;
+                flySeconds = zcBulletFlySecondsFor(sourceUnitId, Math.hypot(zone.x - originX, zone.y - originY));
+                if (flySeconds > 0) {
+                    flyFromX = originX;
+                    flyFromY = originY;
+                }
+            }
+            //  第 55 批「弹道雨」（2026-11-26）：这批卡不发一颗大弹，而是**一批小弹**
+            //  从施法者沿贝塞尔抛向圈内各自随机的落点。颗数/弧高见 `ZC_BULLET_RAIN_UNITS`。
+            //  🔴 落点写 `flyTo*`（表现坐标），`zone.x/y` 与判定一个字节不动 —— 见 `ZCProjectileDropStyle`。
+            const rain = zcBulletRainStyleOf(sourceUnitId, 'zone');
+            if (rain && source) {
+                const origin = context.unitPosition(source);
+                const originX = origin.x;
+                const originY = origin.y;
+                //  同一波共用种子 ⇒ 落点可复算（录像/快照重算必须一模一样）；下一波 id 不同 ⇒ 落点换一批
+                const seed = state.nextCombatEventId;
+                for (let index = 0; index < rain.count; index += 1) {
+                    const fields = zcBulletRainFieldsAt(rain, index, {
+                        originX, originY, centerX: zone.x, centerY: zone.y, radiusWorld: zone.radius,
+                    }, seed);
+                    //  2026-11-26 第 58 批：逐颗出手，0.1s 一颗（篮球不再同一拍三颗齐落）。
+                    const fireAt = state.elapsedSeconds + index * ZC_BULLET_RAIN_SHOT_INTERVAL_SECONDS;
+                    state.combatEvents.push({
+                        id: state.nextCombatEventId++,
+                        type: 'area',
+                        owner: zone.owner,
+                        sourceUnitId: zone.sourceUnitId,
+                        targetUnitId: null,
+                        skillId: zone.skillId,
+                        skillName: zone.skillName,
+                        effectKey: null,
+                        projectileKey: null,
+                        effectPrefabPath: zone.effectPrefabPath ?? null,
+                        fromX: zone.x,
+                        fromY: zone.y,
+                        toX: zone.x,
+                        toY: zone.y,
+                        radius: zone.radius,
+                        damage: zone.damage,
+                        empowered: true,
+                        startedAt: fireAt,
+                        //  2026-11-26 第 56 批：子弹**到点即摘**（原来取 max(波间隔, 特效时长,
+                        //  飞行时长)，于是火球落在圈里之后还继续播 3 秒，看着像「卡在地上」）。
+                        durationSeconds: fields.flyInSeconds,
+                        angleDegrees: zone.angleDegrees,
+                        //  第 58 批：起点抬到「角色图片中心 +5px」（区域自己的抬升照叠）。
+                        visualLiftPx: (zone.visualLiftPx ?? 0) + ZC_BULLET_RAIN_ORIGIN_LIFT_PX,
+                        effectScale: zone.effectScale,
+                        tint: zone.tint,
+                        ...fields,
+                    });
+                    //  「命中指定坐标消失，在坐标处播放受击特效」：独立 `area` 事件，
+                    //  `startedAt` 排在**这颗**的到达时刻（逐颗出手后不能再传这一拍）。
+                    const impact = zcBulletRainImpactAt(rain, fields, fireAt);
+                    state.combatEvents.push({
+                        id: state.nextCombatEventId++,
+                        type: 'area',
+                        owner: zone.owner,
+                        sourceUnitId: zone.sourceUnitId,
+                        targetUnitId: null,
+                        skillId: zone.skillId,
+                        skillName: zone.skillName,
+                        effectKey: null,
+                        projectileKey: null,
+                        effectPrefabPath: impact.effectPrefabPath,
+                        fromX: impact.x,
+                        fromY: impact.y,
+                        toX: impact.x,
+                        toY: impact.y,
+                        radius: 1,
+                        damage: 0,
+                        empowered: true,
+                        startedAt: impact.startedAt,
+                        durationSeconds: impact.durationSeconds,
+                        //  跟着子弹的抬升走：不然「球在半空消失、爆炸在地上」对不上
+                        visualLiftPx: zone.visualLiftPx,
+                    });
+                }
+                //  多颗已经发完，不再走下面那条单颗通道（else 分支）
+            } else state.combatEvents.push({
                 id: state.nextCombatEventId++,
                 type: 'area',
                 owner: zone.owner,
@@ -719,9 +826,24 @@ export class ZCGroundZoneSystem {
                 damage: zone.damage,
                 empowered: true,
                 startedAt: state.elapsedSeconds,
-                durationSeconds: zone.waveInterval,
+                //  事件寿命 = 波次间隔 与「目录登记的寿命下限」取大。
+                //  🔴 有些一次性长演出（2026-11-25 运动霸「天外飞石」1.375s，区域
+                //  `durationSeconds` 配的是 0）波次间隔也是 0 ⇒ 事件当拍就被
+                //  `ZCGameModel` 按 `startedAt + durationSeconds` 摘掉，画面上只剩一闪。
+                //  没登记 `durationSeconds` 的路径该函数返回 0 ⇒ 存量区域逐字不变
+                //  （暴风雪 / 灼热地带 / 火船全在这一档）。
+                //  飞入段也要占进寿命里：飞 0.55s 却只活 0.3s 会「半路消失」。
+                durationSeconds: Math.max(zone.waveInterval, zcEffectDurationOf(zone.effectPrefabPath), flySeconds),
                 angleDegrees: zone.angleDegrees,
                 visualLiftPx: zone.visualLiftPx,
+                //  2026-11-25 第 52 批：杰克藕 / 急冻瓜这类「区域洒弹」技能，
+                //  每波表现从区域**上方**掉下来（`dropFromPx` 由视图按进度递减到 0）。
+                //  名单外返回 0 ⇒ 暴风雪 / 灼热地带等既有区域逐字不变。
+                dropFromPx: zcBulletDropHeightOf(sourceUnitId),
+                flyFromX,
+                flyFromY,
+                flyInSeconds: flySeconds > 0 ? flySeconds : undefined,
+                flyArcPx: flySeconds > 0 ? zcBulletFlyArcPx(sourceUnitId) : undefined,
                 effectScale: zone.effectScale,
                 tint: zone.tint,
             });

@@ -1,41 +1,22 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
 import { EventMgr } from '../../framework/event/EventMgr';
 import type { ICardRepository } from './CardRepository';
-import type { LineupBoardPresentation } from './CardPresentations';
 import { LineupBoardModel } from './LineupBoardModel';
-import { CardPopupEvent, type LineupBoardIntent } from './CardPopupEvents';
+import { CardPopupEvent, type LineupBoardIntent, type LineupBoardOutput } from './CardPopupEvents';
 import { CardLineupEvent } from './CardLineupEvents';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 
 export interface ILineupBoardControllerOptions {
-    readonly owner: object;
     readonly model: LineupBoardModel;
     readonly repository: Pick<ICardRepository, 'loadBoard' | 'saveFormation' | 'selectFormation'>;
     readonly autoLoadDecks: boolean;
     readonly closeAfterSave: boolean;
-    readonly failed: (error: unknown) => void;
-    readonly view: {
-        readonly render: (state: LineupBoardPresentation) => void | Promise<void>;
-        readonly close: () => void;
-    };
-    readonly feedback: {
-        readonly tip: (text: string) => void;
-    };
-    readonly requests: {
-        readonly removeCaller: (caller: object) => void;
-    };
 }
 export class LineupBoardController extends ControllerBase {
-    private started = false;
     constructor(context: IControllerContext, private readonly options: ILineupBoardControllerOptions) {
         super(context, 'lineup-board');
-        this.own(() => options.requests.removeCaller(this));
     }
     async start(): Promise<void> {
-        if (this.started || this.isDisposed) {
-            return;
-        }
-        this.started = true;
         this.listen(CardPopupEvent.BoardIntent, this.onIntent);
         try {
             const data = await this.options.repository.loadBoard(this.options.autoLoadDecks);
@@ -43,18 +24,24 @@ export class LineupBoardController extends ControllerBase {
                 return;
             }
             this.options.model.load(data);
-            await this.publish();
+            this.publish();
         } catch (error) {
             if (!this.isDisposed) {
-                this.options.failed(error);
-                this.options.feedback.tip(CARD_LINEUP_TEXTS.boardLoadFailed);
+                this.emitOutput({ kind: 'failed', error });
+                this.emitOutput({ kind: 'tip', text: CARD_LINEUP_TEXTS.boardLoadFailed });
             }
         }
     }
-    private async publish(): Promise<void> {
+    private emitOutput(output: LineupBoardOutput): void {
+        if (this.isDisposed) {
+            return;
+        }
+        EventMgr.instance.emit(CardPopupEvent.BoardOutput, output, this);
+    }
+    private publish(): void {
         const state = this.options.model.snapshot;
         if (state && !this.isDisposed) {
-            await this.options.view.render(state);
+            this.emitOutput({ kind: 'render', state });
         }
     }
     private onIntent(event: LineupBoardIntent): void {
@@ -74,7 +61,7 @@ export class LineupBoardController extends ControllerBase {
         } else {
             this.options.model.reset();
         }
-        void this.publishSafely();
+        this.publish();
     }
 
     /**
@@ -98,7 +85,7 @@ export class LineupBoardController extends ControllerBase {
         if (complete && model.switchNeedsCommit && !await this.submit(true)) return;
         if (this.isDisposed || !model.snapshot) return;
         model.selectPreset(index);
-        await this.publishSafely();
+        this.publish();
         if (complete) await this.selectOnServer();
     }
 
@@ -123,14 +110,6 @@ export class LineupBoardController extends ControllerBase {
         });
     }
 
-    private publishSafely(): Promise<void> {
-        return this.publish().catch(error => {
-            if (!this.isDisposed) {
-                this.options.failed(error);
-            }
-        });
-    }
-
     /**
      * 保存当前方案（协议口径是「保存 并 选中」，见 `FormationService.sendFormationOp`）。
      *
@@ -145,15 +124,18 @@ export class LineupBoardController extends ControllerBase {
             return false;
         }
         try {
-            void this.publishSafely();
+            this.publish();
             const result = await this.options.repository.saveFormation(submission.formationId, submission.heroIds, this);
             if (this.isDisposed) {
                 return false;
             }
             const unchanged = model.finishSave(submission, result.kind);
             if (result.kind !== 'success') {
-                this.options.feedback.tip(result.kind === 'offline' ? CARD_LINEUP_TEXTS.boardSaveOffline : CARD_LINEUP_TEXTS.boardSaveFailed);
-                await this.publishSafely();
+                this.emitOutput({
+                    kind: 'tip',
+                    text: result.kind === 'offline' ? CARD_LINEUP_TEXTS.boardSaveOffline : CARD_LINEUP_TEXTS.boardSaveFailed,
+                });
+                this.publish();
                 return false;
             }
             EventMgr.instance.emit(CardLineupEvent.DeckSaved, { formationId: submission.formationId, heroIds: submission.heroIds });
@@ -161,22 +143,22 @@ export class LineupBoardController extends ControllerBase {
                 return false;
             }
             if (!quietSuccess) {
-                this.options.feedback.tip(CARD_LINEUP_TEXTS.boardSaved);
+                this.emitOutput({ kind: 'tip', text: CARD_LINEUP_TEXTS.boardSaved });
             }
             if (unchanged && this.options.closeAfterSave) {
-                this.options.view.close();
+                this.emitOutput({ kind: 'close' });
                 return true;
             }
-            await this.publishSafely();
+            this.publish();
             return unchanged;
         } catch (error) {
             if (this.isDisposed) {
                 return false;
             }
             model.finishSave(submission, 'failed');
-            this.options.failed(error);
-            this.options.feedback.tip(CARD_LINEUP_TEXTS.boardSaveFailed);
-            await this.publishSafely();
+            this.emitOutput({ kind: 'failed', error });
+            this.emitOutput({ kind: 'tip', text: CARD_LINEUP_TEXTS.boardSaveFailed });
+            this.publish();
             return false;
         }
     }

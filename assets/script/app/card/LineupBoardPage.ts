@@ -9,7 +9,7 @@ import {
     SpriteFrame,
 } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
-import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { ZCDeckCard } from './CardLineupTypes';
 import { cardArtProvider } from './CardArtProvider';
 import type { ICardArtConfig } from './CardArtConfig';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';

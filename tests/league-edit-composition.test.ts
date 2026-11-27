@@ -4,10 +4,11 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import * as ts from 'typescript';
-import { PopupCompositionHost, type IPopupComposition } from '../assets/script/framework/ui/PopupCompositionHost';
+import { PopupCompositionHost, PopupSession, type IPopupComposition } from '../assets/script/framework/ui/PopupCompositionHost';
 import { LeagueEditController } from '../assets/script/app/league/LeagueEditController';
 import { LeagueEditModel } from '../assets/script/app/league/LeagueEditModel';
 import { LeagueEditEvent, type ILeagueEditViewState } from '../assets/script/app/league/LeagueEditEvents';
+import { LeagueRewardEvent } from '../assets/script/app/league/LeagueRewardEvents';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { createControllerContext } from './helpers/controller-context';
 import type { LeagueRequestResult } from '../assets/script/app/league/LeagueRepository';
@@ -84,15 +85,22 @@ test('real composition owns one controller per opening, cancels old caller and i
     const { createLeaguePopupComposition } = load<{
         createLeaguePopupComposition: (context: ReturnType<typeof createControllerContext>, view: object) => IPopupComposition | null;
     }>('assets/script/app/bootstrap/LeaguePopupComposition.ts', {
+        PopupCompositionHost: { PopupSession },
         ...Object.fromEntries(['LeagueStorePage', 'LeagueDiscountPage', 'LeagueTaskPage', 'LeagueNorthRewardPage', 'LeagueNorthExpeditionPage'].map(name => [name, { [name]: class {} }])),
         LeagueRewardController: { LeagueRewardController },
+        LeagueRewardEvents: { LeagueRewardEvent },
         LeagueEditPage: { LeagueEditPage: Page }, LeagueEditModel: { LeagueEditModel }, LeagueEditController: { LeagueEditController },
+        LeagueEditEvents: { LeagueEditEvent },
         FW: { FW: { showTip: (text: string) => tips.push(text) } },
-        GameNet: { GameNet: { instance: { removeCaller: (caller: object) => cancelled.push(caller) } } },
         LeagueRepository: { leagueRepository: { edit: (type: number, content: string, caller: object) =>
             new Promise<LeagueRequestResult>(resolve => requests.push({ caller, type, content, resolve })) } },
     });
-    const context = createControllerContext();
+    const context = createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => cancelled.push(caller),
+        },
+    });
     assert.equal(createLeaguePopupComposition(context, {}), null);
     const host = new PopupCompositionHost<object>(view => createLeaguePopupComposition(context, view));
     const view = new Page();
@@ -116,6 +124,56 @@ test('real composition owns one controller per opening, cancels old caller and i
         const broken = new Page(); broken.render = () => { throw new Error('render failed'); };
         await assert.rejects(host.open(broken, { type: 1, content: '值' }), /render failed/);
         assert.equal(cancelled.length, 3);
+    } finally { host.dispose(); }
+});
+
+test('reward popup composition dispatches rewards by source identity and disposes cleanly', async () => {
+    class StorePage {}
+    class RewardSpy extends LeagueRewardController {}
+    const instances: LeagueRewardController[] = [];
+    const rewardsShown: CmdGoods[][] = [];
+    const cancelled: object[] = [];
+    const { createLeaguePopupComposition } = load<{
+        createLeaguePopupComposition: (context: ReturnType<typeof createControllerContext>, view: object) => IPopupComposition | null;
+    }>('assets/script/app/bootstrap/LeaguePopupComposition.ts', {
+        PopupCompositionHost: { PopupSession },
+        ...Object.fromEntries(['LeagueDiscountPage', 'LeagueTaskPage', 'LeagueNorthRewardPage', 'LeagueNorthExpeditionPage'].map(name => [name, { [name]: class {} }])),
+        LeagueStorePage: { LeagueStorePage: StorePage },
+        LeagueRewardController: {
+            LeagueRewardController: class extends RewardSpy {
+                constructor(context: ReturnType<typeof createControllerContext>, options: ConstructorParameters<typeof LeagueRewardController>[1]) {
+                    super(context, options);
+                    instances.push(this);
+                }
+            },
+        },
+        LeagueRewardEvents: { LeagueRewardEvent },
+        LeagueEditPage: { LeagueEditPage: class {} }, LeagueEditModel: { LeagueEditModel }, LeagueEditController: { LeagueEditController },
+        LeagueEditEvents: { LeagueEditEvent },
+        FW: { FW: { showTip() {}, ShowReward: (goods: CmdGoods[]) => rewardsShown.push(goods) } },
+        LeagueRepository: { leagueRepository: { buyStoreGoods: async () => ({ status: 'ok', rewards: [] }) } },
+    });
+    const context = createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => cancelled.push(caller),
+        },
+    });
+    const host = new PopupCompositionHost<object>(view => createLeaguePopupComposition(context, view));
+    const storeView = new StorePage();
+    try {
+        assert.equal(await host.open(storeView, undefined), true);
+        assert.equal(instances.length, 1);
+        const controller = instances[0];
+        const sample = [{ resId: 11, number: '5' }] as unknown as CmdGoods[];
+        EventMgr.instance.emit(LeagueRewardEvent.Output, { kind: 'reward', rewards: sample }, {});
+        assert.equal(rewardsShown.length, 0);
+        EventMgr.instance.emit(LeagueRewardEvent.Output, { kind: 'reward', rewards: sample }, controller);
+        assert.deepEqual(rewardsShown, [sample]);
+        host.close(storeView);
+        assert.deepEqual(cancelled, [controller]);
+        EventMgr.instance.emit(LeagueRewardEvent.Output, { kind: 'reward', rewards: sample }, controller);
+        assert.equal(rewardsShown.length, 1);
     } finally { host.dispose(); }
 });
 

@@ -28,7 +28,12 @@ const REMOTE = 'assets/remoteRef';
 const CLIENT = 'D:/Alan/Project/POW/doc/塔防数据配置/json/client';
 
 function remoteRows(name: string): Array<Record<string, unknown>> {
-    const source = JSON.parse(readFileSync(`${REMOTE}/${name}.json`, 'utf8')) as { k: string[]; v: unknown[][] };
+    //  两种落盘形态都要吃：`armySkillLevelUp` 是列存 `{k,v}`，`pvpSkillPlan`
+    //  2026-11 的表更新后是**行对象数组**（`[{...},...]`）—— 只按列存解析会让整组用例
+    //  一起报 `Cannot read properties of undefined (reading 'map')`，看着像数据错。
+    const raw = readFileSync(`${REMOTE}/${name}.json`, 'utf8');
+    const source = JSON.parse(raw) as Array<Record<string, unknown>> | { k: string[]; v: unknown[][] };
+    if (Array.isArray(source)) return source;
     return source.v.map((row) => Object.fromEntries(source.k.map((key, index) => [key, row[index]])));
 }
 
@@ -37,13 +42,15 @@ function clientRows(name: string): Array<Record<string, unknown>> {
 }
 
 /** 本批 5 条：链 → (卡, 名称, 额外段数, 是否有第 3 段)。
- *  68009 的 100901 已换成「破阵投枪」（第 7 批），不再在这里。 */
-const SKILLS: Array<{ chain: number; card: string; name: string; hits: number }> = [
-    { chain: 100501, card: '68005', name: '蔓生连打', hits: 1 },
-    { chain: 100702, card: '68007', name: '蔓生三连', hits: 2 },
-    { chain: 101401, card: '68014', name: '蔓生连打', hits: 1 },
-    { chain: 101801, card: '68018', name: '蔓生三连', hits: 2 },
-    { chain: 102501, card: '68025', name: '蔓生三连', hits: 2 },
+ *  68009 的 100901 已换成「破阵投枪」（第 7 批），不再在这里。
+ *  `levels` = 该链三档的解锁兵种等级（设计案 2026-11-26 口径：技能1 2/10/22、技能2 3/16/26）。 */
+const SKILLS: Array<{ chain: number; card: string; name: string; hits: number; levels: readonly number[] }> = [
+    //  🔴 2026-11-25 设计案统一命名：1 段叫「飞叶快打」（原「蔓生连打」）、2 段叫「三连击」（原「蔓生三连」）。
+    { chain: 100501, card: '68005', name: '飞叶快打', hits: 1, levels: [2, 10, 22] },
+    { chain: 100702, card: '68007', name: '三连击', hits: 2, levels: [3, 16, 26] },
+    { chain: 101401, card: '68014', name: '飞叶快打', hits: 1, levels: [2, 10, 22] },
+    { chain: 101801, card: '68018', name: '三连击', hits: 2, levels: [2, 10, 22] },
+    { chain: 102501, card: '68025', name: '三连击', hits: 2, levels: [2, 10, 22] },
 ];
 
 const COMBO_DAMAGE = [60, 65, 70];
@@ -63,7 +70,7 @@ test('5 条连击：段数走 attackCount、递减走 comboDamage / comboFalloff
                 assert.equal(row.statId, 'attackCount', '段数只能走 attackCount ⇒ multiHitFlat');
                 assert.equal(row.operation, 'add');
                 assert.equal(Number(row.value), spec.hits, `${spec.chain} 的额外段数`);
-                assert.equal(Number(row.unlockHeroLevel), [3, 10, 22][index], '这 5 条都在第 1 格 ⇒ 3/10/22');
+                assert.equal(Number(row.unlockHeroLevel), spec.levels[index], `${spec.chain} L${index + 1} 解锁档位`);
                 const params = JSON.parse(String(row.skillParamJson)) as Record<string, number>;
                 assert.equal(params.comboDamage, COMBO_DAMAGE[index], '第 2 段占首段的百分比');
                 assert.equal(params.comboFalloff, COMBO_FALLOFF, '再往后每段 ×0.6');
@@ -72,9 +79,9 @@ test('5 条连击：段数走 attackCount、递减走 comboDamage / comboFalloff
     }
 });
 
-test('名称规则：1 段叫「蔓生连打」、2 段叫「蔓生三连」（段数不同 ⇒ 机制不同 ⇒ 不同名）', () => {
+test('名称规则：1 段叫「飞叶快打」、2 段叫「三连击」（段数不同 ⇒ 机制不同 ⇒ 不同名）', () => {
     for (const spec of SKILLS) {
-        const expected = spec.hits === 1 ? '蔓生连打' : '蔓生三连';
+        const expected = spec.hits === 1 ? '飞叶快打' : '三连击';
         assert.equal(spec.name, expected, `${spec.chain} 段数 ${spec.hits} 与名称不符`);
         const kRows = remoteRows('armySkillLevelUp').filter((row) => Number(row.id) === spec.chain);
         assert.equal(kRows.length, 3, `${spec.chain} 的 K 表必须三档齐备`);
@@ -102,7 +109,7 @@ test('文案：第 2 段逐档 60/65/70%，有第 3 段的卡再写 36/39/42%', 
 
 test('尾巴落位：有子链走子链槽位，没子链走 mix；子链与主链同档解锁', () => {
     const rows = remoteRows('pvpSkillPlan');
-    const expectSlot = (chainId: number, statId: string, value: number) => {
+    const expectSlot = (chainId: number, statId: string, value: number, levels: readonly number[]) => {
         const tiers = rows.filter((row) => Number(row.skillChainId) === chainId)
             .sort((left, right) => Number(left.skillLevel) - Number(right.skillLevel));
         assert.equal(tiers.length, 3, `${chainId} 三档齐备`);
@@ -110,15 +117,15 @@ test('尾巴落位：有子链走子链槽位，没子链走 mix；子链与主�
             assert.equal(row.statId, statId, `${chainId} 承载的属性`);
             assert.equal(row.operation, 'addRate');
             assert.equal(Number(row.value), value);
-            assert.equal(Number(row.unlockHeroLevel), [3, 10, 22][index], '子链必须与主链同档解锁');
+            assert.equal(Number(row.unlockHeroLevel), levels[index], `${chainId} 子链必须与主链同档解锁`);
             //  子链不能再带 combo 参数：它按 `unitId:pvpSkillId` 覆盖合并，写重了谁赢看行序。
             assert.equal(row.skillParamJson, null, `${chainId} 不该带参数袋`);
         }
     };
-    expectSlot(280702, 'attack', 0.18);
-    expectSlot(190702, 'attackSpeed', 0.18);
-    expectSlot(280901, 'attack', 0.26);
-    expectSlot(190901, 'attackSpeed', 0.28);
+    expectSlot(280702, 'attack', 0.18, [3, 16, 26]);
+    expectSlot(190702, 'attackSpeed', 0.18, [3, 16, 26]);
+    expectSlot(280901, 'attack', 0.26, [2, 10, 22]);
+    expectSlot(190901, 'attackSpeed', 0.28, [2, 10, 22]);
 
     const mixOf = (chain: number, tier: number) => JSON.parse(String(
         rows.find((row) => Number(row.skillChainId) === chain && Number(row.skillLevel) === tier)!.skillParamJson,
@@ -148,17 +155,32 @@ test('K 表 modfiy 只指到真实存在的修改器（顺带清掉 94925011 / 9
     const plan = remoteRows('pvpSkillPlan');
     const known = new Set(plan.map((row) => Number(row.modifierId)));
     const kRows = remoteRows('armySkillLevelUp');
+    //  🔴 面板域（`91xxxxxx`）不进 `modfiy`：那是 `pvpSkillPlan.statId` 的数值加成，
+    //  走 `cardLevelUp` / 面板；`modfiy` 只收战场行为修改器（`94`/`95` 域）。
+    //  68001–68005 这 20 条新手链全表都是 `91` 域（如 100501「飞叶快打」= 91005101，
+    //  而同名技能在 68014 上是 94014011）⇒ 这 60 格**本就该空**，不是漏填。
+    const panelDomain = (id: number) => String(id).startsWith('91');
     for (const spec of SKILLS) {
         const tiers = kRows.filter((row) => Number(row.id) === spec.chain)
             .sort((left, right) => Number(left.skilllevel) - Number(right.skilllevel));
         for (const row of tiers) {
             const ids = row.modfiy as number[];
+            const planTiers = plan.filter((entry) => Number(entry.skillChainId) === spec.chain);
+            const purelyPanel = planTiers.length > 0
+                && planTiers.every((entry) => panelDomain(Number(entry.modifierId)));
+            if (purelyPanel) {
+                assert.deepEqual(ids, [], `${spec.chain} L${row.skilllevel} 是纯面板链，modfiy 必须留空`);
+                continue;
+            }
             assert.ok(Array.isArray(ids) && ids.length > 0, `${spec.chain} L${row.skilllevel} 的 modfiy 为空`);
             for (const id of ids) {
                 assert.ok(known.has(Number(id)), `${spec.chain} L${row.skilllevel} 指向了不存在的 ${id}`);
             }
         }
     }
+    //  全表守卫：一条 `91` 域引用都不许有（这次 213 格回填只认 94 域，靠这条兜住）。
+    const stray = kRows.filter((row) => (row.modfiy as number[]).some((id) => panelDomain(Number(id))));
+    assert.deepEqual(stray.map((row) => `${row.id}#L${row.skilllevel}`), [], 'modfiy 里混进了面板域 id');
 });
 
 test('全表守卫：同一个 unitId 里段数只能由一条链写', () => {

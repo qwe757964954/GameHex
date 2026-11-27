@@ -1,5 +1,5 @@
 import type { IRewardAmount } from '../../core/types/Reward';
-import { GUANKA_REWARD_TABLE, ITEM_TABLE, ROLE_PROPERTY_TABLE as CORE_ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
+import { GUANKA_REWARD_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /**
  * 联盟主页入口与配置表归一化纯函数，不 import cc。
  * 六个入口按 LEAGUE_ENTRANCES 顺序接事件；landed 表示面板是否已落地。
@@ -1345,12 +1345,6 @@ export const LEAGUE_UNION_COIN_RES_ID = 11;
 
 /** 见 `LEAGUE_UNION_COIN_RES_ID` 的说明（`roleProperty.unionContri` = 联盟贡献）。 */
 export const LEAGUE_UNION_CONTRI_RES_ID = 13;
-
-/** `roleProperty` 分表名（`assets/remoteRef/roleProperty.json`，货币 / 属性类资源的图标与字段名）。 */
-export const LEAGUE_PROPERTY_TABLE = CORE_ROLE_PROPERTY_TABLE;
-
-/** 道具表（`item`，奖励图标「直通 `resources/` 路径」的那一支）。 */
-export const LEAGUE_ITEM_TABLE = ITEM_TABLE;
 
 /** `gameConfig` 分表名（`{key, value}` 两列的泛型配置，创建消耗数量在里面）。 */
 export const LEAGUE_GAME_CONFIG_TABLE = 'gameConfig';

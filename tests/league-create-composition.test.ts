@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import * as ts from 'typescript';
-import { PopupCompositionHost, type IPopupComposition } from '../assets/script/framework/ui/PopupCompositionHost';
+import { PopupCompositionHost, PopupSession, type IPopupComposition } from '../assets/script/framework/ui/PopupCompositionHost';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { LeagueCreateController } from '../assets/script/app/league/LeagueCreateController';
 import { LeagueCreateModel } from '../assets/script/app/league/LeagueCreateModel';
@@ -132,9 +132,11 @@ function compositionHarness() {
     const { createLeagueCreatePopupComposition } = load<{
         createLeagueCreatePopupComposition: (context: ReturnType<typeof createControllerContext>, view: object) => IPopupComposition | null;
     }>(COMPOSITION_TS, {
+        PopupCompositionHost: { PopupSession },
         EventMgr: { EventMgr },
         FW: { FW: { showTip: (text: string) => tips.push(text) } },
         LeagueCreateController: { LeagueCreateController },
+        LeagueCreateEvents: { LeagueCreateEvent },
         LeagueCreateModel: { LeagueCreateModel },
         LeagueCreatePage: { LeagueCreatePage },
         LeagueRepository: {
@@ -145,9 +147,13 @@ function compositionHarness() {
             },
         },
         LeagueTabEvents: { LeagueTabEvent },
-        GameNet: { GameNet: { instance: { removeCaller: (caller: object) => cancelled.push(caller) } } },
     });
-    const context = createControllerContext();
+    const context = createControllerContext({
+        callbackOwners: {
+            addCallerCleanup: () => () => {},
+            removeCallerListener: caller => cancelled.push(caller),
+        },
+    });
     const host = new PopupCompositionHost<object>(view => createLeagueCreatePopupComposition(context, view));
     return {
         LeagueCreatePage, host, tips, cancelled, joined, costCalls, createCalls, makeCost,

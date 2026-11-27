@@ -10,20 +10,15 @@ import type { ZCFloatText, ZCSnapshot, ZCUnitState } from '../assets/script/app/
 import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import {
-    ZCAttackResolutionSystem, type IZCAttackResolutionContext,
-} from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+    ZCAttackResolutionSystem, type IZCAttackResolutionContext } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
-import { ZC_BURST_IMPACT_PREFAB_PATH, zcBurstEffectScale } from '../assets/script/app/zcds/model/ZCBurstFx';
+import { ZC_EFFECT_BEHAVIOR_KEYS, ZC_EFFECT_PATHS, zcEffectPathsForBehavior } from '../assets/script/app/zcds/model/ZCEffectCatalog';
 import {
-    ZC_FAN_SWEEP_BURSTS, ZC_FAN_SWEEP_BURST_DISTANCE_RATIO, ZC_FAN_SWEEP_BURST_RADIUS_RATIO,
-    ZC_FAN_SWEEP_BURST_SPREAD, fanSweepSlowStatusId, zcFanSweepEffectPaths, zcIsFanSweepBehavior,
-} from '../assets/script/app/zcds/model/ZCFanSweepFx';
-import {
-    ZC_SINGLE_STRIKE_EFFECT_PREFAB_PATH, ZC_SINGLE_STRIKE_EFFECT_SECONDS,
-    singleStrikeHasteStatusId, singleStrikeStunStatusId,
-    zcIsSingleStrikeBehavior, zcSingleStrikeEffectPaths,
-} from '../assets/script/app/zcds/model/ZCSingleStrikeFx';
+    ZC_EFFECT_TUNING,
+    fanSweepSlowStatusId, singleStrikeHasteStatusId, singleStrikeStunStatusId,
+} from '../assets/script/app/zcds/model/ZCEffectTuning';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -129,7 +124,7 @@ test('101503 三尖两刃：三档倍数/人数/减速/冷却与设计案一致'
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(rows.length, 3);
     assert.deepEqual(rows.map((row) => Number(row.modifierId)), [94015031, 94015032, 94015033]);
-    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [9, 18, 27], '技能 3 = 9/18/27');
+    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [5, 18, 27], '技能 3 = 5/18/27');
     assert.deepEqual(rows.map((row) => Number(row.pvpSkillId)), [30241, 30241, 30241], '键 = 本卡普攻 skillId');
     for (const [index, row] of rows.entries()) {
         assert.equal(row.unitId, '68015');
@@ -146,7 +141,7 @@ test('101403 菌丝突刺：三档倍数/眩晕/冷却与设计案一致，III �
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(rows.length, 3);
     assert.deepEqual(rows.map((row) => Number(row.modifierId)), [94014031, 94014032, 94014033]);
-    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [9, 18, 27], '技能 3 = 9/18/27');
+    assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [5, 18, 27], '技能 3 = 5/18/27');
     for (const [index, row] of rows.entries()) {
         assert.equal(row.unitId, '68014');
         assert.equal(row.behaviorKey, 'single_strike');
@@ -243,13 +238,10 @@ test('fan_slow / single_strike 必须双登记 + 表现路径进加载清单', (
         assert.match(runtimeSource, new RegExp(`register\\('${key}'`),
             `ZCSkillRuntime 没注册 ${key} ⇒ 参数永远进不了运行时`);
     }
-    assert.equal(zcIsFanSweepBehavior('fan_slow'), true);
-    assert.equal(zcIsFanSweepBehavior('burst_aura'), false, '第 13 批的车道不许被这条判据收进来');
-    assert.equal(zcIsSingleStrikeBehavior('single_strike'), true);
-    assert.equal(zcIsSingleStrikeBehavior('blink_strike'), false, '103404 的闪现不许被收进来');
-    assert.deepEqual(zcFanSweepEffectPaths('fan_slow'), [ZC_BURST_IMPACT_PREFAB_PATH], '扇形复用普攻爆炸');
-    assert.deepEqual(zcSingleStrikeEffectPaths('single_strike'), [ZC_SINGLE_STRIKE_EFFECT_PREFAB_PATH]);
-    assert.deepEqual(zcSingleStrikeEffectPaths(null), [], '别的行为键不许被收进清单');
+    assert.deepEqual(zcEffectPathsForBehavior(ZC_EFFECT_BEHAVIOR_KEYS.fanSlow), [ZC_EFFECT_PATHS.jiajiguFan],
+        '第 45 批起扇形甩击用【机甲菇_武器绞杀】，不再是普攻爆炸');
+    assert.deepEqual(zcEffectPathsForBehavior(ZC_EFFECT_BEHAVIOR_KEYS.singleStrike), [ZC_EFFECT_PATHS.singleStrike]);
+    assert.deepEqual(zcEffectPathsForBehavior(null), [], '别的行为键不许被收进清单');
 
     const unit = (unitId: string) => ({ unitId, attackProfile: { effectPrefabPath: null, impactEffectPrefabPath: null } });
     const plan = (unitId: string, behaviorKey: string) => ({ enabled: true, unitId, behaviorKey });
@@ -260,12 +252,12 @@ test('fan_slow / single_strike 必须双登记 + 表现路径进加载清单', (
             textOverrides: new Map(),
         },
     );
-    assert.ok(withStrike.effectPaths.includes(ZC_SINGLE_STRIKE_EFFECT_PREFAB_PATH),
+    assert.ok(withStrike.effectPaths.includes(ZC_EFFECT_PATHS.singleStrike),
         '撕裂此前没有技能在用 ⇒ 漏收就是「照常结算、屏幕上不播」');
-    assert.ok(withStrike.effectPaths.includes(ZC_BURST_IMPACT_PREFAB_PATH), '扇形爆点也要进清单');
+    assert.ok(withStrike.effectPaths.includes(ZC_EFFECT_PATHS.jiajiguFan), '扇形挥击也要进清单');
     const without = buildZCVisualResourcePlan(
         [unit('68001')], { skillPlans: [plan('68001', 'random_strike')], textOverrides: new Map() });
-    assert.equal(without.effectPaths.includes(ZC_SINGLE_STRIKE_EFFECT_PREFAB_PATH), false);
+    assert.equal(without.effectPaths.includes(ZC_EFFECT_PATHS.singleStrike), false);
 });
 
 test('fanReadyAt / singleReadyAt 必须登记进快照白名单（不还原会读档白送一次）', () => {
@@ -281,8 +273,8 @@ test('fanReadyAt / singleReadyAt 必须登记进快照白名单（不还原会�
 test('撕裂的播放时长 = 8 帧 ÷ 12fps，不是设计案写的 0.3s', () => {
     //  设计案 O 列写「贴目标播 0.3s」，但这条序列帧有 8 张、sample 12 ⇒ 走完要 0.667s。
     //  截到 0.3s 会把后 4 张砍掉（观感是「砍一半就消失」）。与五雷轰顶同一条口径：帧数 ÷ 采样率。
-    assert.ok(Math.abs(ZC_SINGLE_STRIKE_EFFECT_SECONDS - 8 / 12) < 1e-9);
-    assert.ok(ZC_SINGLE_STRIKE_EFFECT_SECONDS > 0.3);
+    assert.ok(Math.abs(ZC_EFFECT_TUNING.singleStrikeSeconds - 8 / 12) < 1e-9);
+    assert.ok(ZC_EFFECT_TUNING.singleStrikeSeconds > 0.3);
 });
 
 // ────────────────────────────────────────────── 三、castFanSweep：扇形与人数上限
@@ -379,7 +371,7 @@ test('三尖两刃：只打扇形里的人，且最多 fanMaxTargets 个', () =>
     const { context, hit } = fanContext(units, FAN_PARAMS[0], { id: 2, x: 22, y: 0 });
     const slowId = fanSweepSlowStatusId(40, 2);
 
-    assert.equal(ZCAttackResolutionSystem.castFanSweep(state, caster, context, slowId), true);
+    assert.equal(ZCSkillResolutionSystem.castFanSweep(state, caster, context, slowId), true);
     //  L1 上限 4：扇形里 5 个（id 2/3/4/5/6），按距离丢掉最远的 id 6；
     //  背后与正侧方那两个一个都不许中。
     assert.equal(hit.length, 4, '「最多 4 名敌人」是设计约束，扇形内全打就错了');
@@ -397,7 +389,7 @@ test('三尖两刃：扇形方向独立选择最近合法目标，同距按 id',
     const state = makeState(units);
     const { context, hit, damaged } = fanContext(units, FAN_PARAMS[0], null);
 
-    assert.equal(ZCAttackResolutionSystem.castFanSweep(state, caster, context, undefined), true);
+    assert.equal(ZCSkillResolutionSystem.castFanSweep(state, caster, context, undefined), true);
     assert.deepEqual(damaged, [2], '独立选敌，同距选择 id 较小的 2');
     assert.equal(hit.length, 0, '不传减速 id ⇒ 一个状态都不许挂');
 });
@@ -410,17 +402,17 @@ test('三尖两刃：扇形里没人 / 参数不全 ⇒ 返回 false，且不推
     const state = makeState(units);
     //  锁定目标无效；唯一敌人在技能半径外 ⇒ 不出手。
     const empty = fanContext(units, FAN_PARAMS[0], { id: 9, x: 40, y: 0 });
-    assert.equal(ZCAttackResolutionSystem.castFanSweep(state, caster, empty.context), false);
+    assert.equal(ZCSkillResolutionSystem.castFanSweep(state, caster, empty.context), false);
     assert.equal(state.combatEvents.length, 0);
 
     const front = [caster, makeUnit(3, ZCOwner.Enemy, 20)];
     const broken = fanContext(front, { fanCooldown: 14, fanRadius: 150, fanAngle: 120 });
     assert.equal(
-        ZCAttackResolutionSystem.castFanSweep(makeState(front), caster, broken.context), false,
+        ZCSkillResolutionSystem.castFanSweep(makeState(front), caster, broken.context), false,
         '缺 fanDamageRate ⇒ 不出手');
 });
 
-test('三尖两刃的爆点铺在扇形里（3 发、尺寸按半径反算）', () => {
+test('三尖两刃：一条扇形挥击——锚点在施法者、尖端沿中轴走到判定半径、寿命 19/24', () => {
     prepare();
     const caster = makeUnit(1, ZCOwner.Player, 0);
     const enemy = makeUnit(2, ZCOwner.Enemy, 22);
@@ -428,19 +420,27 @@ test('三尖两刃的爆点铺在扇形里（3 发、尺寸按半径反算）', 
     const state = makeState(units);
     const { context } = fanContext(units, FAN_PARAMS[0], { id: 2, x: 22, y: 0 });
 
-    assert.equal(ZCAttackResolutionSystem.castFanSweep(state, caster, context, undefined), true);
-    assert.equal(state.combatEvents.length, ZC_FAN_SWEEP_BURSTS, '设计案 O 列「沿扇形展开」');
-    const burstTable = 150 * ZC_FAN_SWEEP_BURST_RADIUS_RATIO;
-    for (const event of state.combatEvents) {
-        assert.equal(event.type, 'area');
-        assert.equal(event.effectPrefabPath, ZC_BURST_IMPACT_PREFAB_PATH);
-        assert.ok(Math.abs(Number(event.effectScale) - zcBurstEffectScale(burstTable)) < 1e-9,
-            '扇形爆点同样走 zcBurstEffectScale（视图不读 radius）');
-        const distance = Math.hypot(event.fromX - 0, event.fromY - 0);
-        assert.ok(Math.abs(distance - 150 * 0.3 * ZC_FAN_SWEEP_BURST_DISTANCE_RATIO) < 1e-6);
-    }
-    //  三发都落在扇形半角之内（SPREAD < 1 ⇒ 最外侧那发仍在 60° 内）。
-    assert.ok(ZC_FAN_SWEEP_BURST_SPREAD < 1);
+    assert.equal(ZCSkillResolutionSystem.castFanSweep(state, caster, context, undefined), true);
+    //  第 45 批：改前是「扇形里铺 3 发爆点」（玩家只看到三团烟），现在是**整条**扇形挥击。
+    assert.equal(state.combatEvents.length, 1, '一条扇形挥击，不是多片爆点');
+    const [event] = state.combatEvents;
+    assert.equal(event.type, 'melee');
+    assert.equal(event.effectPrefabPath, ZC_EFFECT_PATHS.jiajiguFan);
+    //  锚点必须落在施法者脚下：视图对未登记的 prefab 取 `fromX/fromY`，写别处节点就飘走。
+    assert.ok(Math.abs(Number(event.fromX)) < 1e-9, `from.x 应为 0，实际 ${event.fromX}`);
+    assert.ok(Math.abs(Number(event.fromY)) < 1e-9, `from.y 应为 0，实际 ${event.fromY}`);
+    //  `to` = 施法者沿扇形中轴走满判定半径（150 表值 × 0.3 = 45 世界 px）。
+    //  🔴 不能写成 `from == to`：两端视图位移都是 0 ⇒ 转角退回 0°（永远朝右）。
+    const radiusWorld = 150 * 0.3;
+    assert.ok(Math.abs(Math.hypot(Number(event.toX), Number(event.toY)) - radiusWorld) < 1e-6,
+        'to 必须正好落在判定半径上（特效前伸 = fanRadius）');
+    assert.ok(Math.abs(Number(event.toY)) < 1e-6, '锁定目标在正 +X ⇒ to 在 +X 轴上');
+    assert.ok(Number(event.toX) > 0);
+    //  尺寸烘焙在 prefab 里（前伸 = 150 逻辑 × 0.76875 屏上 px）⇒ 事件**不**再带 effectScale。
+    assert.equal(event.effectScale ?? null, null, '这条特效只有一档半径，按判定重算会跟美术口径打架');
+    //  寿命 = 19 帧 ÷ 24fps；短于它 clip 会被事件寿命摘在半路。
+    assert.ok(Math.abs(Number(event.durationSeconds) - ZC_EFFECT_TUNING.fanSweepSeconds) < 1e-9);
+    assert.ok(Math.abs(ZC_EFFECT_TUNING.fanSweepSeconds - 19 / 24) < 1e-9, '19 张有效帧 ÷ 24fps');
 });
 
 // ────────────────────────────────────────────── 四、触发系统：CD 与状态

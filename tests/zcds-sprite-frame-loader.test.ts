@@ -91,7 +91,6 @@ for (const method of [
     'loadWallMaterial', 'loadUnitOutlineCopyEffect', 'loadWallFrames', 'loadBuildingFrames',
     'loadNeutralResourceFrames', 'loadGoldCoinFrame', 'loadUnknownResourceFrame',
     'loadCommonEffects',
-    'loadSpawnRegionFrames',
 ]) {
     test(`${method} 加载失败向上抛出，不降级为缺图`, async () => {
         const failure = new Error('asset unavailable');
@@ -141,7 +140,6 @@ function commonEffectsLoader(assets: unknown) {
             buildingDestroyFxPrefab: { name: string };
             hitFxPrefabs: ReadonlyMap<string, { name: string }>;
         }>;
-        loadSpawnRegionFrames(scope?: object): Promise<{ front: { name: string }; mid: { name: string }; back: { name: string } }>;
     };
 }
 
@@ -186,26 +184,4 @@ test('公共特效目录在途取消不返回资源，已取消时不派发请�
     await assert.rejects(loader.loadCommonEffects(scope), /取消/);
     await assert.rejects(loader.loadCommonEffects(scope), /取消/);
     assert.equal(calls, 1);
-});
-
-test('出生区域气泡按目录加载并按帧名映射，其他气泡不参与映射', async () => {
-    const scope = new ResourceScope('battle-test');
-    let calls = 0;
-    const loader = commonEffectsLoader({ loadDir: async (directory, type, options) => {
-        calls++;
-        assert.equal(directory, 'image/spawn-region');
-        assert.equal(type.name, 'SpriteFrame');
-        assert.equal(options.scope, scope);
-        return ['frame_04', 'frame_02', 'frame_03', 'frame_01'].map(name => ({ name }));
-    } });
-    const frames = await loader.loadSpawnRegionFrames(scope);
-    assert.equal(calls, 1);
-    assert.equal(frames.front.name, 'frame_02');
-    assert.equal(frames.mid.name, 'frame_01');
-    assert.equal(frames.back, frames.mid);
-});
-
-test('出生区域气泡目录缺少必需帧时明确失败', async () => {
-    const loader = commonEffectsLoader({ loadDir: async () => [{ name: 'frame_04' }] });
-    await assert.rejects(loader.loadSpawnRegionFrames(), /缺少 frame_01/);
 });

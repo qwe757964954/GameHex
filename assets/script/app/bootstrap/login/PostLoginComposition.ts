@@ -5,6 +5,7 @@ import { ProcedureManager } from '../../../framework/procedure/ProcedureManager'
 import { AudioMgr } from '../../../framework/audio/AudioMgr';
 import { LaunchProgressUI, LAUNCH_UPDATE_WEIGHT } from '../../loading/LaunchProgressUI';
 import { PostLoginController } from '../../loading/PostLoginController';
+import { PostLoginEvent, type PostLoginOutput } from '../../loading/PostLoginEvents';
 import { resolvePostLoginIdentity } from '../../loading/PostLoginContract';
 import { TerritoryChapterInfoRepository } from '../../territory/application/TerritoryChapterInfoRepository';
 import { cardRepository } from '../../card/CardRepository';
@@ -28,9 +29,10 @@ export class PostLoginComposition extends ControllerBase {
         if (!prefab) throw new Error('LaunchProgress 尚未预加载');
         try {
             const { ui, startRatio } = this.createView(prefab);
-            const controller = this.createController(ui, startRatio);
+            const controller = this.createController(startRatio);
             this.controller = controller;
             this.own(() => controller.dispose());
+            this.listen(PostLoginEvent.Output, this.onPostLoginOutput);
             void controller.start(params);
         } catch (error) {
             try { this.dispose(); }
@@ -52,23 +54,32 @@ export class PostLoginComposition extends ControllerBase {
         ui.show();
         return { ui, startRatio };
     }
-    private createController(ui: LaunchProgressUI, startRatio: number): PostLoginController {
+    private createController(startRatio: number): PostLoginController {
         return new PostLoginController(this.resources, {
             startRatio,
-            failed: error => console.error('[PostLoginComposition] 登录后资源加载失败', error),
             session: {
                 prepare: report => this.resources.sessionAssets.prepare(report),
                 bootstrapIdentity: bootstrapPostLoginIdentity,
                 initAudio: () => AudioMgr.instance.init()
             },
-            view: {
-                setProgress: ratio => ui.setProgress(ratio),
-                setStatus: message => ui.setStatus(message)
-            },
-            navigation: {
-                navigate: route => ProcedureManager.navigate(route)
-            },
         });
+    }
+    private onPostLoginOutput(output: PostLoginOutput, source: object): void {
+        if (this.isDisposed || source !== this.controller) return;
+        switch (output.kind) {
+            case 'status':
+                this.ui?.setStatus(output.message);
+                return;
+            case 'progress':
+                this.ui?.setProgress(output.ratio);
+                return;
+            case 'navigate':
+                ProcedureManager.navigate(output.route);
+                return;
+            case 'failed':
+                console.error('[PostLoginComposition] 登录后资源加载失败', output.error);
+                return;
+        }
     }
     leave(): void { this.release(this.controller?.mainReady ?? false); }
     dispose(): void { this.release(false); }

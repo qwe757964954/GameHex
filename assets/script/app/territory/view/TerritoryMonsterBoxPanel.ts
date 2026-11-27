@@ -28,21 +28,79 @@
  * 动画从**点击**起演（玩家立刻看到反馈），落点等回包：`upgradeAttempt.seq` 比开演时更大
  * 才算这一轮的结果 —— 换格子 / 连点 / 重开弹窗都不会重放旧结果。
  *
+ * ## 数字反馈（2026-11-25）：概率滚动 + 奖励数字刷光
+ *
+ * 升级成功会把面板换成下一级的内容，两个数字会变，各给一条过渡：
+ *
+ * 1. **成功率**（`90% → 60%`）：不是直接跳数，而是从旧值**滚过去**（0.36s，`outCubic`），
+ *    并给 Label 一点弹（`sin(πt)`）。**只在值真的变了才演** —— `applyContent` 会被同一份内容
+ *    重复调用，不 diff 就会「每次重绘都闪一下」（判据是 `shownRate`）。
+ * 2. **奖励数字**（`300+100 → 400+100`）：一条白色光带扫过那一格（0.46s，缓进快出 + 梯形包络）。
+ *    光带尺寸/行程**全部按该格数字 Label 的 `UITransform` 反算**，挂在 Label 的父节点、
+ *    插在 Label 之前（文字之下）。同样只由「同一种资源 + 文案变了」触发。
+ *
+ * 两条曲线都在 `model/TerritoryMonsterBoxFx`（零 `cc`、可单测），这里只逐帧写节点。
+ *
+ * ## 升级成功的提示 = spine「升级成功」（2026-11-25）
+ *
+ * 成功那一刻**不再弹 toast**，改成在屏幕正中播一次字特效：预制
+ * `ui/territory/TerritoryMonsterBoxUpgradeFx`（单节点 `sp.Skeleton`，指向
+ * `skel/UI升级升星升阶特效字/shengduan` 的 `shengji`）。三条口径：
+ *
+ * 1. **播一次**：`setAnimation(0, 'shengji', false)`，播完（素材 1.07s）把节点
+ *    `active = false` —— 字特效会停在最后一帧，不收起来就一直糊在屏幕中间；
+ * 2. **屏正中**：挂在弹窗根节点（720×1280、锚点 0.5/0.5）的 `(0, 0)` 并排到兄弟最后
+ *    ⇒ 压在 `Dim` / `Panel` 之上。弹窗本身就是全屏居中的，不用再做坐标换算；
+ * 3. **失败不播**：失败仍是 toast（文案归 Model），`shengji` 只表达「成功了」。
+ *
+ * 预制/动画名/时长单点登记在 {@link UPGRADE_FX_PREFAB_PATH} 与
+ * `TERRITORY_MONSTER_BOX_FX.upgradeFxSeconds`，视图不写第二份。
+ *
  * ## 结构约定（prefab 由 `TerritoryMonsterBoxPanel` 保证，别在别处复制这个约定）
  *
  * - `LevelStars`：子节点 `StarOn_i` / `StarOff_i` 按 1..N 级叠放，按 `lv` 显隐，不换帧；
  * - `GuardRow/Guard_i`：每格固定子节点 `CardBg` / `LockBg` / `Icon`(cc.Sprite) / `Lock`(Node) / `UnlockLabel`(cc.Label)；
  * - `RewardSection/RewardRow`：四列虚拟列表，奖励卡复用公共 `RewardItemView`；
  * - `ChestModel`：宝箱 Sprite，白化叠层（`ChestWhite`）是它的运行时子节点；
- * - `StarGhost`：虚影节点，运行时建在 `LevelStars` 下，开演时挪到目标空槽位置。
+ * - `StarGhost`：虚影节点，运行时建在 `LevelStars` 下，开演时挪到目标空槽位置；
+ * - `NumShine`：奖励数字光带，运行时建在**数字 Label 的父节点**下（每格一条，随槽位复用重建）。
  */
-import { _decorator, Button, Color, Label, Material, Node, Sprite, Tween, tween, UIOpacity, UITransform, Vec3, type SpriteFrame } from 'cc';
+import {
+    _decorator,
+    Button,
+    Color,
+    instantiate,
+    Label,
+    Material,
+    Node,
+    Prefab,
+    sp,
+    Sprite,
+    SpriteFrame,
+    Tween,
+    tween,
+    UIOpacity,
+    UITransform,
+    Vec3,
+} from 'cc';
 import { VirtualScrollView } from '../../../vscrollview/VScrollView';
 import { EventMgr } from '../../../framework/event/EventMgr';
+import { AudioMgr } from '../../../framework/audio/AudioMgr';
 import { PopupBase } from '../../../framework/ui/PopupBase';
+import { bundleForPath } from '../../../core/asset/BundleCatalog';
+import { GAME_AUDIO } from '../../ResConst';
 import { RewardItemView, type IRewardItemData } from '../../common/RewardItemView';
 import { TerritoryUiEvent } from '../application/TerritoryEvents';
 import type { ITerritoryMonsterBoxAttempt } from '../model/TerritoryMonsterBoxDetail';
+import {
+    monsterBoxRatePunchAt,
+    monsterBoxRateRollAt,
+    monsterBoxShineAlphaAt,
+    monsterBoxShineBandOf,
+    monsterBoxShineProgressAt,
+    monsterBoxShineXAt,
+    TERRITORY_MONSTER_BOX_FX,
+} from '../model/TerritoryMonsterBoxFx';
 import {
     monsterBoxRollPose,
     TERRITORY_MONSTER_BOX_ROLL,
@@ -110,6 +168,31 @@ const FAIL_LIMIT_LABEL = '失败上限';
 const CHEST_WHITE_NAME = 'ChestWhite';
 /** 运行时建的星星虚影节点名。 */
 const STAR_GHOST_NAME = 'StarGhost';
+/** 运行时建的数字刷光带节点名（每格一条，跟着奖励格复用）。 */
+const NUM_SHINE_NAME = 'NumShine';
+/**
+ * 数字刷光贴图：与卡牌升级页同一条白色光带（横向中间亮、两端全透明，128×32）。
+ *
+ * 走 `bundleForPath` 自动路由 —— 图在 `main-pages` 分包（见 `BundleCatalog`），
+ * 面板自己在首包 `resources`，不带 bundle 会直接 `doesn't contain`。
+ */
+const SHINE_FRAME_PATH = 'image/card_effect_levelup/shine/spriteFrame';
+
+/**
+ * 升级成功特效预制（单节点 `sp.Skeleton`，见 `tools/build_monster_box_upgrade_fx.py`）。
+ *
+ * 与面板同在首包 `resources`，不带 bundle 也能加载（`bundleForPath` 返回 `undefined`
+ * ⇒ 落到 `resources`）。
+ */
+const UPGRADE_FX_PREFAB_PATH = 'ui/territory/TerritoryMonsterBoxUpgradeFx';
+
+/**
+ * 特效里播哪条动画。
+ *
+ * `shengduan.skel` 一个文件里有三条（`shengji` 升级 / `shengjie` 升阶 / `shengxing` 升星，
+ * 各 1.07s），这里要的是「升级成功」。
+ */
+const UPGRADE_FX_ANIMATION = 'shengji';
 
 /** 升级摇奖的播放状态（只在视图里活，不进 Model）。 */
 interface IMonsterBoxRollPlayback {
@@ -126,6 +209,29 @@ interface IMonsterBoxRollPlayback {
     success: boolean | null;
     /** 已经换过新等级宝箱图了（`revealing` 只切一次）。 */
     revealed: boolean;
+}
+
+/**
+ * 一条正在扫的奖励数字光带（视图态，不进 Model）。
+ *
+ * 按**奖励格下标**登记而不是按节点：列表槽位会被回收复用，节点换了带子要跟着换
+ * （见 `ensureShineNode`），但「第 2 格在刷光」这件事不能丢。
+ */
+interface IMonsterBoxShinePlay {
+    readonly index: number;
+    /** 开演时刻（`performance.now()`，毫秒）。 */
+    readonly startedAt: number;
+    /** 光带挂在哪个节点下 —— 数字 Label 的父节点（插在 Label 之前 = 文字之下）。 */
+    target: Node | null;
+    node: Node | null;
+    sprite: Sprite | null;
+    opacity: UIOpacity | null;
+}
+
+/** 一格奖励的「身份」：资源 + 数量文案，用来判断这次重绘该不该刷光。 */
+interface IMonsterBoxRewardSignature {
+    readonly resId: number;
+    readonly text: string;
 }
 
 /**
@@ -234,6 +340,45 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
     /** 两个按钮并排时「开始挑战」的初始 x；满级只剩一个按钮时回到 0 居中（见 `renderButtons`）。 */
     private battleHomeX = 0;
 
+    /**
+     * 屏上正在显示的成功率（`-1` = 没显示 / 刚开面板）。
+     *
+     * 不能只看 `content.successRate`：过渡期间 Label 上写的是中间值，
+     * 只有记住「从哪个数滚出来的」才能区分「值变了要演」和「同一份内容被重绘」。
+     */
+    private shownRate = -1;
+
+    /** 成功率滚动：`null` = 没在演。 */
+    private rateRoll: { readonly from: number; readonly to: number; readonly startedAt: number } | null = null;
+
+    /** 上一趟每格奖励的身份（资源 + 文案），用于 diff 出「哪一格的数字变了」。 */
+    private rewardSignatures: IMonsterBoxRewardSignature[] = [];
+
+    /** 正在扫的奖励数字光带（每格最多一条）。 */
+    private rewardShines: IMonsterBoxShinePlay[] = [];
+
+    /** 数字刷光贴图（随面板开放周期加载，拿不到就整段不刷——数字与概率过渡照常）。 */
+    private shineFrame: SpriteFrame | null = null;
+    private shineLoaded = false;
+
+    /** 升级成功字特效预制（随面板开放周期加载；拿不到就只少一场演出，等级与宝箱照常切）。 */
+    private upgradeFxPrefab: Prefab | null = null;
+    private upgradeFxLoaded = false;
+
+    /** 屏正中的字特效节点（首次需要时才建，之后复用）。 */
+    private upgradeFx: Node | null = null;
+
+    /** 字特效该收起来的时刻（`performance.now()` 毫秒）；`0` = 没在演。 */
+    private upgradeFxHideAt = 0;
+
+    /**
+     * 正在关闭。
+     *
+     * 关闭会走 `onClose → abortRoll → notifyRollSettled`（结果早就回来了要照报），
+     * 但这时候起演字特效毫无意义：节点几帧后跟着弹窗一起销毁，只会闪一下。
+     */
+    private closing = false;
+
     /** 宝箱常态 y 坐标，动画后复位。 */
     private chestHomeY = 260.475;
 
@@ -264,6 +409,21 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
     }
 
     protected onOpen(userData?: unknown): void {
+        // 🔴 每次 open 都是新的资源作用域（`PopupBase._internalOpen` 会 dispose 上一趟的 scope）⇒
+        // 上一趟那张帧已经被释放，`shineFrame` / `shineLoaded` 必须一起清，否则第二次开面板刷光永不出现。
+        this.shineFrame = null;
+        this.shineLoaded = false;
+        // 同一理由：上一趟的 prefab 与实例都归上一趟的作用域，不能跨趟复用
+        if (this.upgradeFx && this.upgradeFx.isValid) this.upgradeFx.destroy();
+        this.upgradeFxPrefab = null;
+        this.upgradeFxLoaded = false;
+        this.upgradeFx = null;
+        this.upgradeFxHideAt = 0;
+        this.closing = false;
+        // 刷光贴图与首帧并行拉：第一趟铺数据不演刷光，等玩家点升级时图早就到了。
+        this.loadShineFrame();
+        // 字特效同理：点升级后要摇 1.2s，光这 1.2s 就够把预制读进来
+        this.loadUpgradeFx();
         if (userData) this.applyContent(userData as ITerritoryMonsterBoxContent);
     }
 
@@ -271,6 +431,9 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
      * 面板已开着时换内容（`PopupManager` 对同类弹窗单实例去重，点另一格不会再走 `onOpen`）。
      */
     applyContent(content: ITerritoryMonsterBoxContent): void {
+        // 换格子 ⇒ 数字过渡与刷光全部归零：这不是「值变了」，是「换了一个宝箱」，
+        // 闪一下会被读成「升级成功了」。
+        if (this.content && this.content.cellId !== content.cellId) this.clearNumberFx();
         this.content = content;
         this.whiteMaskMaterial = content.whiteMaskMaterial ?? null;
         const roll = this.roll;
@@ -305,12 +468,15 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
     }
 
     /**
-     * 只做一件事：把这一帧的摇奖姿态写进节点。
+     * 每帧只做一件事：把这一帧的状态写进节点。
      *
-     * 曲线在 `TerritoryMonsterBoxRoll`（纯函数、有用例），这里不判断「该不该成功」。
-     * `update` 里不建节点、不加载资源、不查配置。
+     * 三条时间轴（摇奖姿态 / 成功率滚动 / 奖励数字刷光）各走各的纯函数，
+     * 这里不判断「该不该成功」、不查配置、不建节点（光带是首次需要时才建）。
      */
     update(): void {
+        this.stepRateRoll();
+        this.stepRewardShines();
+        this.stepUpgradeFx();
         const roll = this.roll;
         if (!roll) return;
         const elapsed = (performance.now() - roll.startedAt) / 1000;
@@ -378,21 +544,46 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
      * 奖励卡的列数、间距与模板由 prefab 配置。
      *
      * 与「宝箱详情」`ChestDetailPanel` 同一套：同一个 `resId` 的多档已在 Model 合并成一格
-     * （见 `mergeRewardsByResId`），所以条数 = 资源种类数，不是掉落池行数。
+     * （见 `buildRewards`），所以条数 = 资源种类数，不是掉落池行数。
+     *
+     * **刷光只由「数值变了」触发**：`applyContent` 会被同一份内容重复调用（回包、预取头像、
+     * 摇奖收尾都会重绘一遍），不 diff 就会「每帧都在闪」。口径是「同一种资源 + 文案变了」——
+     * 换格子（`resId` 换了）与首趟铺数据（没有上一趟）都不演。
      */
     private renderRewards(content: ITerritoryMonsterBoxContent): void {
+        const previous = this.rewardSignatures;
         this.rewards = content.rewards;
+        this.rewardSignatures = content.rewards.map((reward) => ({
+            resId: reward.resId,
+            text: reward.amountText ?? String(reward.amount),
+        }));
         this.rewardSection.active = content.rewards.length > 0;
+
+        const startedAt = performance.now();
+        for (let index = 0; index < this.rewardSignatures.length; index += 1) {
+            const before = previous[index];
+            const after = this.rewardSignatures[index];
+            if (!before || before.resId !== after.resId || before.text === after.text) continue;
+            this.startRewardShine(index, startedAt);
+        }
+
         this.rewardList.setTotalCount(content.rewards.length);
     }
 
     /**
      * 列表条目渲染（槽位池化复用，全量赋值防状态残留）。
+     *
+     * 顺手把这一格正在扫的光带挂到新的数字 Label 上 —— 列表在「条数没变」时也会重绘
+     * （`setTotalCount` 末尾强制刷新），光带的父节点可能刚被换成另一个槽位。
      */
     private readonly renderRewardItem = (item: Node, index: number): void => {
         const data = this.rewards[index];
         if (!data) return;
-        item.getComponentInChildren(RewardItemView).render(data);
+        const view = item.getComponentInChildren(RewardItemView);
+        if (!view) return;
+        view.render(data);
+        const play = this.rewardShines.find((entry) => entry.index === index);
+        if (play) play.target = view.num.node;
     };
 
     /** 按可用性给按钮上色：不能用时压成灰色（`interactable` 本身不改外观）。 */
@@ -418,6 +609,9 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
         );
         if (!hasUpgrade) {
             this.failLabel.node.active = false;
+            // 满级 / 未开放：成功率整块跟着升级按钮一起收起来，过渡态也归零
+            // （否则 `shownRate` 带着上一级的数，下次滚动的起点会错）。
+            this.syncSuccessRate(0, false);
             return;
         }
         this.upgradeLabel.string = content.upgradeCaption;
@@ -432,8 +626,7 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
         this.costIcon.node.active = hasCost && content.costIcon !== null;
 
         const hasRate = content.successRate > 0;
-        this.rateGroup.active = hasRate;
-        this.rateLabel.string = hasRate ? `${Math.round(content.successRate)}%` : '';
+        this.syncSuccessRate(content.successRate, hasRate);
 
         const hasFailCount = content.failCount >= 0;
         const hasFailLimit = content.failLimit > 0;
@@ -447,9 +640,267 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
         }
     }
 
+    /**
+     * 成功率数字：值没变就直接写，变了才**滚过去**（`90 → 60`）。
+     *
+     * 三种情况必须分清（分不清就会「每次重绘都闪一下」）：
+     * - 不显示（满级 / 没入口）⇒ 清空并复位，`shownRate = -1`；
+     * - 首趟铺数据（`shownRate < 0`）或值没变 ⇒ 直写，不演；
+     * - 值变了 ⇒ 记一条滚动（已经朝同一个目标滚着就别重开，否则数字会跳回去重滚）。
+     */
+    private syncSuccessRate(rate: number, hasRate: boolean): void {
+        this.rateGroup.active = hasRate;
+        const node = this.rateLabel.node;
+        if (!hasRate) {
+            this.rateLabel.string = '';
+            this.shownRate = -1;
+            this.rateRoll = null;
+            node.setScale(1, 1, 1);
+            return;
+        }
+        const target = Math.round(rate);
+        if (this.shownRate < 0 || target === this.shownRate) {
+            this.rateLabel.string = `${target}%`;
+            this.shownRate = target;
+            this.rateRoll = null;
+            node.setScale(1, 1, 1);
+            return;
+        }
+        if (this.rateRoll && this.rateRoll.to === target) return;
+        this.rateLabel.string = `${this.shownRate}%`;
+        this.rateRoll = { from: this.shownRate, to: target, startedAt: performance.now() };
+    }
+
+    /** 逐帧写成功率（滚动 + 一点弹）；演完把终值落定，别让 `Math.round` 的尾巴留在屏上。 */
+    private stepRateRoll(): void {
+        const roll = this.rateRoll;
+        if (!roll) return;
+        const elapsed = (performance.now() - roll.startedAt) / 1000;
+        const done = elapsed >= TERRITORY_MONSTER_BOX_FX.rateRollSeconds;
+        const value = done ? roll.to : monsterBoxRateRollAt(roll.from, roll.to, elapsed);
+        this.rateLabel.string = `${value}%`;
+        const scale = done ? 1 : monsterBoxRatePunchAt(elapsed);
+        this.rateLabel.node.setScale(scale, scale, 1);
+        if (!done) return;
+        this.shownRate = roll.to;
+        this.rateRoll = null;
+    }
+
+    // =========================================================================
+    // 奖励数字刷光
+    // =========================================================================
+
+    /** 按需拉刷光贴图（一次；失败就整段不刷，数字与其它动画不受影响）。 */
+    private loadShineFrame(): void {
+        if (this.shineLoaded) return;
+        this.shineLoaded = true;
+        this.assets.load(SHINE_FRAME_PATH, SpriteFrame, { bundle: bundleForPath(SHINE_FRAME_PATH) })
+            .then((frame) => { this.shineFrame = frame?.isValid ? frame : null; })
+            .catch((error: unknown) => {
+                // 出声：静默吞掉会变成「刷光时好时坏、零报错」
+                console.warn('[TerritoryMonsterBoxPanel] 数字刷光贴图加载失败，跳过刷光', error);
+            });
+    }
+
+    /** 给某一格排一条刷光（同一格连续变两次就重头扫，不叠两条）。 */
+    private startRewardShine(index: number, startedAt: number): void {
+        this.rewardShines = this.rewardShines.filter((play) => {
+            if (play.index !== index) return true;
+            this.destroyShine(play);
+            return false;
+        });
+        this.rewardShines.push({ index, startedAt, target: null, node: null, sprite: null, opacity: null });
+    }
+
+    /** 逐帧推进光带；`progress < 0`（扫完）就收节点。 */
+    private stepRewardShines(): void {
+        if (this.rewardShines.length === 0) return;
+        const now = performance.now();
+        const alive: IMonsterBoxShinePlay[] = [];
+        for (const play of this.rewardShines) {
+            const progress = monsterBoxShineProgressAt((now - play.startedAt) / 1000);
+            if (progress < 0) {
+                this.destroyShine(play);
+                continue;
+            }
+            if (this.ensureShineNode(play)) this.applyShineFrame(play, progress);
+            alive.push(play);
+        }
+        this.rewardShines = alive;
+    }
+
+    /**
+     * 保证这一格有一条可用的光带节点；`false` = 这帧还建不出来（贴图没到 / 格子已销毁）。
+     *
+     * 挂在数字 Label 的**父节点**、插在 Label 之前 —— 与卡牌升级页同一条约定
+     * 「底框之上、文字之下」：盖在数字上会把数值糊掉，画到底框下又看不见。
+     */
+    private ensureShineNode(play: IMonsterBoxShinePlay): boolean {
+        const target = play.target;
+        if (!target || !target.isValid || !target.parent) return false;
+        const frame = this.shineFrame;
+        if (!frame || !frame.isValid) return false;
+        if (play.node && play.node.isValid && play.node.parent === target.parent) {
+            if (play.sprite && play.sprite.spriteFrame !== frame) play.sprite.spriteFrame = frame;
+            return true;
+        }
+        this.destroyShine(play);
+        const parent = target.parent;
+        try {
+            const node = new Node(NUM_SHINE_NAME);
+            node.layer = parent.layer;
+            node.addComponent(UITransform);
+            const sprite = node.addComponent(Sprite);
+            sprite.spriteFrame = frame;
+            // 尺寸必须走 CUSTOM：TRIMMED 会让节点跟着帧自带裁剪尺寸变，宽度就匹配不上数字框了。
+            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            sprite.type = Sprite.Type.SIMPLE;
+            sprite.trim = false;
+            const opacity = node.addComponent(UIOpacity);
+            opacity.opacity = 0;
+            parent.insertChild(node, target.getSiblingIndex());
+            node.angle = TERRITORY_MONSTER_BOX_FX.shineAngleDeg;
+            play.node = node;
+            play.sprite = sprite;
+            play.opacity = opacity;
+            return true;
+        } catch (error) {
+            console.warn('[TerritoryMonsterBoxPanel] 数字刷光带创建失败，跳过刷光', error);
+            return false;
+        }
+    }
+
+    /** 写一帧：尺寸/行程/亮度**全部按目标数字框现算**（框换了、字号变了都不用回头改常量）。 */
+    private applyShineFrame(play: IMonsterBoxShinePlay, progress: number): void {
+        const target = play.target;
+        const node = play.node;
+        if (!target || !node || !node.isValid) return;
+        const label = target.getComponent(UITransform);
+        const band = monsterBoxShineBandOf(label?.width ?? 0, label?.height ?? 0);
+        const transform = node.getComponent(UITransform);
+        if (transform) transform.setContentSize(band.width, band.height);
+        const position = target.position;
+        node.setPosition(position.x + monsterBoxShineXAt(progress, label?.width ?? 0, band.width), position.y, 0);
+        if (play.opacity) {
+            const alpha = monsterBoxShineAlphaAt(progress) * TERRITORY_MONSTER_BOX_FX.shinePeakAlpha;
+            play.opacity.opacity = Math.round(255 * alpha);
+        }
+    }
+
+    /** 收掉一条光带的节点（播放记录由调用方摘）。 */
+    private destroyShine(play: IMonsterBoxShinePlay): void {
+        if (play.node && play.node.isValid) play.node.destroy();
+        play.node = null;
+        play.sprite = null;
+        play.opacity = null;
+    }
+
+    /** 关面板 / 换格子：所有过渡态复位，别把光带和半截数字留到下次打开。 */
+    private clearNumberFx(): void {
+        for (const play of this.rewardShines) this.destroyShine(play);
+        this.rewardShines = [];
+        this.rewardSignatures = [];
+        this.rateRoll = null;
+        this.shownRate = -1;
+        if (this.rateLabel && this.rateLabel.node && this.rateLabel.node.isValid) {
+            this.rateLabel.node.setScale(1, 1, 1);
+        }
+    }
+
+    // =========================================================================
+    // 升级成功字特效（spine）
+    // =========================================================================
+
+    /** 按需拉预制（一次；失败只少一场演出，等级切换与数字反馈都不受影响）。 */
+    private loadUpgradeFx(): void {
+        if (this.upgradeFxLoaded) return;
+        this.upgradeFxLoaded = true;
+        this.assets.load(UPGRADE_FX_PREFAB_PATH, Prefab)
+            .then((prefab) => { this.upgradeFxPrefab = prefab?.isValid ? prefab : null; })
+            .catch((error: unknown) => {
+                // 出声：静默吞掉会变成「特效时好时坏、零报错」
+                console.warn('[TerritoryMonsterBoxPanel] 升级成功特效预制加载失败，跳过特效', error);
+            });
+    }
+
+    /**
+     * 屏正中的字特效节点。
+     *
+     * 弹窗根节点本身就是 720×1280、锚点 0.5/0.5 的全屏层 ⇒ 局部 `(0, 0)` 就是屏幕正中；
+     * 排到兄弟最后即压在 `Dim` / `Panel` 之上（字压在面板上也读得出来）。
+     */
+    private ensureUpgradeFx(): Node | null {
+        const prefab = this.upgradeFxPrefab;
+        const host = this.node;
+        if (!prefab || !host || !host.isValid) return null;
+        let node = this.upgradeFx;
+        if (node && node.isValid && node.parent === host) {
+            node.setSiblingIndex(host.children.length - 1);
+            return node;
+        }
+        if (node && node.isValid) node.destroy();
+        this.upgradeFx = null;
+        try {
+            node = instantiate(prefab);
+            host.addChild(node);
+            node.setPosition(0, 0, 0);
+            // 先以「不播」的状态挂好，起播时再点亮 ⇒ 不会出现「挂上去就停在第一帧」
+            node.active = false;
+            this.upgradeFx = node;
+            return node;
+        } catch (error) {
+            console.warn('[TerritoryMonsterBoxPanel] 升级成功特效实例化失败，跳过特效', error);
+            return null;
+        }
+    }
+
+    /**
+     * 播**一次**「升级成功」；播完由 {@link stepUpgradeFx} 收起来。
+     *
+     * @returns 是否真的起播了（`false` ⇒ 调用方让 Model 退回文案，别两边都没有反馈）
+     */
+    private playUpgradeFx(): boolean {
+        if (this.closing) return false;
+        const node = this.ensureUpgradeFx();
+        if (!node) return false;
+        const skeleton = node.getComponent(sp.Skeleton);
+        if (!skeleton) {
+            // 预制做错了（少了 sp.Skeleton）：重试也不会变好，报一次就够
+            console.warn('[TerritoryMonsterBoxPanel] 升级成功特效预制缺少 sp.Skeleton，跳过特效');
+            return false;
+        }
+        node.active = true;
+        try {
+            // 同一条轨道上重设即从头播（`setAnimation` 替换 track 0），不用先 stop；
+            // 末位 `false` = 不循环，就是「播放1次」。
+            skeleton.setAnimation(0, UPGRADE_FX_ANIMATION, false);
+            this.upgradeFxHideAt = performance.now() + TERRITORY_MONSTER_BOX_FX.upgradeFxSeconds * 1000;
+            return true;
+        } catch (error) {
+            console.warn('[TerritoryMonsterBoxPanel] 升级成功特效播放失败', error);
+            node.active = false;
+            this.upgradeFxHideAt = 0;
+            return false;
+        }
+    }
+
+    /** 到点把字收起来：`loop = false` 的骨架会停在最后一帧，不收就一直糊在屏幕中间。 */
+    private stepUpgradeFx(): void {
+        if (this.upgradeFxHideAt <= 0) return;
+        if (performance.now() < this.upgradeFxHideAt) return;
+        this.upgradeFxHideAt = 0;
+        if (this.upgradeFx && this.upgradeFx.isValid && this.upgradeFx.active) this.upgradeFx.active = false;
+    }
+
     protected onClose(): void {
+        // 关闭途中 `abortRoll` 还会再报一次结果（等级确实变了）：那一刻起演字特效没意义，
+        // 节点几帧后就跟着弹窗一起销毁，只会闪一下。
+        this.closing = true;
+        this.upgradeFxHideAt = 0;
+        if (this.upgradeFx && this.upgradeFx.isValid) this.upgradeFx.active = false;
         // 演到一半被关掉：状态丢掉即可（面板关了就没人看；下次开重新算）
         this.abortRoll();
+        this.clearNumberFx();
         this.syncChestWhite();
         // Presenter 靠这条清 `detailSite`（页面订阅后调 closeDetail，幂等）
         EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'closeDetail' } });
@@ -499,15 +950,29 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
     }
 
     /**
-     * 摇奖演完（或被中途收掉）⇒ 请 Model 弹结果提示。
+     * 摇奖演完（或被中途收掉）⇒ 成功播字特效与音效、结果提示交回 Model。
      *
-     * 提示的**时机**归视图（演完才报），**文案**归 Model（按 `monsterBoxAttempt` 取成功/失败）。
+     * 分工：**成功**这一拍由视图演（{@link playUpgradeFx} 在屏正中播一次「升级成功」，
+     * 替掉原来的 toast），**失败**仍走 Model 的 toast（文案按 `monsterBoxAttempt` 取）。
      * 视图不自己拼文案、也不直接调 toast —— 那是 Controller/Model 的事。
+     *
+     * 音效（2026-11-26 用户）：成功 = 通用「升级成功」、失败 = 通用「升级失败」，
+     * 与字特效同一拍起。关闭途中不播（节点几帧后就跟弹窗一起销毁，只会响一下）。
      */
     private notifyRollSettled(): void {
         const roll = this.roll;
         if (!roll || roll.success === null) return;
-        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'monsterBoxRollSettled', cellId: roll.cellId } });
+        const fxPlayed = roll.success ? this.playUpgradeFx() : false;
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, {
+            intent: { kind: 'monsterBoxRollSettled', cellId: roll.cellId, fxPlayed },
+        });
+        // 音效与字特效同一拍（2026-11-26 用户）：成功 = 通用「升级成功」、失败 = 通用「升级失败」。
+        // 关闭途中不播（节点几帧后就跟弹窗一起销毁，只会响一下）。
+        if (this.closing) return;
+        void AudioMgr.instance.playSound(
+            roll.success ? GAME_AUDIO.upgradeSuccess : GAME_AUDIO.upgradeFailure,
+            this.resourceScope,
+        );
     }
 
     /** 中途收掉摇奖（关弹窗 / 换格子）：节点复位，别把白层留在屏上。 */

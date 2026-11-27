@@ -54,11 +54,12 @@ export interface IBigMapCampMoveRequest {
     readonly moveType: BigMapCampMoveType;
 }
 
-/** 迁城结果（与 `IBigMapActionFeedback` 同形，避免 Presenter 再包一层）。 */
-export interface IBigMapCampMoveResult {
-    readonly ok: boolean;
-    readonly message: string;
-}
+export type BigMapCampMoveStatus = 'ok' | 'rejected' | 'offline' | 'busy' | 'disposed' | 'invalid' | 'failed';
+
+/** 迁城结构化结论（仓储/模型只传状态，展示文案由 Controller 查表决定）。 */
+export type IBigMapCampMoveResult =
+    | { readonly ok: true; readonly status: 'ok' }
+    | { readonly ok: false; readonly status: Exclude<BigMapCampMoveStatus, 'ok'> };
 
 /** 迁城相关文案。 */
 export const BIGMAP_CAMP_MOVE_TEXT = {
@@ -66,6 +67,8 @@ export const BIGMAP_CAMP_MOVE_TEXT = {
     busy: '正在迁城，请稍候',
     invalid: '迁城参数不合法',
     failed: '迁城失败，请重试',
+    /** 服务端已通过 `CmdTips` 提示原因，客户端不再补第二条 Toast。 */
+    rejected: '',
     disposed: '页面已关闭',
     offline: '当前未连接服务器，无法迁城',
     invalidPosition: '请选择目标据点范围内未被玩家占用的格子',
@@ -74,6 +77,20 @@ export const BIGMAP_CAMP_MOVE_TEXT = {
     moveHere: '迁城到此据点',
     cancel: '取消',
 } as const;
+
+const BIGMAP_CAMP_MOVE_STATUS_TEXT: Readonly<Record<BigMapCampMoveStatus, string>> = {
+    ok: BIGMAP_CAMP_MOVE_TEXT.moved,
+    rejected: BIGMAP_CAMP_MOVE_TEXT.rejected,
+    offline: BIGMAP_CAMP_MOVE_TEXT.offline,
+    busy: BIGMAP_CAMP_MOVE_TEXT.busy,
+    disposed: BIGMAP_CAMP_MOVE_TEXT.disposed,
+    invalid: BIGMAP_CAMP_MOVE_TEXT.invalid,
+    failed: BIGMAP_CAMP_MOVE_TEXT.failed,
+};
+
+export function formatBigMapCampMoveMessage(status: BigMapCampMoveStatus): string {
+    return BIGMAP_CAMP_MOVE_STATUS_TEXT[status];
+}
 
 /** `pos` 是 `uint32`；0 合法（同建造 `position=0` 口径），只拒负数/小数/超界。 */
 export function isBigMapCampPos(value: unknown): value is number {

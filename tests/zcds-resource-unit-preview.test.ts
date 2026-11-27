@@ -5,6 +5,7 @@ import { loadViews } from './helpers/zcds-view-fixtures';
 import { configureZCMap, ZCMapLayout } from '../assets/script/app/zcds/model/ZCGameModel';
 import { ZC_HEX_ACTIVATION_SECONDS } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
 import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
+import { ZC_MONSTER_AWAKE_RED } from '../assets/script/app/zcds/model/ZCMonsterPresentation';
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
 installZCNeutralTestCatalog();
@@ -32,52 +33,99 @@ test('野怪地表在阵营底色下方，重复设置和池化清理不改变�
 test('野怪按钮显示我方独立解锁、集火与小数冷却状态，归属后隐藏', () => {
     const { load, cc, bar } = loadViews();
     const view = stubHexView(load, cc, bar);
-    const frames = { locked: { name: 'frame_01' }, focus: { name: 'frame_02' }, cancel: { name: 'frame_03' } };
-    const placeholder = { name: 'frame_01' };
     view.monsterFocusButton = { node: bar().node, interactable: true };
-    view.monsterFocusLabel = { string: '', color: null };
-    view.monsterFocusBackground = { color: null, spriteFrame: placeholder, type: cc.Sprite.Type.SLICED };
+    view.monsterFocusLabel = { node: bar().node, string: '', color: null };
     view.onLoad();
-    view.setMonsterFocusFrames(frames);
     const textColor = () => [view.monsterFocusLabel.color.r, view.monsterFocusLabel.color.g, view.monsterFocusLabel.color.b];
     const feature = { awake: false, claimed: false, unlockedOwners: ['enemy'], focusOwners: [], focusReadyAt: {} };
     const state = { neutralFeature: feature };
     view.renderMonsterFocus(state, 0);
     assert.equal(view.monsterFocusButton.node.active, true);
-    assert.equal(view.monsterFocusButton.interactable, false);
-    assert.equal(view.monsterFocusLabel.string, '未解锁');
+    //  🔴 按钮**恒可点**（2026-11-26 第 56 批）：「能不能集火」不再靠 `interactable = false` 沉默，
+    //  改成点了由模型回原因、控制器弹「相邻地块才能集火野怪」。这里断言的是**可点**，
+    //  「现在不能集火」的视觉由下面两条（文案收起 + 底特效压灰）表达。
+    assert.equal(view.monsterFocusButton.interactable, true, '未解锁也要可点，否则玩家得不到任何反馈');
+    // 未解锁：整段文字收起（2026-11-25「隐藏未解锁的文字提示」）—— 只留底特效定格 + 压灰。
+    assert.equal(view.monsterFocusLabel.node.active, false, '未解锁不显示任何文案');
+    assert.equal(view.monsterFocusLabel.string, '', '锁定时连字符串都不留');
     assert.deepEqual(textColor(), [130, 140, 150]);
-    assert.equal(view.monsterFocusBackground.spriteFrame, frames.locked);
-    assert.equal(view.monsterFocusBackground.color.r, 255, '底图不染色，状态色只上文字');
     feature.unlockedOwners.push('player');
     view.renderMonsterFocus(state, 0);
+    assert.equal(view.monsterFocusLabel.node.active, true, '解锁后文字要回来（池化复用不能一直藏着）');
     assert.equal(view.monsterFocusLabel.string, '集火野怪');
     assert.equal(view.monsterFocusButton.interactable, true);
     assert.deepEqual(textColor(), [45, 120, 225]);
-    assert.equal(view.monsterFocusBackground.spriteFrame, frames.focus);
     Object.assign(feature, { focusOwners: ['player'], focusReadyAt: { player: 0.5 } });
     view.renderMonsterFocus(state, 0.25);
     assert.match(view.monsterFocusLabel.string, /^取消集火 0\.3s$/);
     assert.deepEqual(textColor(), [235, 145, 55]);
-    assert.equal(view.monsterFocusBackground.spriteFrame, frames.cancel);
-    assert.equal(view.monsterFocusButton.interactable, false);
+    //  冷却中照样可点：点了控制器会弹「集火冷却中，请稍候」（`ZC_MONSTER_FOCUS_TOAST.cooldown`）。
+    assert.equal(view.monsterFocusButton.interactable, true, '冷却中也可点，改成弹提示');
     view.renderMonsterFocus(state, 0.5);
     assert.equal(view.monsterFocusButton.interactable, true);
-    // 缺图（加载失败 / 未注入）时底图停在 prefab 默认的 locked 帧，不能空着。
-    view.setMonsterFocusFrames(null);
-    view.renderMonsterFocus(state, 0.5);
-    assert.equal(view.monsterFocusBackground.spriteFrame, placeholder, '缺图时沿用 prefab 的 frame_01，不许刷成 null');
-    assert.deepEqual(
-        [view.monsterFocusBackground.color.r, view.monsterFocusBackground.color.g, view.monsterFocusBackground.color.b],
-        [255, 255, 255],
-        '底图恒为白色，缺图也不按状态染色',
-    );
     feature.claimed = true;
     view.renderMonsterFocus(state, 1);
     assert.equal(view.monsterFocusButton.node.active, false);
 });
 
-test('集火按钮随地图缩放并压在后生成的单位上方，归属后隐藏', () => {
+test('集火特效：可点循环播 action，未解锁定格在倒数第2帧并压灰，每帧重复渲染不重播', () => {
+    //  这条要看「按钮灰不灰」，而灰的判据来自野怪三态（`zcMonsterTintStateOf`），需要一张
+    //  `resourceType=11` 的目录才有 `Monster` 视觉。用完自己还回去，别污染后续用例。
+    installZCNeutralTestCatalog([{ groupId: 14009, id: 1400901, groupName: '野怪', resourceType: 11, weight: 1,
+        param: { resId: '68001', wakeRange: 2, reviveRate: 1 } }]);
+    const { load, cc, bar } = loadViews();
+    const view = stubHexView(load, cc, bar);
+    const spine = view.monsterFocusSpine;
+    view.monsterFocusButton = { node: bar().node, interactable: true };
+    view.monsterFocusLabel = { node: bar().node, string: '', color: null };
+    view.onLoad();
+    const feature = { awake: false, claimed: false, unlockedOwners: ['enemy'], focusOwners: [], focusReadyAt: {} };
+    //  🔴 三样都得带齐（野怪 + 中立归属 + 血没空），否则算出来的三态是 `null`，
+    //  `zcMonsterFocusSpineVisualOf` 会当成"已激活"直接白染，这条就测不到灰。
+    const state = { neutralResourceId: 1400901, owner: 'neutral', hp: 900, neutralFeature: feature };
+    view.renderMonsterFocus(state, 0);
+    // 未解锁：单次播放 + 时间轴钉死 + 压灰。定格点 = 墨迹附件时间轴倒数第 2 格的窗口中点
+    // （2/30 → 3/30 的中间），**不是**「总时长 − 一帧」：后者会落到已经淡出的末帧。
+    assert.deepEqual(spine.played, [{ clip: 'action', loop: false }]);
+    assert.equal(spine.timeScale, 0, '定格：时间轴不再前进');
+    assert.ok(Math.abs(spine.track.trackTime - 2.5 / 30) < 1e-9,
+        `定格在倒数第2帧（墨迹第 3 张），实际 ${spine.track.trackTime}`);
+    assert.deepEqual([spine.color.r, spine.color.g, spine.color.b], [140, 146, 158]);
+    assert.equal(spine.updates, 1, '定格后要手动推一帧把姿势算出来');
+    // 同一状态每帧都来：不许重播（否则动画永远停在第 1 帧）。
+    view.renderMonsterFocus(state, 0.1);
+    view.renderMonsterFocus(state, 0.2);
+    assert.equal(spine.played.length, 1, '状态没变就不该重设动画');
+    // 解锁 ⇒ 循环播放、恢复 1 倍速，但颜色**仍然压灰**：野怪还没激活（2026-11-26 第 59 批
+    // 用户「按钮也需要是灰色的」）。灰跟的是野怪三态，定格跟的才是「解锁」—— 两件事。
+    feature.unlockedOwners.push('player');
+    view.renderMonsterFocus(state, 0.3);
+    assert.deepEqual(spine.played, [{ clip: 'action', loop: false }, { clip: 'action', loop: true }]);
+    assert.equal(spine.timeScale, 1);
+    assert.deepEqual([spine.color.r, spine.color.g, spine.color.b], [140, 146, 158],
+        '解锁只是能点了，野怪没激活按钮还是灰的');
+    // 冷却只是按钮不可点，特效继续循环（不翻回定格态）。
+    Object.assign(feature, { focusOwners: ['player'], focusReadyAt: { player: 10 } });
+    view.renderMonsterFocus(state, 0.5);
+    assert.equal(view.monsterFocusButton.interactable, true, '冷却只是弹提示，不再禁点');
+    assert.equal(spine.timeScale, 1, '冷却中仍循环播放');
+    assert.equal(spine.played.length, 2);
+    // 回落未解锁：重新定格（按钮在别处被解锁/回滚时不能停在循环态）。
+    Object.assign(feature, { unlockedOwners: ['enemy'], focusOwners: [], focusReadyAt: {} });
+    view.renderMonsterFocus(state, 0.6);
+    assert.equal(spine.timeScale, 0);
+    assert.equal(spine.played.length, 3);
+    // 野怪**被激活**之后才回原色 —— 这才是三档里的 `active`。
+    feature.unlockedOwners.push('player');
+    feature.awake = true;
+    view.renderMonsterFocus(state, 0.9);
+    assert.equal(spine.timeScale, 1, '激活不回到定格，只是换成循环');
+    assert.deepEqual([spine.color.r, spine.color.g, spine.color.b], [255, 255, 255],
+        '激活后按钮才回原色');
+    installZCNeutralTestCatalog();
+});
+
+test('集火按钮随地图缩放并留在原层（不再单独抬顶），归属后隐藏', () => {
     const { load, cc, bar } = loadViews();
     const mapLayer = new cc.Node('Map');
     const board = new cc.Node('Board');
@@ -86,8 +134,7 @@ test('集火按钮随地图缩放并压在后生成的单位上方，归属后�
     const button = view.monsterFocusButton.node;
     board.addChild(button);
     button.setPosition(-110, 240, 0);
-    view.monsterFocusLabel = {};
-    view.monsterFocusBackground = {};
+    view.monsterFocusLabel = { node: bar().node, string: '', color: null };
     const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({ mapLayer });
     world.hexEntityBySource.set(7, 1);
     world.hexViews.set(1, view);
@@ -98,8 +145,11 @@ test('集火按钮随地图缩放并压在后生成的单位上方，归属后�
     const unit = new cc.Node('NewUnit');
     world.attachToMapLayer(unit);
     world.renderNeutralFeatures(frame);
+    //  2026-11-26 第 55 批：按钮不再单独抬到 `MonsterFocusLayer` 去压所有单位。
+    //  它跟野怪身体 / 血条一起进角色层，由「层次 + 屏幕 y」统一排（野怪 = 空中层）。
+    //  没注入角色层时（本用例）就待在调用方挂的那一层，视图不再偷偷搬它。
+    assert.equal(button.parent, board, '没注入角色层 ⇒ 视图不许自己搬按钮');
     assert.equal(button.parent.parent, mapLayer);
-    assert.ok(button.parent.getSiblingIndex() > unit.getSiblingIndex());
     assert.deepEqual([button.position.x, button.position.y], [-110, 240]);
     assert.equal(view.monsterFocusButton.interactable, true);
     feature.claimed = true;
@@ -107,23 +157,36 @@ test('集火按钮随地图缩放并压在后生成的单位上方，归属后�
     assert.equal(button.active, false);
 });
 
-test('集火按钮在 prefab 上按气泡排版：150×42、九宫、默认 locked 帧', () => {
+test('集火按钮在 prefab 上挂野怪激活 Spine：点击区仍是 150×42，文字压在特效之上', () => {
     const prefab = JSON.parse(readFileSync('assets/bundles/battle/ui/game/ZCGameHex.prefab', 'utf8')) as any[];
     const nodeIndex = prefab.findIndex((o: any) => o?.__type__ === 'cc.Node' && o._name === 'MonsterFocus');
     assert.ok(nodeIndex >= 0, 'prefab 里要有 MonsterFocus 节点');
     const node = prefab[nodeIndex];
+    // prefab 的 `_lpos` 只是编辑器里的基准位 / `restoreMonsterHeader` 的归位点：
+    // 实战坐标由 `positionMonsterHeader` 每帧算（穷举不了模型头高），但两者必须同口径 ——
+    // 否则编辑器里拖 prefab 看不出效果，改完还得推算对不上。口径 = 血条顶边 + 3。
+    const healthBar = prefab.find((o: any) => o?.__type__ === 'cc.Node' && o._name === 'HealthBar');
+    const barHeight = (healthBar._components.map((ref: any) => prefab[ref.__id__])
+        .find((c: any) => c.__type__ === 'cc.UITransform')._contentSize.height as number);
+    assert.ok(Math.abs((node._lpos.y - 42 / 2) - (healthBar._lpos.y + barHeight / 2 + 3)) < 1e-3,
+        `prefab 基准位也要「血条上方 3px」：按钮底 ${node._lpos.y - 21}、血条顶 ${healthBar._lpos.y + barHeight / 2}`);
     const components = (node._components as any[]).map((ref: any) => prefab[ref.__id__]);
     const transform = components.find((c: any) => c.__type__ === 'cc.UITransform');
-    const sprite = components.find((c: any) => c.__type__ === 'cc.Sprite');
-    const text = prefab[node._children[0].__id__];
+    const oldBubble = components.find((c: any) => c.__type__ === 'cc.Sprite');
     assert.deepEqual([transform._contentSize.width, transform._contentSize.height], [150, 42],
-        '气泡原图 94×45：九宫要 42 高才不会被上下边距吃掉中段');
-    assert.equal(text._lpos.y, 5, '文字上移，落在气泡主体里、避开底部箭头');
-    assert.equal(sprite._type, 1, 'SLICED：三张 frame 都带九宫边距');
-    assert.deepEqual([sprite._color.r, sprite._color.g, sprite._color.b], [255, 255, 255], '底图不染色');
-    const frameMeta = JSON.parse(readFileSync('assets/bundles/battle/image/spawn-region/frame_01.png.meta', 'utf8'));
-    const lockedFrame = Object.values(frameMeta.subMetas).find((meta: any) => meta.name === 'spriteFrame') as any;
-    assert.equal(sprite._spriteFrame.__uuid__, lockedFrame.uuid, '默认帧 = locked 的 spawn-region/frame_01');
+        '按钮大小维持原样：Spine 只是底特效，点击区仍是 150×42');
+    assert.equal(oldBubble._enabled, false, '三态气泡退役：Sprite 留着只为不改结构，必须停用');
+    // 子节点序 = [特效, 文字]：文字在上，才盖得住墨迹。
+    assert.deepEqual(node._children.map((ref: any) => prefab[ref.__id__]._name), ['FocusSpine', 'Text']);
+    const spineNode = prefab[node._children[0].__id__];
+    const spine = (spineNode._components as any[]).map((ref: any) => prefab[ref.__id__])
+        .find((c: any) => c.__type__ === 'sp.Skeleton');
+    assert.ok(spine, 'FocusSpine 上要挂 sp.Skeleton');
+    assert.equal(spine.loop, true, '默认循环');
+    assert.equal(spine._useTint, false, '染色走顶点色乘算，不启用 two-color tint');
+    const skelMeta = JSON.parse(readFileSync('assets/bundles/battle/units/effects/野怪激活可攻击UI特效/E20999.skel.meta', 'utf8'));
+    assert.equal(spine._skeletonData.__uuid__, skelMeta.uuid, '骨架数据要指向 野怪激活可攻击UI特效/E20999');
+    assert.deepEqual([spineNode._lscale.x, spineNode._lscale.y], [0.5, 0.5], '256 画布缩到 128，与 150 宽的按钮同量级');
 });
 
 test('强化门缩小图标，各阶段及缺图时都不显示资源文字', () => {
@@ -243,7 +306,9 @@ test('野怪通过模型表现沉睡与攻击，转身不影响头顶按钮和�
         const overlay = bar().node;
         world.attachCooldownOverlay([{ x: -240, y: 170, view }], overlay);
         const feature = { claimed: false, awake: false };
-        const presentation = { state: resourceHexState(1400901, { neutralFeature: feature }),
+        //  野怪格的真实血量来自 `definition.maxHp`（`ZCNeutralFeatureSystem.initialize`），
+        //  这里补上：2026-11-26 第 53 批起，「能打」的判据要看 `hp > 0`（血量归零 ⇒ 不该再挂暗红）。
+        const presentation = { state: resourceHexState(1400901, { neutralFeature: feature, hp: 900, maxHp: 900 }),
             canDevelop: false, playerGold: 0, cooldown: null, now: 0 };
         view.render(presentation);
         assert.equal(view.resourceUnitNodes.length, 1);
@@ -260,7 +325,10 @@ test('野怪通过模型表现沉睡与攻击，转身不影响头顶按钮和�
         assert.equal(view.healthBar.node.position.x, -240);
         assert.equal(view.monsterFocusButton.node.position.x, -240);
         assert.ok(view.healthBar.node.position.y - 19 / 2 > head);
-        assert.ok(view.monsterFocusButton.node.position.y - 42 / 2 > view.healthBar.node.position.y + 19 / 2);
+        // 「特效按钮移动到血条位置上方 3px」（2026-11-25 用户）：量的是**按钮底边 ↔ 血条顶边**，
+        // 不是中心距 —— 两个半高各加一次，写死 3 才有约束力。
+        assert.equal(view.monsterFocusButton.node.position.y - 42 / 2,
+            view.healthBar.node.position.y + 19 / 2 + 3, '按钮底边贴血条顶边 3px');
         assert.ok(body.__skeleton.color.r < 255);
         feature.awake = true;
         view.render(presentation);
@@ -268,7 +336,12 @@ test('野怪通过模型表现沉睡与攻击，转身不影响头顶按钮和�
         assert.equal(view.iconSprite.spriteFrame, null);
         assert.equal(view.resourceUnitNodes[0], body);
         assert.equal(body.__skeleton.timeScale, 1);
-        assert.equal(body.__skeleton.color.r, 255);
+        //  2026-11-26 第 53 批：激活（能打）不再是原色，而是叠**暗红**（用户：「改成叠加暗色，
+        //  类似敌方卡牌」）。数值真源在 `model/ZCMonsterPresentation`。
+        assert.equal(body.__skeleton.color.r, ZC_MONSTER_AWAKE_RED);
+        assert.ok(body.__skeleton.color.r > body.__skeleton.color.g, '暗红：红通道高于绿');
+        assert.equal(body.__skeleton.color.g, body.__skeleton.color.b);
+        assert.equal(body.__skeleton.color.a, 255, '激活态不透明');
         view.setResourceUnits('68001', prefab, 1, { prefabSize: 1.5, attackDuration: 2 });
         view.render(presentation);
         const centered = view.resourceUnitNodes[0];
@@ -283,6 +356,11 @@ test('野怪通过模型表现沉睡与攻击，转身不影响头顶按钮和�
         assert.equal(centered.scale.x, -centered.scale.y);
         assert.ok(Math.abs(centered.position.x + 210 - 90 * factor) < 1e-9);
         view.render({ ...presentation, state: resourceHexState(1400901, { owner: 'player', neutralFeature: feature }) });
+        //  2026-11-26 第 53 批：野怪被玩家方打下来（归属改了）⇒ 回正常色 + 置一次性出生特效通知。
+        assert.equal(centered.__skeleton.color.r, 255, '归属改了就必须回原色（去掉暗红）');
+        assert.equal(centered.__skeleton.color.a, 255);
+        assert.equal(view.consumeMonsterCapturedFx(), true, '刚被打下：取到一次性通知');
+        assert.equal(view.consumeMonsterCapturedFx(), false, '取走即空，不会连播两帧');
         view.renderMonsterAttack(0, 1, -1);
         assert.deepEqual(prefab.played.slice(-2), [{ clip: 'idle', loop: true }, { clip: 'attack', loop: false }]);
         assert.equal(centered.__skeleton.timeScale, 0.4);
@@ -309,6 +387,40 @@ test('野怪通过模型表现沉睡与攻击，转身不影响头顶按钮和�
 });
 
 /** 与 `zcds-progress.test.ts` 同款：补齐 prefab 必填引用。 */
+/**
+ * 集火特效的 `sp.Skeleton` 桩：只记会改变表现的那几件事 ——
+ * 播了哪条动画 / 循环与否 / 定格时间轴落在哪 / 染色与倍速。
+ */
+function focusSpine(duration = 0.8333) {
+    const played: Array<{ clip: string; loop: boolean }> = [];
+    // 附件时间轴：墨迹 4 帧翻页（0 / 1/30 / 2/30 / 3/30）；另外混一条骨骼时间轴（帧更多），
+    // 用来证明定格只认附件轨道、不会被帧数更多的骨骼轨道带偏。
+    const ink = {
+        frames: [0, 1 / 30, 2 / 30, 3 / 30],
+        attachmentNames: ['hit_00000', 'hit_00001', 'hit_00002', 'hit_00003'],
+    };
+    const bone = { frames: [0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8], attachmentNames: undefined };
+    return {
+        duration,
+        played,
+        updates: 0,
+        color: { r: 255, g: 255, b: 255, a: 255 },
+        timeScale: 1,
+        track: { trackTime: 0 },
+        findAnimation(name: string) {
+            return name === 'action' ? { duration, timelines: [ink, bone] } : null;
+        },
+        setAnimation(_track: number, clip: string, loop = false) {
+            played.push({ clip, loop });
+            this.track = { trackTime: 0 };
+            return this.track;
+        },
+        updateAnimation() {
+            this.updates += 1;
+        },
+    };
+}
+
 function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any {
     const view = new (load('./ZCHexView').ZCHexView)();
     const sprite = () => ({ node: bar().node, enabled: true, spriteFrame: null, color: null });
@@ -321,6 +433,7 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
     view.iconLabel = { node: bar().node, string: '', enabled: true, color: null };
     view.healthBar = bar();
     view.monsterFocusButton = { node: bar().node };
+    view.monsterFocusSpine = focusSpine();
     view.cooldownBar = bar();
     return view;
 }

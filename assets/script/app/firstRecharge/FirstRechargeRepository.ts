@@ -16,6 +16,7 @@
 
 import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { ITEM_TABLE, PAY_CHANNEL_TABLE } from '../../core/config/TableNames';
 import { readRefRows } from '../common/TableRead';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
@@ -81,8 +82,8 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
     async load(nowMs: number = Date.now()): Promise<IFirstRechargeSnapshot> {
         const [tierRows, payRows, itemRows] = await Promise.all([
             readRows('firstRechargeNew'),
-            readRows('payChannel'),
-            readRows('item'),
+            readRows(PAY_CHANNEL_TABLE),
+            readRows(ITEM_TABLE),
         ]);
 
         const tiers = buildTiers(tierRows, buildPriceResolver(payRows));

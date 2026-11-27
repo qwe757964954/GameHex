@@ -1,4 +1,5 @@
 import { _decorator, Component, Node, Sprite, SpriteFrame, Color } from 'cc';
+import { RedDot } from '../common/RedDot';
 
 const { ccclass, property } = _decorator;
 
@@ -39,8 +40,8 @@ export class ChangeHeadItem extends Component {
     @property({ type: Node, tooltip: 'SelectedFrame：选中框（`n2`，设计期隐藏）' })
     selectedFrame: Node = null!;
 
-    @property({ type: Node, tooltip: 'RedDot：新头像红点（`com_rd`，设计期隐藏）' })
-    redDot: Node = null!;
+    @property({ type: RedDot, tooltip: 'RedDot：新头像红点（工程通用红点，设计期隐藏）' })
+    redDot: RedDot = null!;
 
     /** 点这一格（参数 = **数据下标**，由 `HeadGridList` 在重绑时写入 `dataIndex`）。 */
     onClicked: ((dataIndex: number) => void) | null = null;
@@ -75,7 +76,7 @@ export class ChangeHeadItem extends Component {
 
     /** 新头像红点。**无条件写**。 */
     setNew(isNew: boolean): void {
-        this.redDot.active = isNew;
+        this.redDot.setRedDot(isNew);
     }
 
     // ============================================================

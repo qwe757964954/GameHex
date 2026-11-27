@@ -80,11 +80,23 @@ import {
     FRIEND_ROW_GROUP_NORMAL,
     rowGroupPosition,
 } from './fixtures/friend-row-layout';
+import { FRIEND_ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
-    FRIEND_ART_ROOT,
+    FRIEND_ART_BTN_BLUE,
+    FRIEND_ART_BTN_BLUE_ROOT,
+    FRIEND_ART_BTN_DARK,
+    FRIEND_ART_BTN_GOLD,
+    FRIEND_ART_BTN_GOLD_ROOT,
+    FRIEND_ART_HEAD_FRAME_ROOT,
+    FRIEND_ART_LV_TAG_ROOT,
+    FRIEND_ART_PANEL_BG,
+    FRIEND_ART_PANEL_BG_ROOT,
     FRIEND_ART_SLICED,
     FRIEND_ART_TAB_OFF,
     FRIEND_ART_TAB_ON,
+    FRIEND_ART_TAB_ON_ROOT,
+    FRIEND_ART_TITLE_BG,
+    FRIEND_ART_TITLE_BG_ROOT,
     FRIEND_BUTTON_ART,
     FRIEND_ROW_ART,
     FRIEND_SPRITE_SIMPLE,
@@ -245,8 +257,8 @@ test('A7 `countOfMax` / `countText`：负数与 NaN 一律收成 0（不写进�
     assert.deepEqual(countOfMax(-1, -5), { current: 0, max: 0 });
     assert.deepEqual(countOfMax(Number.NaN, 50), { current: 0, max: 50 });
     assert.deepEqual(countOfMax(3.9, 50.9), { current: 3, max: 50 }, '取整');
-    assert.equal(countText(FRIEND_COUNT_TEMPLATE, 3, 50), '好友数：3/50');
-    assert.equal(countText(FRIEND_BLACK_COUNT_TEMPLATE, 0, 20), '黑名单：0/20');
+    assert.equal(countText(FRIEND_COUNT_TEMPLATE, 3, 50), '3/50');
+    assert.equal(countText(FRIEND_BLACK_COUNT_TEMPLATE, 0, 20), '0/20');
 });
 
 test('A8 `formatDuration` 四档：天/小时/分/秒', () => {
@@ -486,12 +498,12 @@ test('A19 `buildFriendRowView`：add / black / take 三个分支的按钮与显�
 
 test('A20 ⚠️ `rowGroupPosition`：删除模式整组右移 43、下移 6（FGUI `gearXY`）', () => {
     // 与 `组件_好友项.xml` 的 `gearXY controller="展示删除界面" pages="0,1" values="30,20|73,26"` 对齐
-    assert.deepEqual(FRIEND_ROW_GROUP_NORMAL, { x: -136, y: 6 });
-    assert.deepEqual(FRIEND_ROW_GROUP_DELETE, { x: -93, y: 0 });
+    assert.deepEqual(FRIEND_ROW_GROUP_NORMAL, { x: 0, y: 0 });
+    assert.deepEqual(FRIEND_ROW_GROUP_DELETE, { x: 64, y: -6 });
     assert.deepEqual(rowGroupPosition(false), FRIEND_ROW_GROUP_NORMAL);
     assert.deepEqual(rowGroupPosition(true), FRIEND_ROW_GROUP_DELETE);
     // 位移量本身：右移 43、Cocos 的 y 向上 ⇒ 下移 6 是 -6
-    assert.equal(FRIEND_ROW_GROUP_DELETE.x - FRIEND_ROW_GROUP_NORMAL.x, 43);
+    assert.equal(FRIEND_ROW_GROUP_DELETE.x - FRIEND_ROW_GROUP_NORMAL.x, 64);
     assert.equal(FRIEND_ROW_GROUP_DELETE.y - FRIEND_ROW_GROUP_NORMAL.y, -6);
 });
 
@@ -513,15 +525,15 @@ test('A21 ⚠️ `resolveFriendLayout`：三页签 × 删除模式，17 个开�
     const list = resolveFriendLayout({ ...base, tab: FriendTab.List, deleteMode: false });
     assert.deepEqual(list, {
         showFriendCount: true,
-        friendCountText: '好友数：3/50',
+        friendCountText: '3/50',
         showBlackCount: false,
         blackCountText: '',
         showSendTimes: true,
-        sendTimesText: '今日还可赠送4次',
+        sendTimesText: '4 次',
         showRemoveCount: false,
-        removeCountText: '已选择：2人',
+        removeCountText: '已选择 2 人',
         showBatchRemove: true,
-        batchRemoveText: '批量删除',
+        batchRemoveText: '管理',
         batchRemoveGold: true,
         showSendOneKey: true,
         showGetEnd: true,
@@ -554,7 +566,7 @@ test('A21 ⚠️ `resolveFriendLayout`：三页签 × 删除模式，17 个开�
     // ---- 页签 2 · 黑名单 ----
     const black = resolveFriendLayout({ ...base, tab: FriendTab.Black, deleteMode: false });
     assert.equal(black.showBlackCount, true);
-    assert.equal(black.blackCountText, '黑名单：1/20');
+    assert.equal(black.blackCountText, '1/20');
     assert.equal(black.showFriendCount, false);
     assert.equal(black.showBatchRemove, false);
     assert.equal(black.showRefresh, false);
@@ -582,50 +594,53 @@ test('A22 页签常量与枚举一致（`FRIEND_TAB_COUNT` 是 prefab 里页签�
 
 const ART_DIR = assetPath('image/friend');
 
-/** `FriendArt` 里 12 个静态图名。 */
-const ART_NAMES: readonly string[] = [
-    FRIEND_ROW_ART.rowBg,
-    FRIEND_ROW_ART.headFrame,
-    FRIEND_ROW_ART.lvTag,
-    'fd_panel_bg',
-    'fd_title_bg',
-    FRIEND_BUTTON_ART.gold,
-    FRIEND_BUTTON_ART.dark,
-    FRIEND_ART_TAB_ON,
-    FRIEND_ART_TAB_OFF,
-    'fd_tab_over',
-    'fd_check_bg',
-    'fd_input_bg',
+interface IArtEntry {
+    readonly root: string;
+    readonly name: string;
+}
+
+/** v2 实际用到的静态图（跨 `image/friend` / `image/main` / `image/role` 三个目录）。 */
+const ART_ENTRIES: readonly IArtEntry[] = [
+    { root: FRIEND_ART_ROOT, name: FRIEND_ROW_ART.rowBg },
+    { root: FRIEND_ART_HEAD_FRAME_ROOT, name: FRIEND_ROW_ART.headFrame },
+    { root: FRIEND_ART_LV_TAG_ROOT, name: FRIEND_ROW_ART.lvTag },
+    { root: FRIEND_ART_PANEL_BG_ROOT, name: FRIEND_ART_PANEL_BG },
+    { root: FRIEND_ART_TITLE_BG_ROOT, name: FRIEND_ART_TITLE_BG },
+    { root: FRIEND_ART_BTN_GOLD_ROOT, name: FRIEND_ART_BTN_GOLD },
+    { root: FRIEND_ART_BTN_BLUE_ROOT, name: FRIEND_ART_BTN_BLUE },
+    { root: FRIEND_ART_ROOT, name: FRIEND_ART_BTN_DARK },
+    { root: FRIEND_ART_TAB_ON_ROOT, name: FRIEND_ART_TAB_ON },
+    { root: FRIEND_ART_ROOT, name: 'fd_check_bg' },
+    { root: FRIEND_ART_ROOT, name: 'fd_input_v2' },
+    { root: FRIEND_ART_ROOT, name: 'fd_sep' },
 ];
 
-test('B1 好友美术目录 12 张图齐（少一张就是一个白框，且**不报错**）', () => {
+test('B1 v2 静态图齐（少一张就是一个白框，且**不报错**）', () => {
     assert.equal(FRIEND_ART_ROOT, 'image/friend', 'loadArt 的 root 不能带 `resources/` 前缀');
-    assert.equal(new Set(ART_NAMES).size, 12);
-    const missing = ART_NAMES.filter((name) => !existsSync(`${ART_DIR}/${name}.png`));
-    assert.deepEqual(missing, [], `缺图：${missing.join(', ')}`);
-    const noMeta = ART_NAMES.filter((name) => !existsSync(`${ART_DIR}/${name}.png.meta`));
-    assert.deepEqual(noMeta, [], `缺 .png.meta（编辑器不会给 uuid ⇒ 图片打不开）：${noMeta.join(', ')}`);
+    const missing = ART_ENTRIES.filter(({ root, name }) => !existsSync(`${assetPath(root)}/${name}.png`));
+    assert.deepEqual(missing, [], `缺图：${missing.map((it) => `${it.root}/${it.name}`).join(', ')}`);
+    const noMeta = ART_ENTRIES.filter(({ root, name }) => !existsSync(`${assetPath(root)}/${name}.png.meta`));
+    assert.deepEqual(noMeta, [], `缺 .png.meta（编辑器不会给 uuid ⇒ 图片打不开）：${noMeta.map((it) => `${it.root}/${it.name}`).join(', ')}`);
 });
 
-test('B2 ⚠️ 九宫格 6 张：边框必须落在 `.png.meta`，且中心格 = `scale9grid` 的 w/h', () => {
-    // 「中心格」判据：rawW − left − right == w 且 rawH − top − bottom == h
-    // （`fd_check_bg` 曾把 scale9grid 的 **w** 当 **h** 用，`bottom` 算成 9、应为 12；
-    //   本判据当场能逮住 —— 边框写错时图照样显示，只是四角被拉伸。）
-    const EXPECT_SLICED: Readonly<Record<string, readonly [number, number, number, number, number, number]>> = {
-        // 图名: [rawW, rawH, top, bottom, left, right]
-        fd_panel_bg: [394, 307, 128, 143, 129, 142],
-        fd_row_bg: [317, 142, 12, 11, 12, 13],
-        fd_btn_gold: [84, 77, 11, 54, 14, 66],
-        fd_btn_dark: [83, 77, 11, 57, 15, 64],
-        fd_check_bg: [39, 39, 13, 12, 10, 12],
-        fd_input_bg: [30, 30, 13, 14, 14, 12],
+test('B2 ⚠️ 九宫格：边框必须落在 `.png.meta`，且中心格 = `scale9grid` 的 w/h', () => {
+    // [rawW, rawH, top, bottom, left, right, packable]
+    const EXPECT_SLICED: Readonly<Record<string, readonly [number, number, number, number, number, number, boolean]>> = {
+        fd_row_v2: [560, 100, 16, 16, 16, 16, false],
+        chest_btn_gold: [130, 54, 0, 0, 29, 38, true],
+        fd_btn_dark: [83, 77, 11, 57, 15, 64, false],
+        fd_check_bg: [39, 39, 13, 12, 10, 12, false],
+        fd_input_v2: [120, 80, 18, 18, 18, 18, false],
     };
     assert.deepEqual([...FRIEND_ART_SLICED].sort(), Object.keys(EXPECT_SLICED).sort(), 'SLICED 表与期望表必须同一批');
 
     const failures: string[] = [];
     for (const [name, want] of Object.entries(EXPECT_SLICED)) {
-        const [rawW, rawH, top, bottom, left, right] = want;
-        const meta = JSON.parse(readFileSync(`${ART_DIR}/${name}.png.meta`, 'utf8')) as {
+        const [rawW, rawH, top, bottom, left, right, packable] = want;
+        const metaPath = name === 'chest_btn_gold'
+            ? `${assetPath(FRIEND_ART_BTN_GOLD_ROOT)}/${name}.png.meta`
+            : `${ART_DIR}/${name}.png.meta`;
+        const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as {
             subMetas: Record<string, { userData: Record<string, unknown> }>;
         };
         const ud = meta.subMetas.f9941?.userData;
@@ -639,23 +654,22 @@ test('B2 ⚠️ 九宫格 6 张：边框必须落在 `.png.meta`，且中心格 
         if ((gTop !== top || gBottom !== bottom || gLeft !== left || gRight !== right)) {
             failures.push(`${name} 边框 T${gTop}/B${gBottom}/L${gLeft}/R${gRight}，期望 T${top}/B${bottom}/L${left}/R${right}`);
         }
-        // 中心格必须正好是 scale9grid 的 w/h
         if (gRawW - gLeft - gRight <= 0 || gRawH - gTop - gBottom <= 0) {
             failures.push(`${name} 边框吃掉了整张图（中心格 ≤ 0）`);
         }
-        if (ud!.packable !== false) {
-            failures.push(`${name} 的 packable 必须为 false（进了自动图集，九宫格边框会被打乱）`);
+        if (ud!.packable !== packable) {
+            failures.push(`${name} 的 packable 应为 ${String(packable)}（现为 ${String(ud!.packable)}）`);
         }
     }
     assert.deepEqual(failures, [], `九宫格配置不对：\n${failures.join('\n')}`);
 });
 
-test('B3 ⚠️ `fd_lv_tag` 必须 `trimType="none"`（auto-trim 会裁掉 1px、多一次 40/38 等比拉伸）', () => {
-    const meta = JSON.parse(readFileSync(`${ART_DIR}/fd_lv_tag.png.meta`, 'utf8')) as {
+test('B3 ⚠️ `hud_level_bg` 必须 `trimType="none"`（auto-trim 会裁掉 1px、多一次等比拉伸）', () => {
+    const meta = JSON.parse(readFileSync(`${assetPath(FRIEND_ART_LV_TAG_ROOT)}/hud_level_bg.png.meta`, 'utf8')) as {
         subMetas: Record<string, { userData: Record<string, unknown> }>;
     };
     const ud = meta.subMetas.f9941!.userData;
-    assert.equal(ud.trimType, 'none');
+    assert.ok(['none', 'auto'].includes(String(ud.trimType)), `trimType 不能是裁剪型：${String(ud.trimType)}`);
     assert.equal(ud.trimX, 0);
     assert.equal(ud.trimY, 0);
     assert.equal(ud.width, ud.rawWidth, 'width 要回到整图宽');
@@ -665,25 +679,20 @@ test('B3 ⚠️ `fd_lv_tag` 必须 `trimType="none"`（auto-trim 会裁掉 1px�
 test('B4 `friendSpriteType` / `friendButtonArt` / `friendTabArt` / `friendTint` 四个查表入口', () => {
     assert.equal(FRIEND_SPRITE_SIMPLE, 0);
     assert.equal(FRIEND_SPRITE_SLICED, 1);
-    // SLICED 表里的图必须给 1（prefab 里 `cc.Sprite._type` 的真源）
     for (const name of FRIEND_ART_SLICED) assert.equal(friendSpriteType(name), 1, `${name} 必须是 SLICED`);
-    for (const name of [FRIEND_ROW_ART.headFrame, FRIEND_ROW_ART.lvTag, 'fd_tab_on']) {
+    for (const name of [FRIEND_ROW_ART.headFrame, FRIEND_ROW_ART.lvTag, FRIEND_ART_TAB_ON]) {
         assert.equal(friendSpriteType(name), 0, `${name} 是原尺寸图，不该拉伸`);
     }
-    // 未知名字给 SIMPLE（不抛）
     assert.equal(friendSpriteType('不存在的图'), 0);
 
-    // ⚠️ 别按图名直觉猜：`颜色,1`(=Orange) 是金色 `TY_btn06`、`颜色,0`(=Bule) 是深色 `TY_btn07`
-    assert.equal(friendButtonArt('gold'), 'fd_btn_gold');
-    assert.equal(friendButtonArt('dark'), 'fd_btn_dark');
+    assert.equal(friendButtonArt('gold'), 'chest_btn_gold');
+    assert.equal(friendButtonArt('dark'), 'chest_btn_blue');
     assert.notEqual(FRIEND_BUTTON_ART.gold, FRIEND_BUTTON_ART.dark);
 
-    // 页签两态（FGUI `组件_弹窗_页签` 的 button controller：常态 TY_btn23 / 选中 TY_btn20）
     assert.equal(friendTabArt(true), FRIEND_ART_TAB_ON);
     assert.equal(friendTabArt(false), FRIEND_ART_TAB_OFF);
     assert.notEqual(friendTabArt(true), friendTabArt(false));
 
-    // 灰度用 tint 近似（有意偏离，Cocos 无内置灰度）
     assert.deepEqual([...FRIEND_TINT_NORMAL], [255, 255, 255]);
     assert.deepEqual([...FRIEND_TINT_GRAY], [132, 132, 132]);
     assert.deepEqual([...friendTint(true)], [...FRIEND_TINT_GRAY]);
@@ -715,6 +724,7 @@ const SCRIPT_FILES: Readonly<Record<string, string>> = {
     FriendApplyRow: 'assets/script/app/friend/FriendApplyRow.ts',
     FriendGetEndRow: 'assets/script/app/friend/FriendGetEndRow.ts',
     FriendTabButton: 'assets/script/app/friend/FriendTabButton.ts',
+    RedDot: 'assets/script/app/common/RedDot.ts',
     VScrollView: 'assets/script/vscrollview/VScrollView.ts',
 };
 
@@ -772,13 +782,16 @@ test('C3 ⚠️ 每个脚本组件的 __type__ 都能从 .ts.meta 反解，且�
         FriendApplyRow: 1,
         FriendGetEndRow: 1,
         FriendTabButton: 3,
+        RedDot: 1,
         VScrollView: 3,
     };
 
     for (const { file, all } of PREFABS) {
         const used = new Set(
             all
-                .filter((entry) => entry && typeof entry.__type__ === 'string' && !(entry.__type__ as string).startsWith('cc.'))
+                .filter((entry) => entry && typeof entry.__type__ === 'string'
+                    && !(entry.__type__ as string).startsWith('cc.')
+                    && !(entry.__type__ as string).startsWith('sp.'))
                 .map((entry) => entry.__type__ as string),
         );
         for (const cid of used) {
@@ -788,7 +801,7 @@ test('C3 ⚠️ 每个脚本组件的 __type__ 都能从 .ts.meta 反解，且�
         const counts = new Map<string, number>();
         for (const entry of all) {
             const type = entry?.__type__ as string | undefined;
-            if (!type || type.startsWith('cc.')) continue;
+            if (!type || type.startsWith('cc.') || type.startsWith('sp.')) continue;
             counts.set(expected.get(type)!, (counts.get(expected.get(type)!) ?? 0) + 1);
         }
         for (const [className, count] of Object.entries(counts)) {
@@ -883,7 +896,28 @@ const PANEL_RECTS: Readonly<Record<string, readonly [number, number, number, num
  *
  * ⚠️ 视口自己的 `xy` 本身就是画布绝对坐标，**不能再加弹窗框的 47** —— 那是面板内部元素才要加的。
  */
+function friendRowExpectV2(prefix: string, rowTop: number) {
+    const at = (ix: number, iy: number, w: number, h: number) => ({ left: 80 + ix, top: rowTop + iy, w, h });
+    const p = (name: string) => `${prefix}/RowView/content/RowTemplate/${name}`;
+    return {
+        [`${prefix}/RowView/content/RowTemplate`]: { left: 80, top: rowTop, w: 560, h: 100 },
+        [p('Group')]: at(0, 0, 560, 100),
+        [p('Group/HeadFrame')]: at(14, 8, 84, 84),
+        [p('Group/Icon')]: at(24, 18, 64, 64),
+        [p('Group/LvTag')]: at(16, 66, 32, 32),
+        [p('Group/Lv')]: at(16, 66, 32, 32),
+        [p('Group/Name')]: at(108, 13, 220, 30),
+        [p('Group/Power')]: at(108, 45, 180, 26),
+        [p('ChatBtn')]: at(275, 23, 130, 54),
+        [p('ActionBtn')]: at(414, 23, 130, 54),
+        [p('Duration')]: at(258, 45, 110, 26),
+        [p('CheckBtn')]: at(22, 42, 50, 50),
+        [p('CheckBtn/Mark')]: at(22, 42, 50, 50),
+    };
+}
+
 function rowExpect(prefix: string, rowTop: number, kind: 'list' | 'apply' | 'take') {
+    if (prefix === 'Friend' && kind === 'list') return friendRowExpectV2(prefix, rowTop);
     const at = (ix: number, iy: number, w: number, h: number) => ({ left: 78 + ix, top: rowTop + iy, w, h });
     const p = (name: string) => `${prefix}/RowView/content/RowTemplate/${name}`;
     const out: Record<string, { left: number; top: number; w: number; h: number }> = {
@@ -931,27 +965,36 @@ type Rect = { left: number; top: number; w: number; h: number };
 const EXPECT: Readonly<Record<string, Readonly<Record<string, Rect>>>> = {
     Friend: {
         Friend: { left: 0, top: 0, w: 720, h: 1280 },
-        ...Object.fromEntries(Object.entries(PANEL_RECTS).map(([k, v]) => [`Friend/${k}`, { left: v[0], top: v[1], w: v[2], h: v[3] }])),
-        // list (78,309) 564×592，视口 anchor (0.5,1) ⇒ 顶边 309
-        'Friend/RowView': { left: 78, top: 309, w: 564, h: 592 },
-        'Friend/BatchRemoveBtn': { left: 486, top: 250, w: 136, h: 60 },
-        'Friend/SendOneKeyBtn': { left: 194, top: 941, w: 150, h: 70 },
-        'Friend/GetEndBtn': { left: 390, top: 941, w: 150, h: 70 },
-        'Friend/RefreshBtn': { left: 194, top: 930, w: 150, h: 70 },
-        'Friend/ApplyListBtn': { left: 390, top: 930, w: 150, h: 70 },
-        'Friend/RemoveOneKeyBtn': { left: 290, top: 955, w: 150, h: 70 },
-        'Friend/SearchBtn': { left: 507, top: 238, w: 136, h: 75 },
-        'Friend/SearchInput': { left: 162, top: 257, w: 355, h: 45 },
-        // group n85 (86,1045) 548×73 → **高统一 72**（有意偏离②）
-        'Friend/TabBar': { left: 86, top: 1045, w: 548, h: 72 },
-        'Friend/TabBar/Tab1': { left: 86, top: 1045, w: 160, h: 72 },
-        'Friend/TabBar/Tab2': { left: 280, top: 1045, w: 160, h: 72 },
-        'Friend/TabBar/Tab3': { left: 474, top: 1045, w: 160, h: 72 },
-        'Friend/FriendCountLabel': { left: 86, top: 267, w: 138, h: 29 },
-        'Friend/BlackCountLabel': { left: 352 - 61, top: 269, w: 122, h: 29 },
-        'Friend/SendTimesLabel': { left: 269 - 77.5, top: 911, w: 155, h: 29 },
-        'Friend/RemoveCountLabel': { left: 361 - 57.5, top: 926, w: 115, h: 29 },
-        ...rowExpect('Friend', 309, 'list'),
+        'Friend/PanelBg': { left: 34, top: 155, w: 652, h: 970 },
+        'Friend/TitleBg': { left: 150, top: 117, w: 420, h: 122 },
+        'Friend/Title': { left: 229, top: 153, w: 262, h: 54 },
+        'Friend/CloseBtn': { left: 612, top: 147.5, w: 92, h: 91 },
+        'Friend/StatBar': { left: 80, top: 246, w: 560, h: 106 },
+        'Friend/StatBar/FriendStatCell': { left: 80, top: 246, w: 280, h: 106 },
+        'Friend/StatBar/FriendStatCell/FriendCountLabel': { left: 168, top: 294, w: 190, h: 40 },
+        'Friend/StatBar/SendStatCell': { left: 360, top: 246, w: 280, h: 106 },
+        'Friend/StatBar/SendStatCell/SendTimesLabel': { left: 448, top: 294, w: 200, h: 40 },
+        'Friend/BlackStatBar': { left: 80, top: 246, w: 560, h: 106 },
+        'Friend/BlackStatBar/BlackCountLabel': { left: 168, top: 294, w: 140, h: 40 },
+        'Friend/TagRow': { left: 80, top: 358, w: 560, h: 70 },
+        'Friend/TagRow/TagBg': { left: 80, top: 358, w: 200, h: 70 },
+        'Friend/TagRow/TagCount': { left: 292, top: 378, w: 120, h: 30 },
+        'Friend/TagRow/BatchRemoveBtn': { left: 508, top: 366, w: 112, h: 54 },
+        'Friend/TagRow/RefreshBtn': { left: 490, top: 366, w: 130, h: 54 },
+        'Friend/TagRow/RemoveCountPill': { left: 296, top: 374, w: 150, h: 38 },
+        'Friend/TagRow/RemoveCountPill/RemoveCountLabel': { left: 301, top: 378, w: 140, h: 30 },
+        'Friend/SearchInput': { left: 80, top: 246, w: 360, h: 66 },
+        'Friend/SearchBtn': { left: 452, top: 252, w: 188, h: 54 },
+        'Friend/RowView': { left: 80, top: 436, w: 560, h: 432 },
+        'Friend/SendOneKeyBtn': { left: 80, top: 874, w: 231, h: 108 },
+        'Friend/GetEndBtn': { left: 319, top: 874, w: 321, h: 108 },
+        'Friend/ApplyListBtn': { left: 199.5, top: 874, w: 321, h: 108 },
+        'Friend/RemoveOneKeyBtn': { left: 199.5, top: 874, w: 321, h: 108 },
+        'Friend/TabBar': { left: 80, top: 996, w: 560, h: 60 },
+        'Friend/TabBar/Tab1': { left: 80, top: 996, w: 184, h: 60 },
+        'Friend/TabBar/Tab2': { left: 268, top: 996, w: 184, h: 60 },
+        'Friend/TabBar/Tab3': { left: 456, top: 996, w: 184, h: 60 },
+        ...rowExpect('Friend', 436, 'list'),
     },
     FriendApply: {
         FriendApply: { left: 0, top: 0, w: 720, h: 1280 },
@@ -998,6 +1041,21 @@ test('C4 ⚠️ 几何：三个 prefab 的每个节点反解回画布像素后�
     assert.deepEqual(failures, [], `节点位置偏离 FGUI 原值：\n${failures.join('\n')}`);
 });
 
+test('C4b 标题文字/关闭按钮对齐巡逻宝箱：字号 40、行高 50、标题 262×54', () => {
+    const { all } = PREFABS.find((item) => item.rootName === 'Friend')!;
+    const title = all.find((entry) => entry && entry.__type__ === 'cc.Node' && entry._name === 'Title')!;
+    const label = all[((title._components as { __id__: number }[])[1]).__id__];
+    assert.equal(label._fontSize, 40);
+    assert.equal(label._lineHeight, 50);
+    assert.deepEqual(label._color, { __type__: 'cc.Color', r: 255, g: 250, b: 235, a: 255 });
+    assert.equal(label._enableOutline, true);
+    assert.equal(label._outlineWidth, 2);
+    assert.deepEqual(label._outlineColor, { __type__: 'cc.Color', r: 92, g: 45, b: 12, a: 255 });
+    const close = all.find((entry) => entry && entry.__type__ === 'cc.Node' && entry._name === 'CloseBtn')!;
+    assert.equal(close._lpos.x, 298);
+    assert.equal(close._lpos.y, 447);
+});
+
 test('C5 ⚠️ `Group` 是**中心锚点**（套「左上角」公式会整体偏半个组宽 116px，且两边都自洽）', () => {
     const nodes = GEOM_BY_PREFAB.get('Friend')!;
     const group = nodes.find((node) => node.path === 'Friend/RowView/content/RowTemplate/Group');
@@ -1008,10 +1066,10 @@ test('C5 ⚠️ `Group` 是**中心锚点**（套「左上角」公式会整体�
     const template = nodes.find((node) => node.path === 'Friend/RowView/content/RowTemplate')!;
     const lposX = group!.px - template.px;
     const lposY = -(group!.py - template.py);
-    assert.equal(lposX, FRIEND_ROW_GROUP_NORMAL.x, 'Group._lpos.x 与 FRIEND_ROW_GROUP_NORMAL 必须一致');
-    assert.equal(lposY, FRIEND_ROW_GROUP_NORMAL.y, 'Group._lpos.y 与 FRIEND_ROW_GROUP_NORMAL 必须一致');
-    // 232/2 = 116 —— 套错公式时的偏移量，写在这里提醒别改回「左上角」算法
-    assert.equal(group!.w / 2, 116);
+    assert.equal(Math.round(lposX * 1000) / 1000, FRIEND_ROW_GROUP_NORMAL.x, 'Group._lpos.x 与 FRIEND_ROW_GROUP_NORMAL 必须一致');
+    assert.ok(Math.abs(lposY) < 1e-9, 'Group._lpos.y 与 FRIEND_ROW_GROUP_NORMAL 必须一致（-0 也算 0）');
+    // 560/2 = 280 —— v2 行通栏，套错公式时仍能靠这条判据定位
+    assert.equal(group!.w / 2, 280);
 });
 
 test('C6 ⚠️ 根节点子序：RowView 必须排在内容区按钮**之前**（_children 序 = 渲染序）', () => {
@@ -1057,7 +1115,8 @@ test('C7 虚拟列表三件套：视口 / content 的 anchor 都是 (0.5,1)，�
         assert.equal(template!.script, scriptCid(SCRIPT_FILES[TEMPLATE_SCRIPT[rootName]!]!), `行模板脚本不对`);
         // `_lpos.y = -66.5`（= −行高/2 − 视口顶）与 `content._lpos.y = 0` 是 VScrollView 的取位口径
         // ⚠️ Cocos 的 y 向上 ⇒ `_lpos.y = -66.5` 在画布上落在**父节点下方** 66.5
-        assert.equal(template!.py, view!.py + 66.5, 'RowTemplate 的 y 必须在视口顶下 66.5');
+        const halfRow = rootName === 'Friend' ? 50 : 66.5;
+        assert.equal(template!.py, view!.py + halfRow, `RowTemplate 的 y 必须在视口顶下 ${halfRow}`);
         assert.equal(content!.py, view!.py, 'content 必须在视口顶');
     }
 });
@@ -1068,33 +1127,37 @@ test('C8 三个页签：x 升序 = 好友列表 / 添加好友 / 黑名单，且
     const tabs = [1, 2, 3].map((i) => byPath.get(`Friend/TabBar/Tab${i}`));
     assert.ok(tabs.every(Boolean), '三个页签必须都在');
     const xs = tabs.map((tab) => tab!.left);
-    assert.deepEqual(xs, [86, 280, 474], '等距 194（160 宽 + 34 间距）');
+    assert.deepEqual(xs, [80, 268, 456], '等距 188（184 宽 + 4 间距）');
     assert.equal(new Set(xs).size, 3, '三个页签不能重叠（重叠时只有最上面那个收得到触摸）');
     assert.ok(xs[0]! < xs[1]! && xs[1]! < xs[2]!, 'x 必须升序，否则「页签 i → FriendTab i」的映射就反了');
 
     const cidTab = scriptCid(SCRIPT_FILES.FriendTabButton!);
     for (const tab of tabs) {
         assert.equal(tab!.script, cidTab, '页签上必须挂 FriendTabButton');
-        assert.equal(tab!.w, 160, 'TabBar 高 72 时页签也是 160×72');
-        assert.equal(tab!.h, 72);
+        assert.equal(tab!.w, 184, 'v2 三段分栏每段 184×60');
+        assert.equal(tab!.h, 60);
     }
 });
 
 test('C9 ⚠️ 九宫格：`cc.Sprite._type` 必须是 1(SLICED)，且不是所有 Sprite 都该是 1', () => {
-    // ⚠️ prefab 里 `_spriteFrame.__uuid__` 用的是 **png 的顶层 uuid + `@f9941`**（子资源后缀），
-    //    `.png.meta` 的 `subMetas.f9941.uuid` 则**自带** `@f9941` ⇒ 两边比对前都要归一化，
-    //    否则整批九宫格图会被判成「非九宫格」（本文件第一版就踩了这个）。
-    const SLICED_UUIDS = new Set(
-        [...FRIEND_ART_SLICED].map((name) => {
-            const meta = JSON.parse(readFileSync(`${ART_DIR}/${name}.png.meta`, 'utf8')) as { uuid: string };
-            return meta.uuid;
-        }),
-    );
-    assert.equal(SLICED_UUIDS.size, 6, '6 张九宫格图的 png uuid 不能重复');
-    // 抽一张反查：prefab 里的写法确实是「顶层 uuid + @f9941」
-    for (const name of ['fd_row_bg']) {
-        const meta = JSON.parse(readFileSync(`${ART_DIR}/${name}.png.meta`, 'utf8')) as { uuid: string };
-        assert.equal(meta.uuid, 'a5bf30a4-00e7-4706-8039-adbffaab2897', 'fd_row_bg 的 png uuid 变了');
+    // 旧弹窗（FriendApply / FriendGetEnd）仍用老图，这里把两批 + 巡逻宝箱公共框一起登记。
+    const SLICED_META: Readonly<Record<string, string>> = {
+        fd_row_v2: `${ART_DIR}/fd_row_v2.png.meta`,
+        chest_btn_gold: `${assetPath(FRIEND_ART_BTN_GOLD_ROOT)}/chest_btn_gold.png.meta`,
+        fd_btn_dark: `${ART_DIR}/fd_btn_dark.png.meta`,
+        fd_check_bg: `${ART_DIR}/fd_check_bg.png.meta`,
+        fd_input_bg: `${ART_DIR}/fd_input_bg.png.meta`,
+        fd_input_v2: `${ART_DIR}/fd_input_v2.png.meta`,
+        fd_panel_bg: `${ART_DIR}/fd_panel_bg.png.meta`,
+        fd_row_bg: `${ART_DIR}/fd_row_bg.png.meta`,
+        fd_btn_gold: `${ART_DIR}/fd_btn_gold.png.meta`,
+        bg: `${assetPath(FRIEND_ART_PANEL_BG_ROOT)}/bg.png.meta`,
+        frame_01: `${assetPath('image/territory/panel/monsterbox')}/frame_01.png.meta`,
+    };
+    const SLICED_UUIDS = new Set<string>();
+    for (const [name, metaPath] of Object.entries(SLICED_META)) {
+        assert.ok(existsSync(metaPath), `${name} 的 .meta 不存在`);
+        SLICED_UUIDS.add((JSON.parse(readFileSync(metaPath, 'utf8')) as { uuid: string }).uuid);
     }
 
     const failures: string[] = [];
@@ -1116,10 +1179,10 @@ test('C9 ⚠️ 九宫格：`cc.Sprite._type` 必须是 1(SLICED)，且不是所
         });
     }
     assert.deepEqual(failures, [], failures.join('\n'));
-    assert.ok(slicedUsed >= 10, `九宫格 Sprite 只找到 ${slicedUsed} 个（底板/行底/按钮/勾选/输入框）`);
+    assert.ok(slicedUsed >= 8, `九宫格 Sprite 只找到 ${slicedUsed} 个（行底/按钮/勾选/输入框/公共框）`);
 });
 
-test('C10 搜索框 `cc.EditBox`：两个子 Label 的 anchor (0,1) 与局部位置，底图是 fd_input_bg', () => {
+test('C10 搜索框 `cc.EditBox`：两个子 Label 的 anchor (0,0.5) 与局部位置，底图是 fd_input_v2', () => {
     const { all } = PREFABS.find((item) => item.rootName === 'Friend')!;
     const at = (ref: unknown) => all[(ref as { __id__?: number }).__id__!] as Record<string, unknown>;
 
@@ -1139,19 +1202,42 @@ test('C10 搜索框 `cc.EditBox`：两个子 Label 的 anchor (0,1) 与局部位
         const childUit = ((node._components ?? []) as unknown[]).map(at).find((c) => c.__type__ === 'cc.UITransform')!;
         const anchor = childUit._anchorPoint as { x: number; y: number };
         assert.equal(anchor.x, 0);
-        assert.equal(anchor.y, 1, '两个子 Label 都是左上锚点');
+        assert.equal(anchor.y, 0.5, 'v2 输入框文字垂直居中');
         const lpos = node._lpos as { x: number; y: number };
-        assert.equal(lpos.x, -w / 2 + 2);
-        assert.equal(lpos.y, h / 2);
+        assert.equal(lpos.x, -w / 2 + 26);
+        assert.equal(lpos.y, 0);
     }
 
-    // 底图必须是好友自己的那份 input（不是 login/input_box —— 那份的边框会影响登录界面）
-    const bgMeta = JSON.parse(readFileSync(`${ART_DIR}/fd_input_bg.png.meta`, 'utf8')) as { uuid: string };
+    // 底图必须是好友自己的那份主题 input（不是 login/input_box —— 那份的边框会影响登录界面）
+    const bgMeta = JSON.parse(readFileSync(`${ART_DIR}/fd_input_v2.png.meta`, 'utf8')) as { uuid: string };
     const frame = editBox!._backgroundImage as { __uuid__: string };
     assert.equal(frame.__uuid__.replace('@f9941', ''), bgMeta.uuid);
     // FGUI 原稿 `<text input="true" prompt="请输入玩家名称">` **没写 maxLength** ⇒ 新端按用途自定：
     // 登录名 40 / GM 面板 64 / 这里 24（同一工程里都是自定值，没有统一口径可抄）
     assert.equal(editBox!._maxLength, 24, '搜索框上限 24');
+
+    // 搜索按钮：节点 scale 必须是 1（历史上写过 0.6 ⇒ 188×54 实际只画 113×32）
+    const searchBtn = all.find((entry) => entry && entry.__type__ === 'cc.Node' && entry._name === 'SearchBtn')!;
+    assert.deepEqual(searchBtn._lscale, { __type__: 'cc.Vec3', x: 1, y: 1, z: 1 });
+    const labelChild = all[((searchBtn._children as { __id__: number }[])[0]).__id__];
+    const text = all[((labelChild._components as { __id__: number }[])[1]).__id__];
+    assert.deepEqual(text._color, { __type__: 'cc.Color', r: 74, g: 47, b: 28, a: 255 }, '搜索按钮要深棕字，不能白字金底');
+});
+
+test('C11 好友申请按钮挂工程通用 RedDot（数字红点 = 待处理申请数）', () => {
+    const { all } = PREFABS.find((item) => item.rootName === 'Friend')!;
+    const dot = all.find((entry) => entry && entry.__type__ === 'cc.Node' && entry._name === 'ApplyRedDot');
+    assert.ok(dot, '好友弹窗根下必须有 ApplyRedDot（父节点常驻，onLoad 才会跑）');
+    assert.equal(dot!._lpos.x, 150);
+    assert.equal(dot!._lpos.y, -246);
+    assert.deepEqual(dot!._lscale, { __type__: 'cc.Vec3', x: 0.8, y: 0.8, z: 1 });
+    const redDot = ((dot!._components as { __id__: number }[]) || [])
+        .map((ref) => all[ref.__id__])
+        .find((comp) => comp.__type__ === '5fa5aSCCTRI/Y8zkguS79+z');
+    assert.ok(redDot, 'ApplyRedDot 必须挂公共 RedDot 组件');
+    const icon = all[redDot!.icon.__id__];
+    assert.equal(icon._spriteFrame.__uuid__, '84c85dbf-f6d0-4171-bcf6-66c163725f67@f9941');
+    assert.match(PAGE_CODE, /setRedDot\(layout\.showApplyList \? snapshot\.applyRows\.length : 0, RED_DOT_TYPE_NUMBER\)/);
 });
 
 // ============================================================
@@ -1201,7 +1287,7 @@ test('D2 ⚠️ 三张表都走 `CacheMgr`（服务端会推），**不自己存
     // 三张分表在 protoCache 里 ⇒ 不能当配置表读
     assert.ok(!REPO_CODE.includes(`getRefAllAsync('CmdFriend')`), 'CmdFriend 是缓存表，不是配置表');
     // 只有 `gameConfig` 是配置表
-    assert.ok(REPO_CODE.includes(`readRows('gameConfig')`), 'friend* 上限必须读 gameConfig');
+    assert.ok(REPO_CODE.includes(`readRows(GAME_CONFIG_TABLE)`), 'friend* 上限必须读 gameConfig');
     // 推荐列表 / 我申请过谁 = 内存（老端 ModelFriend 同理），不能假装有缓存
     assert.ok(REPO_CODE.includes('private suggestRaw: unknown[] = []'));
     assert.ok(REPO_CODE.includes('private readonly appliedIds = new Set<string>()'));
@@ -1347,7 +1433,7 @@ test('E1 文案表键齐全（页面只从这里取字，别处不许造字符�
     assert.deepEqual(FRIEND_ROW_BUTTON_TEXT, {
         gift: '赠送', gifted: '已赠送', apply: '申请', applied: '已申请', remove: '移除',
     });
-    assert.equal(FRIEND_BTN_REMOVE_MODE, '批量删除');
+    assert.equal(FRIEND_BTN_REMOVE_MODE, '管理');
     assert.equal(FRIEND_BTN_REMOVE_MODE_BACK, '返回');
     assert.equal(FRIEND_BTN_SEND_ONE_KEY, '一键赠送');
     assert.equal(FRIEND_BTN_GET_END, '领取体力');

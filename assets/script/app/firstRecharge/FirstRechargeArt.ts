@@ -10,11 +10,3 @@ export interface IFirstRechargeItemInfo {
     readonly icon: string;
     readonly quality: number;
 }
-
-/** 品质框统一在 `common/QualityFrameArt`，这里只转发，不重算。 */
-export {
-    QUALITY_FRAME_ROOT,
-    QUALITY_FRAME_NAMES,
-    qualityFrameLevel,
-    qualityFrameName,
-} from '../common/QualityFrameArt';

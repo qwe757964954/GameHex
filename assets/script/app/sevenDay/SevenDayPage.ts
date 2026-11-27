@@ -2,7 +2,7 @@ import { _decorator, Button, Color, Label, Node, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { loadArt } from '../card/CardLineupIcons';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
-import { qualityFrameName } from './SevenDayArt';
+import { qualityFrameName } from '../common/QualityFrameArt';
 import { resolveItemIconRef } from '../common/RewardIcon';
 import { sevenDayRepository } from './SevenDayRepository';
 import { loadQualityFrameMap } from '../common/QualityFrameLoader';

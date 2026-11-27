@@ -10,7 +10,8 @@ const { ccclass } = _decorator;
  * 没有弹窗语义，所以直接继承 Component。
  *
  * 版面由 Bg、ShopPanel、Npc、ResBar 和 ScrollView 组成；ScrollView 的 content
- * 依次放 5 个分段 prefab。资源条复用公共 ResBar，显示哪两格由 prefab 的 resKeys 决定。
+ * 依次放 5 个分段 prefab。资源条复用公共 ResBar，显示哪几格由 prefab 的 resKeys 决定
+ * （商城 = 铜币 + 体力 + 幻灵玉，前两格与主界面 HUD 同一套货币）。
  */
 @ccclass('StorePage')
 export class StorePage extends Component {

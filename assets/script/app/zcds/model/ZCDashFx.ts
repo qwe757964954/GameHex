@@ -16,11 +16,34 @@ export const ZC_CHARGE_SHIELD_BEHAVIOR_KEY = ZC_EFFECT_BEHAVIOR_KEYS.chargeShiel
 /** 冲锋 / 尖刺冲锋的行为键。*/
 export const ZC_LEGACY_DASH_BEHAVIOR_KEY = ZC_EFFECT_BEHAVIOR_KEYS.legacyDash;
 
-/** 冲锋位移的表现：轻骑兵_冲锋（静态单帧）。*/
-export const ZC_DASH_EFFECT_PREFAB_PATH = ZC_EFFECT_PATHS.chargeDash;
+/**
+ * 冲锋位移的表现：【战士通用剑气】（2026-11-25 第 49 批换掉「轻骑兵_冲锋」残影）。
+ *
+ * 三条冲锋车道（菌盾冲锋 101204 / 冲锋 102303 / 尖刺冲锋 102703）共用这一张：
+ * 事件仍是 `Melee` + `from → to` 的一条线段，但视图会按目录里的 `flight` 把它当**子弹**播 ——
+ * 位置逐帧从起冲点插值到落点，转角 = 弹道方向 + 180°（美术凸面朝 −X）。
+ *
+ * 🔴 别把 `anchor: 'midpoint'` 的旧口径搬回来：那是「残影贴在线段中点」的补丁，
+ * 视图的飞行分支在锚点逻辑**之前**就 `return` 了，两套一起写只会让人以为它还在用锚点。
+ */
+export const ZC_DASH_EFFECT_PREFAB_PATH = ZC_EFFECT_PATHS.warriorQi;
 
 /** 冲锋残影时长（秒）。*/
 export const ZC_DASH_EFFECT_SECONDS = ZC_EFFECT_TUNING.dashSeconds;
+
+/**
+ * 剑气在屏幕竖直方向上的抬升（视图 px，2026-11-25 第 49 批）。
+ *
+ * 原料是「线段中点残影」（画布 120×56），压着冲锋线放只低 28px，看不出问题；
+ * 换成剑气后画布是 **123×141**（≈1.4 个兵种高），居中对齐就等于**一半插进地面**。
+ *
+ * 🔴 必须是**事件级** `visualLiftPx`，不能写进 prefab 的 `_lpos`：宿主节点会按弹道转角
+ * （剑气朝右时转 180°），本地 +Y 会被一起转成「侧移 / 下沉」，四个方向表现各不相同。
+ * 视图在 `setRotationFromEuler` 之后读它、加在 `mapToViewY` 上 ⇒ 永远是屏幕竖直方向。
+ *
+ * 取 40 ≈ 兵种视觉（画布 98）的腰线：剑气从身体高度掠过，而不是贴着地面推。
+ */
+export const ZC_DASH_EFFECT_LIFT_PX = 40;
 
 /** 落地自保的表现：刀盾兵_护盾。*/
 export const ZC_DASH_GUARD_PREFAB_PATH = ZC_EFFECT_PATHS.dashGuard;
@@ -32,7 +55,7 @@ export const ZC_DASH_GUARD_SECONDS = ZC_EFFECT_TUNING.dashGuardSeconds;
  * 推一条「刀盾兵_护盾」的纯表现事件（2026-11-21 第 37 / 38 批）。
  *
  * 两个调用点共用同一份字段口径，避免「一批的盾看得见、另一批看不见」：
- *  · 第 37 批 巨力坚果 68002「亡者护盾」—— 上盾那一刻给自己挂一圈；
+ *  · 第 37 批 巨力坚果 68002「巨力护盾」（2026-11-25 前叫「亡者护盾」）—— 上盾那一刻给自己挂一圈；
  *  · 第 38 批 波利奥 68006「吃口菠萝」—— 给 `selfCastAllyRadius` 内每个己方单位
  *    （含施法者自己）各挂一圈。
  *

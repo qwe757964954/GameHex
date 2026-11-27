@@ -20,8 +20,8 @@ export const BIGMAP_TILE_WIDTH = 235;
  *取整（153 或 154）会让相邻格出现 1~2px 的缝或重叠。
  */
 export const BIGMAP_TILE_HEIGHT = BIGMAP_TILE_WIDTH * 96 / 147;
-export const BIGMAP_COLUMN_STEP = BIGMAP_TILE_WIDTH * 0.75;
-export const BIGMAP_ROW_STEP = BIGMAP_TILE_HEIGHT;
+const BIGMAP_COLUMN_STEP = BIGMAP_TILE_WIDTH * 0.75;
+const BIGMAP_ROW_STEP = BIGMAP_TILE_HEIGHT;
 
 export interface IBigMapTerritoryEdge {
     readonly start: { readonly x: number; readonly y: number };
@@ -92,7 +92,7 @@ export interface IBigMapMarkerHitArea {
     readonly badgeWidth?: number;
 }
 
-export const BIGMAP_MARKER_ICON_LIFT = 24;
+const BIGMAP_MARKER_ICON_LIFT = 24;
 /** 建筑脚底到格子中心的下沉量：`iconY = height/2 - 16` ⇒ 建筑底边恒在 `-16`。 */
 export const BIGMAP_MARKER_FOOT_LIFT = 16;
 /**

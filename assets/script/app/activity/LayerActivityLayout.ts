@@ -33,9 +33,7 @@ export { fguiTopLeftToCocos };
 //   localX = fguiX绝对中心 - (93 + 606/2)
 //   localY = (315 + 46) - fguiY绝对中心
 
-/** FGUI `list_act` 左上角 x（用于反推各元素的局部坐标，别在别处再抄一遍）。 */
-export const ACTIVITY_STRIP_FGUI_X = 93;
-export const ACTIVITY_STRIP_FGUI_Y = 315;
+/** FGUI `list_act` 窗口尺寸；左上角 (93,315) 由 `ACTIVITY_STRIP_POS` 承接。 */
 export const ACTIVITY_STRIP_WIDTH = 606;
 export const ACTIVITY_STRIP_HEIGHT = 92;
 
@@ -65,8 +63,6 @@ export const ACTIVITY_STRIP_HEIGHT = 92;
  */
 export const ACTIVITY_BAR_LEFT = -304;
 export const ACTIVITY_BAR_WIDTH = 592;
-/** 条的横向中心（不是 0：左边让给徽章那块，所以整条是右偏的）。 */
-export const ACTIVITY_BAR_CENTER_X = ACTIVITY_BAR_LEFT + ACTIVITY_BAR_WIDTH / 2;
 export const ACTIVITY_BAR_HEIGHT = 24;
 export const ACTIVITY_BAR_CENTER_Y = 18;
 
@@ -93,7 +89,7 @@ export const ACTIVITY_CHEST_ART_SIZE = 66;
 export const ACTIVITY_CHEST_CENTER_Y = 45;
 
 /** 宝箱横向可排布区间 = 一根整条。 */
-export const ACTIVITY_CHEST_SPAN = ACTIVITY_BAR_WIDTH;
+const ACTIVITY_CHEST_SPAN = ACTIVITY_BAR_WIDTH;
 
 /** 某个 `cost/costMax` 比例的宝箱在 `ProgressStrip` 局部坐标里的 x。 */
 export function chestOffsetX(ratio: number): number {
@@ -165,13 +161,7 @@ export function rewardNumLayout(cellSize: number): {
 // ============================================================
 // 外层（父容器 = 画布 720×1280）
 // ============================================================
-
-/** 主底板 `act_panel_bg`：FGUI (0,150) 720×1020。 */
-export const ACTIVITY_PANEL_POS = fguiTopLeftToCocos(0, 150, 720, 1020);
-
-/** 顶部装饰底 `act_top_bg`（森林景）：FGUI (26,228) 673×239。 */
-export const ACTIVITY_TOP_BG_POS = fguiTopLeftToCocos(26, 228, 673, 239);
-export const ACTIVITY_TOP_BG_SIZE = { width: 673, height: 239 } as const;
+// 节点坐标已由 `Activity.prefab` / `cc.Widget` 接管；这里只保留测试仍引用的尺寸。
 
 /**
  * 标题横幅：FGUI `图片/框体_frame/title_02.png`（359×93 带铆钉木板牌），摆在 (116,105) 461×119。
@@ -180,19 +170,11 @@ export const ACTIVITY_TOP_BG_SIZE = { width: 673, height: 239 } as const;
  *   宽高比 5.75 vs 本图 3.86），拉进 461×119 会横竖双向变形。
  *   工程里没有 359×93 的图，现从 zarts 拷到 `image/activity/act_title.png`。
  */
-export const ACTIVITY_TITLE_POS = fguiTopLeftToCocos(116, 105, 461, 119);
 export const ACTIVITY_TITLE_SIZE = { width: 461, height: 119 } as const;
 
 /** 标题文字「每日任务」：FGUI (227,127) 240×76，fontSize 58，色 `#dbd394`，描边 `#140f0b`。 */
-export const ACTIVITY_TITLE_LABEL_POS = fguiTopLeftToCocos(227, 127, 240, 76);
 export const ACTIVITY_TITLE_LABEL_SIZE = { width: 240, height: 76 } as const;
 
-/** 关闭按钮：FGUI (657,148) 60×55（组件本体 60×60，被 55 压一点，照抄）。 */
-export const ACTIVITY_CLOSE_POS = fguiTopLeftToCocos(657, 148, 60, 55);
-export const ACTIVITY_CLOSE_SIZE = { width: 60, height: 55 } as const;
-
-/** 任务列表：FGUI (17,454) 688×660。 */
-export const ACTIVITY_LIST_POS = fguiTopLeftToCocos(17, 454, 688, 660);
 export const ACTIVITY_LIST_SIZE = { width: 688, height: 660 } as const;
 
 /** 周活跃整条（含徽章/积分/条/宝箱）：FGUI (93,315) 606×92。 */
@@ -207,18 +189,6 @@ export const ACTIVITY_STRIP_POS = fguiTopLeftToCocos(93, 315, ACTIVITY_STRIP_WID
 /** 徽章 `act_medal`：FGUI (47,301) 83×94。 */
 export const ACTIVITY_MEDAL_POS = stripLocalOf(47, 301, 83, 94);
 export const ACTIVITY_MEDAL_SIZE = { width: 83, height: 94 } as const;
-
-/** 积分数字 `act_coin`：FGUI (0,323) 177×42，fontSize 30，色 `#f2efd4`，居中。 */
-export const ACTIVITY_COIN_POS = stripLocalOf(0, 323, 177, 42);
-export const ACTIVITY_COIN_SIZE = { width: 177, height: 42 } as const;
-
-/** 「周活跃」字底 `act_week_tag`：FGUI (50,388) 79×36（九宫）。 */
-export const ACTIVITY_WEEK_TAG_POS = stripLocalOf(50, 388, 79, 36);
-export const ACTIVITY_WEEK_TAG_SIZE = { width: 79, height: 36 } as const;
-
-/** 「周活跃」文字：FGUI (53,390) 70×32，fontSize 22，色 `#f2efd4`，描边黑 2。 */
-export const ACTIVITY_WEEK_LABEL_POS = stripLocalOf(53, 390, 70, 32);
-export const ACTIVITY_WEEK_LABEL_SIZE = { width: 70, height: 32 } as const;
 
 /** FGUI 绝对坐标（`组件_活动_内容` 空间）→ `ProgressStrip` 局部坐标。 */
 export function stripLocalOf(x: number, y: number, width: number, height: number): ILayoutPoint {
@@ -279,7 +249,7 @@ export const ACTIVITY_PREVIEW_MAX_CELLS = 5;
 /** 气泡**底边**与宝箱**顶边**之间的间隙。 */
 export const ACTIVITY_PREVIEW_ANCHOR_GAP = 12;
 /** 气泡离屏幕左右 / 上下的最小留白。 */
-export const ACTIVITY_PREVIEW_SCREEN_MARGIN = 8;
+const ACTIVITY_PREVIEW_SCREEN_MARGIN = 8;
 
 /** 预览格（90×90）的数量版面 —— 与行内格共用 `rewardNumLayout`。 */
 const PREVIEW_NUM_LAYOUT = rewardNumLayout(ACTIVITY_PREVIEW_CELL_SIZE);

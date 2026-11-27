@@ -24,8 +24,8 @@ import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZC
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 import { ZCDamageResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCDamageResolutionSystem';
 import {
-    ZCAttackResolutionSystem, type IZCAttackResolutionContext,
-} from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+    ZCAttackResolutionSystem, type IZCAttackResolutionContext } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { ZCSkillResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCSkillResolutionSystem';
 import type { ZCAttackProfile, ZCDeckBonuses, ZCUnitDefinition } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { ZCCombatEventType } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import type { ZCFloatText } from '../assets/script/app/zcds/model/ZCGameTypes';
@@ -145,7 +145,7 @@ test('101404 配表：累计普攻 8 次 + 3/4/6 只 + 继承 30/50/80%（生命
             assert.equal(row.skillKind, 'active_cd');
             assert.equal(Number(row.unitId), Number(SPLIT_UNIT));
             assert.equal(Number(row.pvpSkillId), 30216);
-            assert.equal(Number(row.unlockHeroLevel), [9, 18, 27][index]);
+            assert.equal(Number(row.unlockHeroLevel), [7, 18, 27][index]);
             assert.deepEqual(Object.keys(bag).filter((key) => !key.startsWith('summon')), []);
             assert.equal(bag.summonEvery, 8, '设计 K 列：累计普攻 8 次');
             assert.equal(bag.summonCount, tier.count);
@@ -171,7 +171,7 @@ test('101404 卡面：K 表口径的 desc 三份一致，修改器 94014041~43',
         rows.forEach((row, index) => {
             assert.equal(row.name, '一人成军');
             assert.equal(row.desc, plans[index].desc);
-            assert.equal(Number(row.unlockarmylevel), [9, 18, 27][index]);
+            assert.equal(Number(row.unlockarmylevel), [7, 18, 27][index]);
             assert.deepEqual(row.modfiy, [94014041 + index]);
         });
     }
@@ -236,7 +236,7 @@ test('101404 触发口径：第一次只记基线、满 8 次才放、被拒不�
 test('101404 分身：3/4/6 只、继承 30/50/80% 生命与攻击、不过期、不跟随', () => {
     for (let index = 0; index < 3; index += 1) {
         const tier = SPLIT_TIERS[index];
-        const config = buildMatch(SPLIT_UNIT, [9, 18, 27][index]);
+        const config = buildMatch(SPLIT_UNIT, [7, 18, 27][index]);
         const model = makeModel(config, [makeUnit(1, SPLIT_UNIT)], 4);
         const master = liveUnit(model, 1);
         const base = (model as unknown as { effectiveUnitDefinition(unit: ZCUnitState): { attack: number } })
@@ -281,7 +281,7 @@ test('102204 配表：伤害 15/25/40% + 攻速 0/15/30% + 5/6/8 秒，III 级�
             assert.equal(row.behaviorKey, 'team_buff');
             assert.equal(Number(row.unitId), Number(BANANA_UNIT));
             assert.equal(Number(row.pvpSkillId), 30231);
-            assert.equal(Number(row.unlockHeroLevel), [12, 24, 36][index]);
+            assert.equal(Number(row.unlockHeroLevel), [7, 24, 36][index]);
             assert.deepEqual(Object.keys(bag).filter((key) => !key.startsWith('teamBuff')), []);
             assert.equal(bag.teamBuffCooldown, 8, '设计 J 列');
             assert.equal(bag.teamBuffRadius, 190, '设计没给半径 ⇒ 补 190（与共生信号光环同档）');
@@ -315,7 +315,7 @@ test('102204 卡面三份一致，修改器 94022041~43', () => {
         rows.forEach((row, index) => {
             assert.equal(row.name, '嗜血术');
             assert.equal(row.desc, plans[index].desc);
-            assert.equal(Number(row.unlockarmylevel), [12, 24, 36][index]);
+            assert.equal(Number(row.unlockarmylevel), [7, 24, 36][index]);
             assert.deepEqual(row.modfiy, [94022041 + index]);
         });
     }
@@ -526,7 +526,7 @@ test('102304 配表：80/110/150% + 减攻 20/30/40% + 3/4/5 秒，III 级才有
             assert.equal(row.behaviorKey, 'roar');
             assert.equal(Number(row.unitId), Number(PUMPKIN_UNIT));
             assert.equal(Number(row.pvpSkillId), 30216, '南瓜战神与分裂菇共用 30216，靠 unitId 分袋');
-            assert.equal(Number(row.unlockHeroLevel), [12, 24, 36][index]);
+            assert.equal(Number(row.unlockHeroLevel), [7, 24, 36][index]);
             assert.deepEqual(Object.keys(bag).filter((key) => !key.startsWith('roar')), []);
             assert.equal(bag.roarCooldown, 8, '设计 J 列');
             assert.equal(bag.roarRadius, 150, '设计没给半径 ⇒ 补 150（与毒液喷吐 / 陷阱爆炸同档）');
@@ -557,7 +557,7 @@ test('102304 卡面三份一致，修改器 94023041~43', () => {
         rows.forEach((row, index) => {
             assert.equal(row.name, '大吼大叫');
             assert.equal(row.desc, plans[index].desc);
-            assert.equal(Number(row.unlockarmylevel), [12, 24, 36][index]);
+            assert.equal(Number(row.unlockarmylevel), [7, 24, 36][index]);
             assert.deepEqual(row.modfiy, [94023041 + index]);
         });
     }
@@ -724,7 +724,7 @@ test('102304 伤害：半径内敌人吃 80/110/150%，半径外一个不碰', (
         const { context, damaged } = roarContext(units, params, statuses);
         const state = skillState(units, 4.2);
 
-        assert.equal(ZCAttackResolutionSystem.castRoar(state, caster, context), true);
+        assert.equal(ZCSkillResolutionSystem.castRoar(state, caster, context), true);
         assert.deepEqual(damaged.map((hit) => hit.id), [2], '只打半径内的敌人（友军不挨）');
         assert.equal(damaged[0].damage, Math.round(100 * tier.rate));
         assert.equal(far.hp, 1200, '200 > 150，打不到');
@@ -748,7 +748,7 @@ test('102304 减攻：挂的是 `attackPct` 负值状态，秒数照设计', () 
     const { context } = roarContext(units, params, statuses);
     const state = skillState(units, 0);
 
-    ZCAttackResolutionSystem.castRoar(state, caster, context);
+    ZCSkillResolutionSystem.castRoar(state, caster, context);
     const applied = statuses.applied.filter((item) => item.unitId === '2');
     assert.equal(applied.length, 1, '每个挨打的敌人都挂一条');
     const def = statuses.defs.get(applied[0].id)!;
@@ -772,7 +772,7 @@ test('102304 III 级友军护盾：施法者最大生命的 15%，只给半径�
     const { context } = roarContext(units, params, statuses);
     const state = skillState(units, 10);
 
-    ZCAttackResolutionSystem.castRoar(state, caster, context);
+    ZCSkillResolutionSystem.castRoar(state, caster, context);
     //  「自身 15% 最大生命」= 施法者的 2000 × 15% = 300，不是友军自己的 500 × 15%。
     assert.equal(caster.shield, 300, '吼的人自己也有一份');
     assert.equal(nearAlly.shield, 300, '按施法者最大生命算');
@@ -804,7 +804,7 @@ test('102304 半径内没有敌人 ⇒ 拒放（不白吃 8 秒 CD）', () => {
         roarCooldown: 8, roarRadius: 150, roarDamageRate: 1, roarAttackPct: -20, roarSeconds: 3,
     }, statuses);
     const state = skillState(units, 0);
-    assert.equal(ZCAttackResolutionSystem.castRoar(state, caster, context), false);
+    assert.equal(ZCSkillResolutionSystem.castRoar(state, caster, context), false);
     assert.deepEqual(damaged, []);
     assert.equal(state.combatEvents.length, 0, '拒放连表现都不该有');
 
@@ -856,7 +856,7 @@ test('102004 配表：每 0.5 秒 10% + 持续 6/7/8 秒，游走与牵引参数
             assert.equal(row.skillKind, 'active_cd');
             assert.equal(Number(row.unitId), Number(JOKER_UNIT));
             assert.equal(Number(row.pvpSkillId), 30714);
-            assert.equal(Number(row.unlockHeroLevel), [12, 24, 36][index]);
+            assert.equal(Number(row.unlockHeroLevel), [7, 24, 36][index]);
             assert.deepEqual(Object.keys(bag).filter((key) => !key.startsWith('storm')), [],
                 '参数袋里不许串进 102001 / 102002 的克制条');
             assert.equal(bag.stormCooldown, 12, '设计 J 列');
@@ -883,7 +883,7 @@ test('102004 卡面：K 表口径的 desc 三份一致，修改器 94020041~43',
         rows.forEach((row, index) => {
             assert.equal(row.name, '飓风');
             assert.equal(row.desc, plans[index].desc);
-            assert.equal(Number(row.unlockarmylevel), [12, 24, 36][index]);
+            assert.equal(Number(row.unlockarmylevel), [7, 24, 36][index]);
             assert.deepEqual(row.modfiy, [94020041 + index]);
         });
     }
@@ -896,7 +896,7 @@ test('102004 释放：区域建在施法者脚下，半径 / 时长 / 每跳伤�
     const { context } = stormContext(units, stormParams(8));
     const state = skillState(units, 5);
 
-    assert.equal(ZCAttackResolutionSystem.castStorm(state, caster, context), true);
+    assert.equal(ZCSkillResolutionSystem.castStorm(state, caster, context), true);
     assert.equal(state.groundZones.length, 1);
     const zone = state.groundZones[0];
     assert.equal(zone.x, 30, '生成在施法者脚下（设计没给位置）');
@@ -918,7 +918,7 @@ test('102004 释放：区域建在施法者脚下，半径 / 时长 / 每跳伤�
 
     //  参数不全 ⇒ 拒放，不白吃 CD。
     const broken = stormContext(units, { ...stormParams(8), stormRadius: 0 });
-    assert.equal(ZCAttackResolutionSystem.castStorm(skillState(units, 5), caster, broken.context), false);
+    assert.equal(ZCSkillResolutionSystem.castStorm(skillState(units, 5), caster, broken.context), false);
 });
 
 test('102004 触发：CD 走独立的 stormReadyAt，首次只挂 CD', () => {
@@ -1019,7 +1019,7 @@ test('102004 区域：每 0.5 秒打一跳、同一个敌人反复挨，牵引�
     const units = [caster, foe];
     const cast = stormContext(units, stormParams(8));
     const state = skillState(units, 0);
-    assert.equal(ZCAttackResolutionSystem.castStorm(state, caster, cast.context), true);
+    assert.equal(ZCSkillResolutionSystem.castStorm(state, caster, cast.context), true);
 
     const zoneCtx = stormZoneContext(units);
     //  第一拍：打一跳 + 把敌人往左拽。
@@ -1051,7 +1051,7 @@ test('102004 区域：游走是 S 型（连续转向 + 按段翻号），不是�
     //  random 恒 0 ⇒ 初始朝向 0（+x），后面全靠转向率走 S。
     const cast = stormContext(units, stormParams(8));
     const state = skillState(units, 0);
-    ZCAttackResolutionSystem.castStorm(state, caster, cast.context);
+    ZCSkillResolutionSystem.castStorm(state, caster, cast.context);
     const zone = state.groundZones[0];
     const zoneCtx = stormZoneContext(units, () => 0);
 
@@ -1097,7 +1097,7 @@ test('102004 区域：牵引够不着 / 贴着圆心都不拽，游走方向由�
     const units = [caster, far, hugging, ally];
     const cast = stormContext(units, stormParams(8));
     const state = skillState(units, 0);
-    ZCAttackResolutionSystem.castStorm(state, caster, cast.context);
+    ZCSkillResolutionSystem.castStorm(state, caster, cast.context);
 
     const zoneCtx = stormZoneContext(units, () => 0.25);
     ZCGroundZoneSystem.tick(state, 0.5, zoneCtx.context);
@@ -1136,7 +1136,7 @@ test('102004 投送：出生在本体脚下、按卡牌面板移速飞向目标�
     } as ZCCombatTarget;
     const cast = stormContext(units, stormParams(8), target);
     const state = skillState(units, 0);
-    assert.equal(ZCAttackResolutionSystem.castStorm(state, caster, cast.context), true);
+    assert.equal(ZCSkillResolutionSystem.castStorm(state, caster, cast.context), true);
     const zone = state.groundZones[0];
     assert.equal(zone.x, 0, '出生点仍是本体脚下');
     assert.equal(zone.y, 0);
@@ -1194,7 +1194,7 @@ test('102004 投送：落地那一拍只补当前一波，不把赶路期间攒�
     } as ZCCombatTarget;
     const cast = stormContext(units, stormParams(8), target);
     const state = skillState(units, 0);
-    ZCAttackResolutionSystem.castStorm(state, caster, cast.context);
+    ZCSkillResolutionSystem.castStorm(state, caster, cast.context);
     const zone = state.groundZones[0];
     const zoneCtx = stormZoneContext(units);
     for (let index = 0; index < 200 && zone.approachSpeed !== undefined; index += 1) {
@@ -1231,7 +1231,7 @@ test('102004 投送：追不上的目标不能把风变成永动机（赶路耗�
     } as ZCCombatTarget;
     const cast = stormContext(units, stormParams(8), target);
     const state = skillState(units, 0);
-    ZCAttackResolutionSystem.castStorm(state, caster, cast.context);
+    ZCSkillResolutionSystem.castStorm(state, caster, cast.context);
     const zoneCtx = stormZoneContext(units);
     for (let index = 0; index < 400 && state.groundZones.length; index += 1) {
         state.elapsedSeconds += 0.1;
@@ -1255,7 +1255,7 @@ test('102004 投送：闸门放行但这一拍还没锁定 ⇒ 自己按普攻�
     const units = [caster, near, far];
     const cast = stormContext(units, stormParams(8), null);
     const state = skillState(units, 0);
-    assert.equal(ZCAttackResolutionSystem.castStorm(state, caster, cast.context), true);
+    assert.equal(ZCSkillResolutionSystem.castStorm(state, caster, cast.context), true);
     const zone = state.groundZones[0];
     assert.equal(zone.approachSpeed, 28, '照样走赶路段（不能因为没锁定就原地生成）');
     assert.equal(zone.approachTargetId, 2, '追射程内最近的那个，射程外的 3 不追');
@@ -1280,7 +1280,7 @@ test('102004 投送：锁的是墙也照样飞向射程内的敌人，不能飞�
     } as ZCCombatTarget;
     const cast = stormContext(units, stormParams(8), wall);
     const state = skillState(units, 0);
-    assert.equal(ZCAttackResolutionSystem.castStorm(state, caster, cast.context), true);
+    assert.equal(ZCSkillResolutionSystem.castStorm(state, caster, cast.context), true);
     const zone = state.groundZones[0];
     assert.equal(zone.approachSpeed, 28, '有活敌 ⇒ 走赶路段');
     assert.equal(zone.approachTargetId, 2, '追的是敌人，不是墙');
@@ -1302,7 +1302,7 @@ test('102004 投送：目标半路阵亡且没有替代 ⇒ 继续飞到最后�
     } as ZCCombatTarget;
     const cast = stormContext(units, stormParams(8), target);
     const state = skillState(units, 0);
-    ZCAttackResolutionSystem.castStorm(state, caster, cast.context);
+    ZCSkillResolutionSystem.castStorm(state, caster, cast.context);
     const zone = state.groundZones[0];
     const zoneCtx = stormZoneContext(units);
 
@@ -1344,7 +1344,7 @@ test('102004 投送：无活目标（含在打墙）⇒ 原地生成、退回老
     for (const target of [null, wall]) {
         const cast = stormContext(units, stormParams(8), target);
         const state = skillState(units, 0);
-        assert.equal(ZCAttackResolutionSystem.castStorm(state, caster, cast.context), true,
+        assert.equal(ZCSkillResolutionSystem.castStorm(state, caster, cast.context), true,
             '不拒放（设计：场上没敌人也照放，敌人走过来照样挨）');
         const zone = state.groundZones[0];
         assert.equal(zone.x, 0, '原地生成');

@@ -40,12 +40,12 @@ const PREFAB_NAME = '火焰树妖_灼热地带技能.prefab';
 const CLIP_NAME = '火焰树妖_灼热地带技能-loop.anim';
 
 const FRAME_COUNT = 14;
-const FRAME_WIDTH = 400;
-const FRAME_HEIGHT = 451;
+const FRAME_WIDTH = 226;
+const FRAME_HEIGHT = 257;
 const HOT_FRAMES = ['046_00', '046_02', '046_04', '046_06', '046_08', '046_13', '046_14',
     '046_15', '046_17', '046_18', '046_20', '046_22', '046_23', '046_24'];
 /** 可见内容（`alpha >= 8` 的 14 帧并集），纹理坐标 —— 用例会用 PNG 自己量一遍再比。 */
-const CONTENT = { left: 93, right: 265, top: 99, bottom: 345 };
+const CONTENT = { left: 6, right: 178, top: 2, bottom: 248 };
 /**
  * `readPngAlphaBox` 的判据是 `alpha > threshold`，要表达"`alpha >= 8` 才算可见"就得传 7。
  * 别传 8：火焰边缘有一圈 `alpha === 8` 的弱像素（`046_00` 的 x=93 就是），差 1 会一直红。

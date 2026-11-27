@@ -4,6 +4,10 @@ import {
     ZC_SELF_AURA_EFFECT_PREFAB_PATH, ZC_SELF_AURA_BEHAVIOR_KEY, zcSelfAuraEffectPath,
     ZC_SELF_AURA_LANDING_ANGLE_DEGREES, ZC_SELF_AURA_LANDING_SECONDS, zcSelfAuraLandingPath,
 } from '../ZCSelfAuraFx';
+import {
+    ZC_BULLET_RAIN_ORIGIN_LIFT_PX, ZC_BULLET_RAIN_SHOT_INTERVAL_SECONDS,
+    zcBulletDropHeightOf, zcBulletRainFieldsAt, zcBulletRainImpactAt, zcBulletRainStyleOf,
+} from '../ZCProjectileDropStyle';
 import { ZC_BOLT_EFFECT_PREFAB_PATH, ZC_BOLT_EFFECT_SECONDS, ZC_BOLT_NUMB_STATUS_ID } from '../ZCBoltStrikeFx';
 import {
     ZC_CHAIN_EFFECT_PREFAB_PATH, ZC_CHAIN_EFFECT_SECONDS,
@@ -14,9 +18,11 @@ import {
 } from '../ZCSplashShotFx';
 import { ZC_BURST_IMPACT_PREFAB_PATH, zcBurstEffectScale } from '../ZCBurstFx';
 import {
-    ZC_FAN_SWEEP_BURSTS, ZC_FAN_SWEEP_BURST_DISTANCE_RATIO, ZC_FAN_SWEEP_BURST_RADIUS_RATIO,
-    ZC_FAN_SWEEP_BURST_SPREAD,
+    ZC_FAN_SWEEP_PREFAB_PATH, ZC_FAN_SWEEP_SECONDS,
 } from '../ZCFanSweepFx';
+import {
+    pushSkillRangeRingEvent, zcRangeRingEnabledForUnit,
+} from '../ZCSkillRangeRingFx';
 import {
     ZC_DASH_GUARD_PREFAB_PATH, ZC_DASH_GUARD_SECONDS, pushDashGuardVisualEvent,
 } from '../ZCDashFx';
@@ -32,10 +38,11 @@ import {
 import {
     ZC_TRAP_EXPIRE_SECONDS, zcTrapExpirePath,
     ZC_TRAP_IDLE_PREFAB_PATH, ZC_TRAP_SPAWN_PREFAB_PATH, ZC_TRAP_SPAWN_SECONDS,
+    zcTrapFlightPath,
 } from '../ZCTrapFx';
 import { missileLog } from '../../ZCMissileSkillDiagnostics';
 import { skillCastLog, skillCastLogChanging, zcSkillCastWatched } from '../../ZCSkillCastDiagnostics';
-import type { ZCCombatTarget, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
+import type { ZCCombatTarget, ZCProjectileState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import { ZCOwner } from '../ZCMapConfig';
 import { ZC_PROJECTILE_MISS_DISTANCE, ZCCombatSystem } from './ZCCombatSystem';
 import { ZCTargetingSystem } from './ZCTargetingSystem';
@@ -51,21 +58,6 @@ import {
 const ZC_STORM_GROW_FROM = 0.1;
 const ZC_TRAP_FLIGHT_ARC_PX = 92;
 
-/**
- * 战场主动技能与光环结算系统 (ZCSkillResolutionSystem)
- *
- * 职责划分 (MVC - Model 领域层):
- * 1. 专注承接与结算战场中英雄与怪物的 20+ 种异构主动技能与光环增益（扇形射击、自身光环、落雷连线、
- *    闪电链、陷阱/蘑菇、溅射投射物、飓风召唤、多段弹幕、菌核爆裂、战吼、射线集束、文明之火、
- *    扇形甩击、冲锋、多点打击及全队/自身护盾与光环等）。
- * 2. 纯逻辑领域系统：只对战斗快照状态（ZCSnapshot）进行受限变更并派发 ZCCombatEvent 战斗事件，
- *    绝不持有或调用 Cocos 视图层/引擎节点。
- * 3. 严格遵循战斗数值与规则不变量：
- *    - 统一伤害与暴击计算：baseDamage * criticalMultiplier
- *    - 职业克制乘数：基于攻防双方卡牌与全局克制规则计算，支持目标单位实例的防御降级回退
- *    - 鞭尸防护：对已阵亡（hp <= 0 或 battleState === 'dead'）的目标进行严格过滤拦截
- *    - 战斗高频性能保障：消除热点路径上的闭包临时对象分配，数组随机抽取采用 O(1) swap-pop
- */
 /**
  * 战场主动技能与光环结算系统 (ZCSkillResolutionSystem)
  *
@@ -282,30 +274,116 @@ export class ZCSkillResolutionSystem {
             angleDegrees,
             visualLiftPx: visualLiftPx > 0 ? visualLiftPx : undefined,
         });
-        const landingPath = zcSelfAuraLandingPath(ZC_SELF_AURA_BEHAVIOR_KEY, unit.unitId);
-        if (landingPath) {
-            state.combatEvents.push({
-                id: state.nextCombatEventId++,
-                type: ZCCombatEventType.Area,
+        //  2026-11-25 第 45 批：冰山陨落（102403）开冰域的同时画一圈范围指示（用户口径）。
+        //  中心与冰域**同一个点**（`auraAtTarget` 时就是受击目标脚下），半径取表值
+        //  `auraRadius`、寿命取 `auraSeconds` ⇒ 「圈 = 实际范围，技能结束即消失」。
+        //  按单位白名单（`ZC_SKILL_RANGE_RING_UNITS`）而不是车道开关：同一个 `self_aura`
+        //  车道上还有 68025 / 68016 / 68026 三张卡，它们不该多出这个圈。
+        if (zcRangeRingEnabledForUnit(unit.unitId)) {
+            pushSkillRangeRingEvent(state, {
+                x: spawnX,
+                y: spawnY,
+                logicRadius: Math.max(0, parameters.auraRadius ?? 0),
+                worldRadius: radius,
+                seconds,
                 owner: unit.owner,
                 sourceUnitId: unit.id,
-                targetUnitId,
                 skillId: profile.skillId,
                 skillName: profile.name,
-                effectKey: null,
-                projectileKey: null,
-                effectPrefabPath: landingPath,
-                fromX: spawnX,
-                fromY: spawnY,
-                toX: spawnX,
-                toY: spawnY,
-                radius: 1,
-                damage: 0,
-                empowered: false,
-                startedAt: state.elapsedSeconds,
-                durationSeconds: ZC_SELF_AURA_LANDING_SECONDS,
-                angleDegrees: ZC_SELF_AURA_LANDING_ANGLE_DEGREES,
             });
+        }
+        const landingPath = zcSelfAuraLandingPath(ZC_SELF_AURA_BEHAVIOR_KEY, unit.unitId);
+        if (landingPath) {
+            //  第 55 批「弹道雨」（2026-11-26）：冰山陨落不再「在落点原地摆一根 / 从天上掉一根」，
+            //  改成**一批冰锥从施法者沿贝塞尔抛向圈内各自的随机落点**。
+            //  🔴 落点写 `flyTo*`（表现坐标），`spawnX/spawnY` 与区域判定一个字节不动。
+            const rain = zcBulletRainStyleOf(unit.unitId, 'aura');
+            if (rain) {
+                const originX = origin.x;
+                const originY = origin.y;
+                const seed = state.nextCombatEventId;
+                for (let index = 0; index < rain.count; index += 1) {
+                    const fields = zcBulletRainFieldsAt(rain, index, {
+                        originX, originY, centerX: spawnX, centerY: spawnY, radiusWorld: radius,
+                    }, seed);
+                    //  2026-11-26 第 58 批：逐颗出手，0.1s 一颗（三根冰锥不再同一拍冒出来）。
+                    const fireAt = state.elapsedSeconds + index * ZC_BULLET_RAIN_SHOT_INTERVAL_SECONDS;
+                    state.combatEvents.push({
+                        id: state.nextCombatEventId++,
+                        type: ZCCombatEventType.Area,
+                        owner: unit.owner,
+                        sourceUnitId: unit.id,
+                        targetUnitId,
+                        skillId: profile.skillId,
+                        skillName: profile.name,
+                        effectKey: null,
+                        projectileKey: null,
+                        effectPrefabPath: landingPath,
+                        fromX: spawnX,
+                        fromY: spawnY,
+                        toX: spawnX,
+                        toY: spawnY,
+                        radius: 1,
+                        damage: 0,
+                        empowered: false,
+                        startedAt: fireAt,
+                        //  2026-11-26 第 56 批：到点即摘 —— 「命中指定坐标消失」。
+                        durationSeconds: fields.flyInSeconds,
+                        //  第 58 批：起点抬到「角色图片中心 +5px」。
+                        visualLiftPx: ZC_BULLET_RAIN_ORIGIN_LIFT_PX,
+                        ...fields,
+                    });
+                    //  落地那一点播受击特效（独立事件，`startedAt` 排在**这颗**的到达时刻）
+                    const impact = zcBulletRainImpactAt(rain, fields, fireAt);
+                    state.combatEvents.push({
+                        id: state.nextCombatEventId++,
+                        type: ZCCombatEventType.Area,
+                        owner: unit.owner,
+                        sourceUnitId: unit.id,
+                        targetUnitId: null,
+                        skillId: profile.skillId,
+                        skillName: profile.name,
+                        effectKey: null,
+                        projectileKey: null,
+                        effectPrefabPath: impact.effectPrefabPath,
+                        fromX: impact.x,
+                        fromY: impact.y,
+                        toX: impact.x,
+                        toY: impact.y,
+                        radius: 1,
+                        damage: 0,
+                        empowered: false,
+                        startedAt: impact.startedAt,
+                        durationSeconds: impact.durationSeconds,
+                    });
+                }
+            } else {
+                state.combatEvents.push({
+                    id: state.nextCombatEventId++,
+                    type: ZCCombatEventType.Area,
+                    owner: unit.owner,
+                    sourceUnitId: unit.id,
+                    targetUnitId,
+                    skillId: profile.skillId,
+                    skillName: profile.name,
+                    effectKey: null,
+                    projectileKey: null,
+                    effectPrefabPath: landingPath,
+                    fromX: spawnX,
+                    fromY: spawnY,
+                    toX: spawnX,
+                    toY: spawnY,
+                    radius: 1,
+                    damage: 0,
+                    empowered: false,
+                    startedAt: state.elapsedSeconds,
+                    durationSeconds: ZC_SELF_AURA_LANDING_SECONDS,
+                    angleDegrees: ZC_SELF_AURA_LANDING_ANGLE_DEGREES,
+                    //  2026-11-25 第 52 批：「从区域上方垂直掉下来」而不是在落点原地摆一根。
+                    //  只改表现位置（`to` 与区域判定不变），见 `ZCProjectileDropStyle`。
+                    dropFromPx: zcBulletDropHeightOf(unit.unitId),
+                });
+            }
         }
         if (zcSkillCastWatched(unit.unitId)) {
             skillCastLog('施法', `${unit.unitId}#${unit.id} 在 (${origin.x.toFixed(1)}, ${origin.y.toFixed(1)})`
@@ -678,6 +756,10 @@ export class ZCSkillResolutionSystem {
 
         let velocityX = 0;
         let velocityY = 0;
+        //  投掷段的朝向（2026-11-26 第 57 批）：飞在空中的那颗子弹要「头朝飞的方向」，
+        //  否则三角形拖尾永远指着正左方，看不出是往右上抛出去。
+        //  只服务飞行段 —— `settleFlight` 落地时会清掉，免得常驻陷阱图歪着躺在地上。
+        let flightAngleDegrees: number | undefined;
         if (flying) {
             const dx = target ? target.x - x : 0;
             const dy = target ? target.y - y : 0;
@@ -686,6 +768,7 @@ export class ZCSkillResolutionSystem {
                 : unit.facingRadians;
             velocityX = Math.cos(radians) * flightSpeed * scale;
             velocityY = Math.sin(radians) * flightSpeed * scale;
+            flightAngleDegrees = radians * 180 / Math.PI;
         }
 
         state.groundZones.push({
@@ -697,7 +780,9 @@ export class ZCSkillResolutionSystem {
             skillName: profile.name,
             effectPrefabPath: ZC_TRAP_IDLE_PREFAB_PATH,
             holdVisual: true,
-            flightVisualPath: flying ? ZC_TRAP_SPAWN_PREFAB_PATH : undefined,
+            //  2026-11-26 第 57 批：飞行段的美术按单位可换（毒箭菇 68017 换成蘑菇子弹），
+            //  落地后仍是下面那条常驻陷阱 —— 「机制保持一致」。
+            flightVisualPath: flying ? zcTrapFlightPath(unit.unitId) : undefined,
             flightTotalSeconds: flying ? flightSeconds : undefined,
             flightArcPx: flying ? ZC_TRAP_FLIGHT_ARC_PX : undefined,
             visualDelaySeconds: flying ? 0 : ZC_TRAP_SPAWN_SECONDS,
@@ -708,6 +793,8 @@ export class ZCSkillResolutionSystem {
             flightSeconds: flying ? flightSeconds : undefined,
             moveVelocityX: flying ? velocityX : undefined,
             moveVelocityY: flying ? velocityY : undefined,
+            //  飞行段的朝向：只有投掷段有，落地由 `settleFlight` 清掉。
+            angleDegrees: flightAngleDegrees,
             expireRequiresContact: expireOnTimeout ? undefined : true,
             damage: 0,
             slowRatio: 0,
@@ -1726,37 +1813,39 @@ export class ZCSkillResolutionSystem {
         const damage = Math.round(ZCAttackResolutionSystem.unitDamage(context, unit, primary.owner, primary.cardId,
             damageRate, primary.id) * criticalMultiplier);
         const floatTextKind = damageFloatTextKind(criticalMultiplier > 1, counterMultiplier);
-        const burstTable = radiusTable * ZC_FAN_SWEEP_BURST_RADIUS_RATIO;
-        const burstDistance = radius * ZC_FAN_SWEEP_BURST_DISTANCE_RATIO;
-        const burstScale = zcBurstEffectScale(burstTable);
-        const middle = (ZC_FAN_SWEEP_BURSTS - 1) / 2;
-        for (let index = 0; index < ZC_FAN_SWEEP_BURSTS; index += 1) {
-            const angle = heading + (index - middle) * halfAngle * ZC_FAN_SWEEP_BURST_SPREAD;
-            const x = origin.x + Math.cos(angle) * burstDistance;
-            const y = origin.y + Math.sin(angle) * burstDistance;
-            state.combatEvents.push({
-                id: state.nextCombatEventId++,
-                type: ZCCombatEventType.Area,
-                owner: unit.owner,
-                sourceUnitId: unit.id,
-                targetUnitId: null,
-                skillId: profile.skillId,
-                skillName: profile.name,
-                effectKey: null,
-                projectileKey: null,
-                effectPrefabPath: ZC_BURST_IMPACT_PREFAB_PATH,
-                fromX: x,
-                fromY: y,
-                toX: x,
-                toY: y,
-                radius: burstDistance,
-                damage: 0,
-                empowered: false,
-                startedAt: state.elapsedSeconds,
-                durationSeconds: 0.3,
-                effectScale: burstScale,
-            });
-        }
+        //  2026-11-25 第 45 批：扇形甩击改成**一条**扇形挥击特效（用户口径「使用新特效
+        //  【机甲菇-武器绞杀】」）。改前是「扇形里铺 3 发爆点」，玩家看到的是三团烟，
+        //  既看不出朝向也看不出扇形边界。
+        //
+        //  🔴 `from` 必须是施法者、`to` 必须是「施法者沿扇形中轴走满半径」那一点：
+        //  视图按 `from → to` 算转角（目录登记 `facingDegrees: 0`，美术尖端在 +X），
+        //  同时锚点默认 `caster` ⇒ 节点就落在施法者脚下，尖端才指向目标。
+        //  写成 `from == to` 会因为两端的视图位移都是 0 而退回 0°（永远朝右）。
+        //  🔴 尺寸烘焙在 prefab 里（前伸 = fanRadius），事件**不**再带 `effectScale`：
+        //  这条特效只有这一档半径，按判定重算一遍反而会和美术口径打架。
+        const fanX = origin.x + Math.cos(heading) * radius;
+        const fanY = origin.y + Math.sin(heading) * radius;
+        state.combatEvents.push({
+            id: state.nextCombatEventId++,
+            type: ZCCombatEventType.Melee,
+            owner: unit.owner,
+            sourceUnitId: unit.id,
+            targetUnitId: primary.id,
+            skillId: profile.skillId,
+            skillName: profile.name,
+            effectKey: null,
+            projectileKey: null,
+            effectPrefabPath: ZC_FAN_SWEEP_PREFAB_PATH,
+            fromX: origin.x,
+            fromY: origin.y,
+            toX: fanX,
+            toY: fanY,
+            radius,
+            damage: 0,
+            empowered: false,
+            startedAt: state.elapsedSeconds,
+            durationSeconds: ZC_FAN_SWEEP_SECONDS,
+        });
         for (const { unit: victim } of victims) {
             const hitText = context.damageUnit(victim, damage, {
                 owner: unit.owner, kind: 'unit', unitId: unit.id, floatTextKind,
@@ -1900,7 +1989,9 @@ export class ZCSkillResolutionSystem {
             if (dist > radius) continue;
             candidates.push({ unit: candidate, distance: dist });
         }
-        if (!candidates.length) return 0;
+        //  `forceVisual`：技能已经放出去之后（戈壁箭雨的 6 秒窗口内）敌人可能被打光 / 走光，
+        //  那一刻不能停手 —— 否则圈还在、箭没了。见 `IZCStrikeOptions.forceVisual`。
+        if (!candidates.length && !options.forceVisual) return 0;
         if (options.nearest) candidates.sort((a, b) => a.distance - b.distance);
         else {
             for (let index = 0; index < Math.min(count, candidates.length); index += 1) {
@@ -1911,6 +2002,16 @@ export class ZCSkillResolutionSystem {
             }
         }
         const victims = candidates.slice(0, count);
+        //  这一发实际作用在哪，回填给调用方画范围指示白环用（2026-11-26 第 57 批）。
+        //  🔴 必须是**这里**的 `victims`、而不是调用方在外面重算：`nearest: false` 时挑人带随机，
+        //  外面重算一次会得到另一个目标 ⇒ 「圈在这头、箭落那头」。
+        //  第 58 批改成取**第一个**目标（用户口径「光圈切换到下个目标」）：光圈标的是
+        //  「这一发打谁」，取质心会让圈飘在敌群中间、谁身上都不对。
+        if (options.centerOut && victims.length > 0) {
+            const spot = context.unitPosition(victims[0].unit);
+            options.centerOut.x = spot.x;
+            options.centerOut.y = spot.y;
+        }
         const profile = context.effectiveDefinition(unit).attackProfile;
         const splashRadius = Math.max(0, options.splashRadius ?? 0);
         const splashRate = Math.max(0, options.splashDamageRate ?? 0);
@@ -1986,6 +2087,117 @@ export class ZCSkillResolutionSystem {
         }
 
         let hits = 0;
+        //  第 55 批「弹道雨」（2026-11-26）：杰克藕的戈壁箭雨改成「一批箭从自己身上抛向圈内
+        //  各自随机的落点」，**表现与结算解耦** —— 箭落哪由 `flyTo*` 决定，伤害仍按
+        //  上面挑出来的 `victims` 逐个结算（否则每一颗都要改命中判定，等于重做这套技能）。
+        //  散布中心取**敌群质心**（有敌人时）⇒ 箭雨朝敌群方向撒，不会一半扎在自己脚下。
+        const rain = zcBulletRainStyleOf(unit.unitId, 'strike');
+        if (rain) {
+            const origin = context.unitPosition(unit);
+            const originX = origin.x;
+            const originY = origin.y;
+            let centerX = originX;
+            let centerY = originY;
+            //  散布半径缺省 = 区域半径（落点铺满整圈）
+            let spreadWorld = options.radius;
+            if (victims.length > 0) {
+                let sumX = 0;
+                let sumY = 0;
+                for (const { unit: victim } of victims) {
+                    //  `unitPosition` 是每单位复用的 scratch：取完立刻用掉，别把对象留着
+                    const spot = context.unitPosition(victim);
+                    sumX += spot.x;
+                    sumY += spot.y;
+                }
+                centerX = sumX / victims.length;
+                centerY = sumY / victims.length;
+            } else {
+                //  这一波一个敌人都没有（窗口内敌人被打光 / 走光，`forceVisual` 放行的那几波）：
+                //  往**朝向前方半个半径**撒 —— 直接以自己为圆心的话，几支箭会全扎在自己脚上，
+                //  比「不播」更难看。散布半径同时收到同样的半个半径，保证落点仍然落在
+                //  那张白色范围圈里（圈的圆心由下面的 `centerOut` 回填，与这里同一个点）。
+                //  半径在这里可能被算成 `Infinity`（`strikeTargetMode === 2`）⇒ 按 0 处理。
+                const forward = Number.isFinite(options.radius) ? Math.max(0, options.radius) * 0.5 : 0;
+                centerX = originX + Math.cos(unit.facingRadians) * forward;
+                centerY = originY + Math.sin(unit.facingRadians) * forward;
+                spreadWorld = forward;
+            }
+            //  🔴 圈心用**散布中心**、不是 `victims` 质心：上面那个 `else` 分支（0 目标）会把中心
+            //  推到身前半个半径，此时盘质心根本不存在；两处口径必须在这一个点上收口，
+            //  否则「圈还在、箭撒在圈外」。
+            if (options.centerOut) {
+                options.centerOut.x = centerX;
+                options.centerOut.y = centerY;
+            }
+            const seed = state.nextCombatEventId;
+            //  颗数以**配表 `strikeCount`** 为准（三档 5/6/8），表里那个值只是缺省 ——
+            //  `ZC_BULLET_RAIN_UNITS['68008'].count` 写死 5 的话，L3 配表说 8 却只画 5 支。
+            const shots = Math.max(1, Math.round(count));
+            for (let index = 0; index < shots; index += 1) {
+                const fields = zcBulletRainFieldsAt(rain, index, {
+                    originX, originY, centerX, centerY, radiusWorld: spreadWorld,
+                }, seed, shots);
+                //  2026-11-26 第 58 批：**逐颗**出手（0.1s 一颗），不是一批齐射。
+                //  🔴 只错开表现时刻 —— 伤害仍在上面 `victims` 那一段一次性结算完。
+                const fireAt = state.elapsedSeconds + index * ZC_BULLET_RAIN_SHOT_INTERVAL_SECONDS;
+                state.combatEvents.push({
+                    id: state.nextCombatEventId++,
+                    type: ZCCombatEventType.Area,
+                    owner: unit.owner,
+                    sourceUnitId: unit.id,
+                    targetUnitId: null,
+                    skillId: profile.skillId,
+                    skillName: profile.name,
+                    effectKey: profile.effectKey ?? null,
+                    projectileKey: null,
+                    effectPrefabPath: profile.effectPrefabPath ?? null,
+                    //  `to` 也写落点，不是敌人位置：这条通道的 `to` 没有判定用途（结算已单独做），
+                    //  写成落点后即使飞入段不生效，子弹也是「落在那一点」而不是贴在敌人身上。
+                    fromX: fields.flyToX,
+                    fromY: fields.flyToY,
+                    toX: fields.flyToX,
+                    toY: fields.flyToY,
+                    radius: Math.max(1, splashRadius),
+                    damage: 0,
+                    empowered: false,
+                    startedAt: fireAt,
+                    //  2026-11-26 第 56 批：子弹**到点即摘**（原来 `max(0.3, 飞行时长)` 会让它
+                    //  在落点上多停一会儿，看起来像「箭插在地上」）。命中特效另起一条事件。
+                    durationSeconds: fields.flyInSeconds,
+                    //  第 58 批：起点抬到「角色图片中心 +5px」，不再贴着脚点飞出去。
+                    visualLiftPx: ZC_BULLET_RAIN_ORIGIN_LIFT_PX,
+                    ...fields,
+                });
+                //  「命中指定坐标消失，在坐标处播放受击特效」—— 独立的 `area` 事件，
+                //  `startedAt` 排在**这颗**的到达时刻（起手 + 飞行），渲染层到点才建节点
+                //  （见 `zcBulletRainImpactAt`）。逐颗出手后这里必须跟着 `fireAt` 走，
+                //  否则命中特效会全部挤在第一颗落地那一刻。
+                const impact = zcBulletRainImpactAt(rain, fields, fireAt);
+                state.combatEvents.push({
+                    id: state.nextCombatEventId++,
+                    type: ZCCombatEventType.Area,
+                    owner: unit.owner,
+                    sourceUnitId: unit.id,
+                    targetUnitId: null,
+                    skillId: profile.skillId,
+                    skillName: profile.name,
+                    effectKey: null,
+                    projectileKey: null,
+                    effectPrefabPath: impact.effectPrefabPath,
+                    fromX: impact.x,
+                    fromY: impact.y,
+                    toX: impact.x,
+                    toY: impact.y,
+                    radius: 1,
+                    damage: 0,
+                    empowered: false,
+                    startedAt: impact.startedAt,
+                    durationSeconds: impact.durationSeconds,
+                });
+            }
+        }
+        //  走弹道雨的单位不再逐敌人推「贴在身上闪一下」的那条旧事件
+        const dropHeight = rain ? 0 : zcBulletDropHeightOf(unit.unitId);
         for (const { unit: victim } of victims) {
             const targetOwner = victim.owner;
             const damage = Math.round(ZCAttackResolutionSystem.unitDamage(context, unit, targetOwner, victim.cardId,
@@ -1994,7 +2206,7 @@ export class ZCSkillResolutionSystem {
                 unit, targetOwner, victim.cardId, context, victim.id);
             const floatTextKind = damageFloatTextKind(criticalMultiplier > 1, counterMultiplier);
             const point = context.unitPosition(victim);
-            state.combatEvents.push({
+            if (!rain) state.combatEvents.push({
                 id: state.nextCombatEventId++,
                 type: ZCCombatEventType.Area,
                 owner: unit.owner,
@@ -2014,6 +2226,13 @@ export class ZCSkillResolutionSystem {
                 empowered: false,
                 startedAt: state.elapsedSeconds,
                 durationSeconds: 0.3,
+                //  2026-11-25 第 52 批：杰克藕「戈壁箭雨」每波的那几支箭从目标**上方**掉下来。
+                //  原来它们是「贴在敌人身上闪一下」，读不出「被打了一箭」。
+                //  · 箭头朝下：素材固有 +Y，prefab 的 `arc` / `offset` 子节点已预转 −90（合成 +X）
+                //    ⇒ 根节点再转 180 就是「头朝下」。
+                //  · 名单只含 68008 / 68024 / 68030，其余 `random_strike` 车道的箭逐字不变。
+                angleDegrees: dropHeight > 0 ? 180 : undefined,
+                dropFromPx: dropHeight,
             });
             const hitText = context.damageUnit(victim, damage, {
                 owner: unit.owner, kind: 'unit', unitId: unit.id, floatTextKind, ranged: true,
@@ -2226,5 +2445,48 @@ export class ZCSkillResolutionSystem {
             context.statusSystem.apply(String(target.id), id, { at: state.elapsedSeconds, durationSeconds: 4 });
         }
         state.statusEffects = context.statusSystem.exportSnapshot();
+    }
+
+    /**
+     * 连射导弹（`explodeOnArrival`）飞抵落点后在半径内结算一次性范围伤害。
+     *
+     * 伤害基数取 `arriveDamage`（出手时计算的面板伤害），逐目标按克制乘数结算，
+     * 与命中爆炸共用同一套吸血 / 处决 / 命中状态通道。
+     */
+    static resolveProjectileArrival(
+        state: ZCSnapshot,
+        projectile: ZCProjectileState,
+        context: IZCAttackResolutionContext,
+    ): void {
+        const radius = Math.max(0, projectile.arriveRadius ?? 0);
+        if (!(radius > 0)) return;
+        const hexId = context.geometry.hexIdAt(projectile.x, projectile.y);
+        if (hexId == null) return;
+        const radiusHex = Math.ceil(radius / HEX_GRID_LOGICAL_ROW_STEP) + 1;
+        const shooter = context.unitById.get(projectile.sourceUnitId);
+        let hit = 0;
+        for (const victim of context.unitsInRadius(hexId, radiusHex)) {
+            if (victim.owner === projectile.owner || victim.battleState === 'dead' || victim.hp <= 0) continue;
+            const position = context.unitPosition(victim);
+            if (distance(projectile.x, projectile.y, position.x, position.y) > radius) continue;
+            const multiplier = ZCAttackResolutionSystem.projectileCounterMultiplier(
+                projectile, victim.owner, victim.cardId, context, victim.id);
+            const damage = Math.round(Math.max(0, projectile.arriveDamage ?? 0) * multiplier);
+            if (!(damage > 0)) continue;
+            const hitText = context.damageUnit(victim, damage, {
+                owner: projectile.owner, kind: 'unit', unitId: projectile.sourceUnitId,
+                floatTextKind: damageFloatTextKind(projectile.criticalHit === true, multiplier),
+                ranged: true,
+            });
+            hit += 1;
+            if (shooter) ZCAttackResolutionSystem.applyLifesteal(shooter, hitText, context);
+            context.tryExecuteUnit(victim, projectile.executeChance, projectile.owner,
+                projectile.sourceUnitId, hitText);
+            context.applyHitStatus(victim, projectile.onHitStatusId, projectile.sourceUnitId);
+        }
+        if (zcSkillCastWatched(shooter ? shooter.unitId : '')) {
+            skillCastLogChanging(`barrage-boom:${projectile.id}`, '施法',
+                `连射导弹在落点引爆：半径 ${radius.toFixed(1)}（世界 px）、命中 ${hit} 人`);
+        }
     }
 }

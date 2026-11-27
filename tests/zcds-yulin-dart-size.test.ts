@@ -69,12 +69,17 @@ function scales(file: string): Map<string, { x: number; y: number }> {
     return result;
 }
 
-test('① 配置表：30716 用普攻飞镖、30821 用强化飞镖，是两套独立的 prefab', () => {
+/** 第 57 批起：30716 的普攻弹体是「卡牌常用子弹物件」里的统一格式，不再是这只飞镖。 */
+const DART_CARD_BULLET = 'units/projectiles/卡牌常用子弹物件/玉林好汉_子弹';
+
+test('① 配置表：30716 换第 57 批统一子弹、30821 仍用强化飞镖，是两套独立的 prefab', () => {
     const rows = readPvpRows('pvpSkill');
-    assert.equal(rowOf(rows, SKILL_ID).effectPrefabPath, DART);
+    assert.equal(rowOf(rows, SKILL_ID).effectPrefabPath, DART_CARD_BULLET);
     assert.equal(rowOf(rows, SKILL_ID).empoweredSkillId, EMPOWERED_SKILL_ID);
-    // 强化那一击是「精英猎手」，自己一套美术，**不跟着缩小**。
+    // 强化那一击是「精英猎手」，自己一套美术，**不跟着缩小、也不跟着换**。
     assert.equal(rowOf(rows, EMPOWERED_SKILL_ID).effectPrefabPath, DART_EMPOWERED);
+    // 旧普攻飞镖 prefab 留在磁盘上（下面 ②③ 拿它当「缩小 70%」的基线），但配表已不再指向它。
+    assert.notEqual(rowOf(rows, SKILL_ID).effectPrefabPath, DART);
 });
 
 test('② 缩放：offset 从 0.5 缩到 0.35（= 70%），根节点仍是 1', () => {

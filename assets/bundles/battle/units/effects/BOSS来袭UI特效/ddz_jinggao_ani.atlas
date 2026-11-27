@@ -1,0 +1,48 @@
+
+ddz_jinggao_ani.png
+size: 496,496
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+ddz_jinggao_di_ani
+  rotate: false
+  xy: 2, 229
+  size: 402, 121
+  orig: 426, 125
+  offset: 18, 2
+  index: -1
+ddz_jinggao_t1_ani
+  rotate: false
+  xy: 2, 2
+  size: 243, 155
+  orig: 243, 155
+  offset: 0, 0
+  index: -1
+ddz_jinggao_tb_ani
+  rotate: false
+  xy: 2, 352
+  size: 419, 142
+  orig: 427, 150
+  offset: 4, 3
+  index: -1
+ddz_jinggao_x_ani
+  rotate: false
+  xy: 247, 36
+  size: 220, 15
+  orig: 226, 16
+  offset: 5, 0
+  index: -1
+ddz_jinggao_zi01_ani
+  rotate: false
+  xy: 2, 159
+  size: 398, 68
+  orig: 402, 69
+  offset: 4, 0
+  index: -1
+ddz_jinggao_zi_ani
+  rotate: false
+  xy: 247, 53
+  size: 209, 104
+  orig: 211, 105
+  offset: 1, 1
+  index: -1

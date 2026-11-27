@@ -237,10 +237,11 @@ test('世界与基地共用一套 TopHud：玩家卡 + 5 格资源 + 基地队�
         WoodIcon: '7f9770fd-2f7e-4860-acda-7bafc1c97671@f9941',
         IronIcon: '8f324deb-ed43-4a78-9a53-bf04d53bc468@f9941',
         StaminaIcon: '600c3877-e900-4bb2-82c5-0e36076049ff@f9941',
-        CoinIcon: 'a8a5af4b-e39c-4c48-ba81-7daf57fa465f@f9941',
+        // 2026-11-26：`concept/sprites/coin.png` 删库，金币改用同目录的 `top_coin`（与 item 表 18504 同源）。
+        CoinIcon: 'db512b1d-b61d-4954-b1ee-2dc2da2990a9@f9941',
     };
     for (const [name, uuid] of Object.entries(expectedFrames)) {
-        assert.equal(iconFrame(name), uuid, `${name} 必须直接使用蓝湖设计切图，不能回落到背包道具图标`);
+        assert.equal(iconFrame(name), uuid, `${name} 必须用 concept/ui/top_* 设计切图，不能回落到背包道具图标`);
     }
     for (const name of ['GrainPlus', 'WoodPlus', 'IronPlus', 'StaminaPlus']) {
         assert.equal(iconFrame(name), 'd2c42dfc-55c7-4861-b674-36532b03df7a@f9941', `${name} 使用设计稿绿色加号切图`);

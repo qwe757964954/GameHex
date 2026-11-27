@@ -1554,15 +1554,19 @@ export class TerritoryModel {
     }
 
     /**
-     * 摇奖演完 ⇒ 弹**通用系统提示**（成功 / 失败各一条）。
+     * 摇奖演完 ⇒ 落地结果提示。
      *
      * 为什么不在回包那一刻弹：回包 100~300ms 就到了，而宝箱要演 1.2s + 顿 + 褪白，
      * 提示比换图先出现等于剧透。面板收尾时发 `monsterBoxRollSettled`，这里再按结果取文案。
      *
-     * 成功文案优先带等级（服务端回包 / 重拉后的快照），拿不到等级只说「升级成功」——
-     * 不本地 `lv + 1`，也不猜。
+     * **成功从 2026-11-25 起不弹 toast**：改成面板在屏幕正中播一次 spine「升级成功」
+     * （`ui/territory/TerritoryMonsterBoxUpgradeFx` 的 `shengji`）。视图演到了就带
+     * `fxPlayed = true` 进来，这里什么都不做；只有**特效没演成**（预制缺失 / 加载失败 /
+     * 弹窗正在关闭）才退回原来那两句文案 —— 两份反馈不能同时出现，也不能都没有。
+     *
+     * 失败始终是 toast（字特效只表达「成功了」）。
      */
-    notifyMonsterBoxRollSettled(cellId: number): void {
+    notifyMonsterBoxRollSettled(cellId: number, fxPlayed = false): void {
         const attempt = this.monsterBoxAttempt;
         if (!attempt || attempt.cellId !== cellId) return;
         if (this.monsterBoxTipSuppressed) return;
@@ -1570,6 +1574,10 @@ export class TerritoryModel {
             this.showTip(TERRITORY_TEXTS.monsterBoxUpgradeFailed);
             return;
         }
+        // 字特效已经演了 ⇒ 不能再补一条 toast（「字刚演完又弹一条『已升至 N 级』」）
+        if (fxPlayed) return;
+        // 退路：成功文案优先带等级（服务端回包 / 重拉后的快照），拿不到等级只说「升级成功」——
+        // 不本地 `lv + 1`，也不猜。
         const boxes = this.chapter?.serverCellStateCache?.monsterBoxes ?? null;
         const box = boxes?.find(item => item.cellId === cellId) ?? null;
         this.showTip(box ? TERRITORY_TEXTS.monsterBoxUpgraded(box.lv) : TERRITORY_TEXTS.monsterBoxUpgradeSucceeded);

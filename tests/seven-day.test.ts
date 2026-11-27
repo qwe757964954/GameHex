@@ -70,12 +70,12 @@ import type {
     ISevenDayTaskRow,
 } from '../assets/script/app/sevenDay/SevenDayTable';
 import { SEVEN_DAY_TEXTS } from '../assets/script/app/sevenDay/SevenDayTexts';
+import { SEVEN_DAY_ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
     QUALITY_FRAME_NAMES,
     qualityFrameLevel,
     qualityFrameName,
-    SEVEN_DAY_ART_ROOT,
-} from '../assets/script/app/sevenDay/SevenDayArt';
+} from '../assets/script/app/common/QualityFrameArt';
 import {
     resolveItemIconPath,
     resolveItemIconRef,

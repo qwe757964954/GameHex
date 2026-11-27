@@ -13,6 +13,8 @@
  * ------------------------------------------------------------------
  */
 
+import type { ResourceScope } from '../../core/asset/ResourceScope';
+
 /**
  * 弹窗层级。
  * 深度排序规则：先比 popupLayer，再比打开先后（serialId）。
@@ -26,13 +28,6 @@ export enum PopupLayer {
     /** 顶层：加载圈、断线重连、跑马灯等必须可见的提示。 */
     TOP = 2,
 }
-
-/** PopupLayer 的中文名，仅用于日志。 */
-export const POPUP_LAYER_NAMES: Readonly<Record<PopupLayer, string>> = {
-    [PopupLayer.NORMAL]: 'Normal',
-    [PopupLayer.SYSTEM]: 'System',
-    [PopupLayer.TOP]: 'Top',
-};
 
 /**
  * 弹窗关闭来源。
@@ -91,6 +86,8 @@ export interface IPopupOpenParams<T = any> {
     allowMultiple?: boolean;
     /** 关闭回调，在弹窗 onClose 之后触发（无论何种关闭来源都会调用一次）。 */
     onClose?: (reason: PopupCloseReason) => void;
+    /** 关联作用域：已释放时直接返回 null；打开中或已打开期间释放会立即取消或强制关闭。 */
+    scope?: ResourceScope;
 }
 
 /** PopupBase.open() 的等价别名，便于业务书写。 */
